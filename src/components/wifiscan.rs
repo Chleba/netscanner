@@ -1,3 +1,4 @@
+use chrono::Timelike;
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use std::time::Instant;
@@ -20,15 +21,17 @@ pub struct WifiInfo {
     mac: String,
 }
 
+#[derive(Debug)]
+pub struct WifiDataset {
+    ssid: String,
+    data: Vec<(f64, f64)>,
+}
+
 pub struct WifiScan {
     pub action_tx: Option<UnboundedSender<Action>>,
     pub scan_start_time: Instant,
     pub wifis: Vec<WifiInfo>,
-}
-
-pub struct WifiDataset {
-    ssid: String,
-    data: Vec<(f64, f64)>,
+    pub wifi_datasets: Vec<WifiDataset>,
 }
 
 impl Default for WifiScan {
@@ -42,6 +45,7 @@ impl WifiScan {
         Self {
             scan_start_time: Instant::now(),
             wifis: Vec::new(),
+            wifi_datasets: Vec::new(),
             action_tx: None,
         }
     }
@@ -62,8 +66,7 @@ impl WifiScan {
             let percent = ((s_clamp - min_dbm) / (max_dbm - min_dbm)).clamp(0.0, 1.0);
 
             let p = (percent * 10.0) as usize;
-            let gauge: String = std::iter::repeat(char::from_u32(0x25a8)
-                .unwrap_or('#'))
+            let gauge: String = std::iter::repeat(char::from_u32(0x25a8).unwrap_or('#'))
                 .take(p)
                 .collect();
 
@@ -77,7 +80,7 @@ impl WifiScan {
                 Style::default().fg(Color::LightGreen),
                 Style::default().fg(Color::Green),
             ];
-            let color = (percent * ((colors.len()-1) as f32)) as usize;
+            let color = (percent * ((colors.len() - 1) as f32)) as usize;
             let signal = format!("({}){}", w.signal, gauge);
 
             rows.push(Row::new(vec![
@@ -107,19 +110,23 @@ impl WifiScan {
         table
     }
 
-    // pub fn make_chart(&mut self) -> Chart {
-    //     let data = Vec::new();
-    //     let dataset = Dataset::default()
-    //         .name("data1")
-    //         .marker(symbols::Marker::Dot)
-    //         .style(Style::default().fg(Color::Red))
-    //         .data(data);
-    //     let chart = Chart::new(vec![dataset])
-    //         .block(Block::default().title("Wifi signals").borders(Borders::ALL))
-    //         .y_axis(Axis::default().title("signal").style(Style::default().fg(Color::Gray)))
-    //         .x_axis(Axis::default().title("time").style(Style::default().fg(Color::Gray)));
-    //     chart
-    // }
+    pub fn make_chart(&mut self) -> Chart {
+        let mut datasets = Vec::new();
+        for d in &self.wifi_datasets {
+            let dataset = Dataset::default()
+                .name("data1")
+                .marker(symbols::Marker::Dot)
+                .style(Style::default().fg(Color::Red))
+                .graph_type(GraphType::Line)
+                .data(&d.data);
+            datasets.push(dataset);
+        }
+        let chart = Chart::new(datasets)
+            .block(Block::default().title("Wifi signals").borders(Borders::ALL))
+            .y_axis(Axis::default().bounds([-90.0, -30.0]).title("signal").style(Style::default().fg(Color::Gray)))
+            .x_axis(Axis::default().bounds([60.0, 0.0]).title("time").style(Style::default().fg(Color::Gray)));
+        chart
+    }
 
     pub fn scan(&mut self) {
         let tx = self.action_tx.clone().unwrap();
@@ -155,6 +162,22 @@ impl WifiScan {
         });
     }
 
+    fn parse_char_data(&mut self, nets: &Vec<WifiInfo>) {
+        for w in nets {
+            let seconds: f64 = w.time.second() as f64;
+            if let Some(n) = self.wifi_datasets.iter_mut().find(|item| item.ssid == w.ssid) {
+                let signal: f64 = w.signal as f64;
+                n.data.push((signal, seconds));
+            } else {
+                self.wifi_datasets.push(WifiDataset {
+                    ssid: w.ssid.clone(),
+                    data: vec![(0.0, 0.0)],
+                });
+            }
+        }
+        // println!("{:?}", self.wifi_datasets);
+    }
+
     fn app_tick(&mut self) -> Result<()> {
         let now = Instant::now();
         let elapsed = (now - self.scan_start_time).as_secs_f64();
@@ -187,6 +210,8 @@ impl Component for WifiScan {
 
         // -- custom actions
         if let Action::Scan(nets) = action {
+            // self.wifis = nets;
+            self.parse_char_data(&nets);
             self.wifis = nets;
         }
 
@@ -205,8 +230,8 @@ impl Component for WifiScan {
         let block = self.make_table();
         f.render_widget(block, rect);
 
-        // let block = self.make_chart();
-        // f.render_widget(block, rects[1]);
+        let block = self.make_chart();
+        f.render_widget(block, rects[1]);
 
         // // -- LIST
         // let mut logs: Vec<ListItem> = Vec::new();
