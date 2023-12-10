@@ -45,7 +45,7 @@ impl Component for Home {
   }
 
   fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-    f.render_widget(Paragraph::new("hello world"), area);
+    f.render_widget(Paragraph::new("Network scanner"), area);
     Ok(())
   }
 }
