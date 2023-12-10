@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 
 use crate::{
   action::Action,
-  components::{home::Home, fps::FpsCounter, wifiscan::WifiScan, Component},
+  components::{home::Home, wifiscan::WifiScan, Component},
   config::Config,
   mode::Mode,
   tui,
@@ -26,7 +26,6 @@ pub struct App {
 impl App {
   pub fn new(tick_rate: f64, frame_rate: f64) -> Result<Self> {
     let home = Home::new();
-    let fps = FpsCounter::default();
     let wifiscan = WifiScan::default();
     let config = Config::new()?;
     let mode = Mode::Home;
@@ -34,7 +33,7 @@ impl App {
       tick_rate: 1.0,
       // tick_rate,
       frame_rate,
-      components: vec![Box::new(home), Box::new(fps), Box::new(wifiscan)],
+      components: vec![Box::new(home), Box::new(wifiscan)],
       should_quit: false,
       should_suspend: false,
       config,

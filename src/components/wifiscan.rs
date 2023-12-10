@@ -26,6 +26,11 @@ pub struct WifiScan {
     pub wifis: Vec<WifiInfo>,
 }
 
+pub struct WifiDataset {
+    ssid: String,
+    data: Vec<(f64, f64)>,
+}
+
 impl Default for WifiScan {
     fn default() -> Self {
         Self::new()
@@ -44,21 +49,21 @@ impl WifiScan {
     fn make_table(&mut self) -> Table {
         let header = Row::new(vec!["UTC", "ssid", "channel", "mac", "signal"])
             .style(Style::default().fg(Color::Yellow))
-            .bottom_margin(0);
+            .bottom_margin(1);
         let mut rows = Vec::new();
         for w in &self.wifis {
             // let gauge = Gauge::default()
             //   .block(Block::default())
             //   .gauge_style(Style::default().fg(Color::White).bg(Color::Black))
             //   .percent(20);
-
             let max_dbm: f32 = -30.0;
             let min_dbm: f32 = -90.0;
             let s_clamp = w.signal.max(min_dbm).min(max_dbm);
             let percent = ((s_clamp - min_dbm) / (max_dbm - min_dbm)).clamp(0.0, 1.0);
 
             let p = (percent * 10.0) as usize;
-            let gauge: String = std::iter::repeat(char::from_u32(0x25a8).unwrap_or('#'))
+            let gauge: String = std::iter::repeat(char::from_u32(0x25a8)
+                .unwrap_or('#'))
                 .take(p)
                 .collect();
 
@@ -72,7 +77,7 @@ impl WifiScan {
                 Style::default().fg(Color::LightGreen),
                 Style::default().fg(Color::Green),
             ];
-            let color = (percent * ((colors.len() - 1) as f32)) as usize;
+            let color = (percent * ((colors.len()-1) as f32)) as usize;
             let signal = format!("({}){}", w.signal, gauge);
 
             rows.push(Row::new(vec![
@@ -101,6 +106,20 @@ impl WifiScan {
             .column_spacing(1);
         table
     }
+
+    // pub fn make_chart(&mut self) -> Chart {
+    //     let data = Vec::new();
+    //     let dataset = Dataset::default()
+    //         .name("data1")
+    //         .marker(symbols::Marker::Dot)
+    //         .style(Style::default().fg(Color::Red))
+    //         .data(data);
+    //     let chart = Chart::new(vec![dataset])
+    //         .block(Block::default().title("Wifi signals").borders(Borders::ALL))
+    //         .y_axis(Axis::default().title("signal").style(Style::default().fg(Color::Gray)))
+    //         .x_axis(Axis::default().title("time").style(Style::default().fg(Color::Gray)));
+    //     chart
+    // }
 
     pub fn scan(&mut self) {
         let tx = self.action_tx.clone().unwrap();
@@ -184,6 +203,10 @@ impl Component for WifiScan {
         rect.y = 1;
 
         let block = self.make_table();
+        f.render_widget(block, rect);
+
+        // let block = self.make_chart();
+        // f.render_widget(block, rects[1]);
 
         // // -- LIST
         // let mut logs: Vec<ListItem> = Vec::new();
@@ -221,7 +244,7 @@ impl Component for WifiScan {
         // // println!("{:?}", items);
         // let block = Table::new(items).block(Block::default().title("[Wifi Networks]").borders(Borders::ALL));
 
-        f.render_widget(block, rect);
+        // f.render_widget(block, rect);
         Ok(())
     }
 }

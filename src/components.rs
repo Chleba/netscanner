@@ -9,7 +9,6 @@ use crate::{
   tui::{Event, Frame},
 };
 
-pub mod fps;
 pub mod home;
 pub mod wifiscan;
 
