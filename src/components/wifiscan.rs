@@ -80,7 +80,11 @@ impl WifiScan {
         let mut rows = Vec::new();
         for w in &self.wifis {
             let mut color_name = Color::Gray;
-            if let Some(p) =self.wifi_datasets.iter_mut().position(|item| item.ssid == w.ssid) {
+            if let Some(p) = self
+                .wifi_datasets
+                .iter_mut()
+                .position(|item| item.ssid == w.ssid)
+            {
                 color_name = COLORS_NAMES[p];
             };
             let max_dbm: f32 = -30.0;
@@ -101,8 +105,8 @@ impl WifiScan {
             rows.push(Row::new(vec![
                 Cell::from(w.time.format("%H:%M:%S").to_string()),
                 Cell::from(Span::styled(
-                    format!("{ssid:<2}"), 
-                    Style::default().fg(color_name)
+                    format!("{ssid:<2}"),
+                    Style::default().fg(color_name),
                 )),
                 Cell::from(w.channel.to_string()),
                 Cell::from(w.mac.clone()),
@@ -118,6 +122,7 @@ impl WifiScan {
             .block(
                 Block::default()
                     .title("[WiFi Networks]")
+                    .title_alignment(Alignment::Right)
                     .borders(Borders::ALL)
                     .padding(Padding::new(1, 0, 1, 0)),
             )
@@ -154,23 +159,41 @@ impl WifiScan {
             datasets.push(dataset);
             index += 1;
         }
+        let x_labels = [
+            self.signal_tick[0].to_string(),
+            (self.signal_tick[1] / 2.0).to_string(),
+            self.signal_tick[1].to_string(),
+        ]
+        .iter()
+        .cloned()
+        .map(Span::from)
+        .collect();
         let chart = Chart::new(datasets)
             .block(
                 Block::default()
                     .title("[Wifi signals]")
+                    .title_alignment(Alignment::Right)
                     .borders(Borders::ALL)
                     .padding(Padding::new(1, 1, 1, 1)),
             )
             .y_axis(
                 Axis::default()
                     .bounds([0.0, 100.0])
-                    .title("signal")
+                    .title("[signal]")
+                    .labels(
+                        ["0.0", "50.0", "100.0"]
+                            .iter()
+                            .cloned()
+                            .map(Span::from)
+                            .collect(),
+                    )
                     .style(Style::default().fg(Color::Yellow)),
             )
             .x_axis(
                 Axis::default()
                     .bounds(self.signal_tick)
-                    .title("time")
+                    .title("[check]")
+                    .labels(x_labels)
                     .style(Style::default().fg(Color::Yellow)),
             );
         chart
@@ -284,8 +307,9 @@ impl Component for WifiScan {
             // .constraints(vec![Constraint::Length(15), Constraint::Length(50)])
             .split(f.size());
 
-        let rect = rects[0];
-        // rect.y = 1;
+        let mut rect = rects[0];
+        rect.y = 1;
+        rect.height -= 1;
 
         let block = self.make_table();
         f.render_widget(block, rect);
