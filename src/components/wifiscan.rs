@@ -179,9 +179,9 @@ impl WifiScan {
             .y_axis(
                 Axis::default()
                     .bounds([0.0, 100.0])
-                    .title("[signal]")
+                    .title("[signal(dbm)]")
                     .labels(
-                        ["0.0", "50.0", "100.0"]
+                        ["0.0", "-50.0", "-100.0"]
                             .iter()
                             .cloned()
                             .map(Span::from)
