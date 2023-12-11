@@ -24,6 +24,7 @@ json5 = "0.4.1"
 lazy_static = "1.4.0"
 libc = "0.2.148"
 log = "0.4.20"
+pnet = "0.34.0"
 pretty_assertions = "1.4.0"
 ratatui = { version = "0.24.0", features = ["serde", "macros"] }
 serde = { version = "1.0.188", features = ["derive"] }

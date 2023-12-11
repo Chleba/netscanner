@@ -1,8 +1,5 @@
-use chrono::Timelike;
-use chrono::{DateTime, Utc};
-use itertools::Itertools;
+use chrono::{DateTime, Timelike, Utc};
 use std::time::Instant;
-use std::time::SystemTime;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_wifiscanner::Wifi;
 
@@ -121,17 +118,19 @@ impl WifiScan {
             .header(header)
             .block(
                 Block::default()
-                    .title("[WiFi Networks]")
+                    .title("|WiFi Networks|")
+                    .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
+                    .title_style(Style::default().fg(Color::Yellow))
                     .title_alignment(Alignment::Right)
                     .borders(Borders::ALL)
                     .padding(Padding::new(1, 0, 1, 0)),
             )
             .widths(&[
                 Constraint::Length(8),
-                Constraint::Length(14),
-                Constraint::Length(7),
+                Constraint::Length(11),
+                Constraint::Length(4),
+                Constraint::Length(17),
                 Constraint::Length(18),
-                Constraint::Length(25),
             ])
             .column_spacing(1);
         table
@@ -171,17 +170,19 @@ impl WifiScan {
         let chart = Chart::new(datasets)
             .block(
                 Block::default()
-                    .title("[Wifi signals]")
+                    .title("|Wifi signals|")
+                    .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
+                    .title_style(Style::default().fg(Color::Yellow))
                     .title_alignment(Alignment::Right)
                     .borders(Borders::ALL)
                     .padding(Padding::new(1, 1, 1, 1)),
             )
             .y_axis(
                 Axis::default()
-                    .bounds([0.0, 100.0])
+                    .bounds([25.0, 100.0])
                     .title("[signal(dbm)]")
                     .labels(
-                        ["0.0", "-50.0", "-100.0"]
+                        ["-25.0", "-52.0", "-100.0"]
                             .iter()
                             .cloned()
                             .map(Span::from)
@@ -292,7 +293,6 @@ impl Component for WifiScan {
 
         // -- custom actions
         if let Action::Scan(nets) = action {
-            // self.wifis = nets;
             self.parse_char_data(&nets);
             self.wifis = nets;
         }
@@ -301,59 +301,15 @@ impl Component for WifiScan {
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, rect: Rect) -> Result<()> {
-        let rects = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
-            // .constraints(vec![Constraint::Length(15), Constraint::Length(50)])
-            .split(f.size());
-
-        let mut rect = rects[0];
-        rect.y = 1;
-        rect.height -= 1;
+        let table_rect = Rect::new(0, 1, f.size().width/2, f.size().height/2);
+        let chart_rect = Rect::new(0, (f.size().height/2) + 1, f.size().width, (f.size().height/2)-1);
 
         let block = self.make_table();
-        f.render_widget(block, rect);
+        f.render_widget(block, table_rect);
 
         let block = self.make_chart();
-        f.render_widget(block, rects[1]);
+        f.render_widget(block, chart_rect);
 
-        // // -- LIST
-        // let mut logs: Vec<ListItem> = Vec::new();
-        // for w in &self.wifis {
-        //   let now = w.time;
-        //   let ssid = w.ssid.clone();
-        //   let signal = w.signal;
-        //   let mac = w.mac.clone();
-        //   let channel = w.channel;
-        //   let content = vec![
-        //     Line::from("-".repeat(rect.width as usize)),
-        //     Line::from(vec![
-        //       Span::styled(format!("{ssid:<2} "), Style::default()),
-        //       Span::styled(format!("{mac:<2} "), Style::default()),
-        //       Span::styled(format!("{channel:<2} "), Style::default()),
-        //       Span::styled(format!("{signal:<2} "), Style::default()),
-        //       // Span::raw(w.signal_level.clone()),
-        //       // Span::raw(w.channel.clone()),
-        //       // Span::raw(w.mac.clone()),
-        //     ]),
-        //     Line::from(now.to_rfc3339()),
-        //     // Line::from(String::from(&self.wifis.len())),
-        //   ];
-        //   logs.push(ListItem::new(content));
-        // }
-        // let block = List::new(logs).block(Block::default().borders(Borders::ALL).title("[Wifi Networks]"));
-
-        // // -- TABLE
-        // let mut items: Vec<Row> = Vec::new();
-        // for w in &self.wifis {
-        //     // println!("{}", w.ssid);
-        //   let cells = vec![Cell::from(w.ssid.clone()), Cell::from(w.signal_level.clone())];
-        //   items.push(Row::new(cells).height(1));
-        // }
-        // // println!("{:?}", items);
-        // let block = Table::new(items).block(Block::default().title("[Wifi Networks]").borders(Borders::ALL));
-
-        // f.render_widget(block, rect);
         Ok(())
     }
 }

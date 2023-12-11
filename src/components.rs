@@ -11,6 +11,7 @@ use crate::{
 
 pub mod home;
 pub mod wifiscan;
+pub mod interfaces;
 
 /// `Component` is a trait that represents a visual and interactive element of the user interface.
 /// Implementors of this trait can be registered with the main application loop and will be able to receive events,
