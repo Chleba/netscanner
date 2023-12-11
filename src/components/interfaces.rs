@@ -11,6 +11,7 @@ use crate::{action::Action, tui::Frame};
 pub struct Interfaces {
     pub action_tx: Option<UnboundedSender<Action>>,
     pub interfaces: Vec<NetworkInterface>,
+    pub scan_start_time: Instant,
 }
 
 impl Default for Interfaces {
@@ -24,11 +25,17 @@ impl Interfaces {
         Self {
             action_tx: None,
             interfaces: Vec::new(),
+            scan_start_time: Instant::now(),
         }
     }
 
     fn app_tick(&mut self) -> Result<()> {
-        if self.interfaces.len() == 0 {
+        let now = Instant::now();
+        let elapsed = (now - self.scan_start_time).as_secs_f64();
+
+        if self.interfaces.len() == 0 || elapsed > 5.0 {
+            self.scan_start_time = now;
+            self.interfaces.clear();
             let interfaces = datalink::interfaces();
             for intf in interfaces {
                 self.interfaces.push(intf);
@@ -59,10 +66,6 @@ impl Interfaces {
                 .cloned()
                 .map(|ip| Span::from(ip.ip().to_string()))
                 .collect();
-
-            // let signal = format!("({}){}", w.signal, gauge);
-            // let color = (percent * (COLORS_SIGNAL.len() as f32)) as usize;
-            // let ssid = w.ssid.clone();
 
             rows.push(Row::new(vec![
                 Cell::from(name),
@@ -109,20 +112,10 @@ impl Component for Interfaces {
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         let rect = Rect::new(area.width / 2, 1, area.width / 2, area.height / 2);
+
         let block = self.make_table();
         f.render_widget(block, rect);
 
-        // f.render_widget(
-        //     Paragraph::new(" Network scanner").block(
-        //         Block::default()
-        //             .borders(Borders::ALL)
-        //             .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-        //             .title_style(Style::default().fg(Color::Yellow))
-        //             .title_alignment(Alignment::Right)
-        //             .title("|Interfaces|"),
-        //     ),
-        //     rect,
-        // );
         Ok(())
     }
 }
