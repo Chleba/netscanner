@@ -108,7 +108,7 @@ impl Component for Interfaces {
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        let rect = Rect::new(area.width / 2, 1, area.width / 2, area.height / 4);
+        let rect = Rect::new(area.width / 2, 1, area.width / 2, area.height / 2);
         let block = self.make_table();
         f.render_widget(block, rect);
 
