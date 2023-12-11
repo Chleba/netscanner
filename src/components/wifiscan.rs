@@ -32,6 +32,7 @@ pub struct WifiScan {
     pub scan_start_time: Instant,
     pub wifis: Vec<WifiInfo>,
     pub wifi_datasets: Vec<WifiDataset>,
+    pub signal_tick: f64,
 }
 
 impl Default for WifiScan {
@@ -47,6 +48,7 @@ impl WifiScan {
             wifis: Vec::new(),
             wifi_datasets: Vec::new(),
             action_tx: None,
+            signal_tick: 0.0,
         }
     }
 
@@ -74,9 +76,9 @@ impl WifiScan {
             let colors = vec![
                 Style::default().fg(Color::Red),
                 Style::default().fg(Color::LightRed),
-                Style::default().fg(Color::Yellow),
                 Style::default().fg(Color::LightMagenta),
                 Style::default().fg(Color::Magenta),
+                Style::default().fg(Color::Yellow),
                 Style::default().fg(Color::LightGreen),
                 Style::default().fg(Color::Green),
             ];
@@ -114,17 +116,29 @@ impl WifiScan {
         let mut datasets = Vec::new();
         for d in &self.wifi_datasets {
             let dataset = Dataset::default()
-                .name("data1")
-                .marker(symbols::Marker::Dot)
+                .name(d.ssid.clone())
+                .marker(symbols::Marker::Bar)
                 .style(Style::default().fg(Color::Red))
                 .graph_type(GraphType::Line)
                 .data(&d.data);
+                // .data(&[(4.0, 10.0), (5.0, 11.0), (6.0, 15.0)]);
             datasets.push(dataset);
         }
         let chart = Chart::new(datasets)
             .block(Block::default().title("Wifi signals").borders(Borders::ALL))
-            .y_axis(Axis::default().bounds([-90.0, -30.0]).title("signal").style(Style::default().fg(Color::Gray)))
-            .x_axis(Axis::default().bounds([60.0, 0.0]).title("time").style(Style::default().fg(Color::Gray)));
+            .y_axis(
+                Axis::default()
+                    .bounds([0.0, 100.0])
+                    .title("signal")
+                    .style(Style::default().fg(Color::Yellow)),
+            )
+            .x_axis(
+                Axis::default()
+                    // .bounds([2.0, self.signal_tick])
+                    .bounds([0.0, 100.0])
+                    .title("time")
+                    .style(Style::default().fg(Color::Yellow)),
+            );
         chart
     }
 
@@ -163,11 +177,23 @@ impl WifiScan {
     }
 
     fn parse_char_data(&mut self, nets: &Vec<WifiInfo>) {
+        self.signal_tick += 1.0;
         for w in nets {
             let seconds: f64 = w.time.second() as f64;
-            if let Some(n) = self.wifi_datasets.iter_mut().find(|item| item.ssid == w.ssid) {
+            if let Some(n) = self
+                .wifi_datasets
+                .iter_mut()
+                .find(|item| item.ssid == w.ssid)
+            {
+                // println!("{}", self.signal_tick);
                 let signal: f64 = w.signal as f64;
-                n.data.push((signal, seconds));
+                n.data.push((signal * -1.0, seconds));
+                // n.data.push((signal * -1.0, self.signal_tick));
+                if n.data.len() > 50 {
+                    // let d = n.data.drai
+                }
+                // n.data = n.data[n.data.len()-50]
+                // n.data = n.data.clone().into_iter().take(50).collect();
             } else {
                 self.wifi_datasets.push(WifiDataset {
                     ssid: w.ssid.clone(),
@@ -221,11 +247,12 @@ impl Component for WifiScan {
     fn draw(&mut self, f: &mut Frame<'_>, rect: Rect) -> Result<()> {
         let rects = Layout::default()
             .direction(Direction::Vertical)
-            .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
+            // .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
+            .constraints(vec![Constraint::Length(15), Constraint::Length(50)])
             .split(f.size());
 
         let mut rect = rects[0];
-        rect.y = 1;
+        // rect.y = 1;
 
         let block = self.make_table();
         f.render_widget(block, rect);
