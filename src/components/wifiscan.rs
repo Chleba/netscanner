@@ -161,7 +161,7 @@ impl WifiScan {
         }
         let x_labels = [
             self.signal_tick[0].to_string(),
-            (self.signal_tick[1] / 2.0).to_string(),
+            (((self.signal_tick[1] - self.signal_tick[0]) / 2.0) + self.signal_tick[0]).to_string(),
             self.signal_tick[1].to_string(),
         ]
         .iter()
