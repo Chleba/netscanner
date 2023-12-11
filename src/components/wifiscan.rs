@@ -32,7 +32,7 @@ pub struct WifiScan {
     pub scan_start_time: Instant,
     pub wifis: Vec<WifiInfo>,
     pub wifi_datasets: Vec<WifiDataset>,
-    pub signal_tick: f64,
+    pub signal_tick: [f64; 2],
 }
 
 impl Default for WifiScan {
@@ -41,6 +41,16 @@ impl Default for WifiScan {
     }
 }
 
+const COLORS: [Color; 7] = [
+    Color::Red,
+    Color::LightRed,
+    Color::LightMagenta,
+    Color::Magenta,
+    Color::Yellow,
+    Color::LightGreen,
+    Color::Green,
+];
+
 impl WifiScan {
     pub fn new() -> Self {
         Self {
@@ -48,7 +58,7 @@ impl WifiScan {
             wifis: Vec::new(),
             wifi_datasets: Vec::new(),
             action_tx: None,
-            signal_tick: 0.0,
+            signal_tick: [0.0, 20.0],
         }
     }
 
@@ -73,16 +83,7 @@ impl WifiScan {
                 .collect();
 
             let signal = format!("({}){}", w.signal, gauge);
-            let colors = vec![
-                Style::default().fg(Color::Red),
-                Style::default().fg(Color::LightRed),
-                Style::default().fg(Color::LightMagenta),
-                Style::default().fg(Color::Magenta),
-                Style::default().fg(Color::Yellow),
-                Style::default().fg(Color::LightGreen),
-                Style::default().fg(Color::Green),
-            ];
-            let color = (percent * ((colors.len() - 1) as f32)) as usize;
+            let color = (percent * (COLORS.len() as f32)) as usize;
             let signal = format!("({}){}", w.signal, gauge);
 
             rows.push(Row::new(vec![
@@ -90,7 +91,10 @@ impl WifiScan {
                 Cell::from(w.ssid.clone()),
                 Cell::from(w.channel.to_string()),
                 Cell::from(w.mac.clone()),
-                Cell::from(Span::styled(format!("{signal:<2}"), colors[color])),
+                Cell::from(Span::styled(
+                    format!("{signal:<2}"),
+                    Style::default().fg(COLORS[color]),
+                )),
             ]));
         }
 
@@ -98,7 +102,7 @@ impl WifiScan {
             .header(header)
             .block(
                 Block::default()
-                    .title("|WiFi Networks|")
+                    .title("[WiFi Networks]")
                     .borders(Borders::ALL),
             )
             .widths(&[
@@ -114,18 +118,33 @@ impl WifiScan {
 
     pub fn make_chart(&mut self) -> Chart {
         let mut datasets = Vec::new();
+        let mut index = 0;
+        let colors = vec![
+            Color::Yellow,
+            Color::Red,
+            Color::Green,
+            Color::Blue,
+            Color::Gray,
+            Color::Cyan,
+        ];
         for d in &self.wifi_datasets {
             let dataset = Dataset::default()
                 .name(d.ssid.clone())
                 .marker(symbols::Marker::Bar)
-                .style(Style::default().fg(Color::Red))
-                .graph_type(GraphType::Line)
+                .style(Style::default().fg(colors[index]))
+                // .graph_type(GraphType::Line)
+                .graph_type(GraphType::Scatter)
                 .data(&d.data);
-                // .data(&[(4.0, 10.0), (5.0, 11.0), (6.0, 15.0)]);
             datasets.push(dataset);
+            index += 1;
         }
+        // index += 1;
         let chart = Chart::new(datasets)
-            .block(Block::default().title("Wifi signals").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("[Wifi signals]")
+                    .borders(Borders::ALL),
+            )
             .y_axis(
                 Axis::default()
                     .bounds([0.0, 100.0])
@@ -134,8 +153,8 @@ impl WifiScan {
             )
             .x_axis(
                 Axis::default()
-                    // .bounds([2.0, self.signal_tick])
-                    .bounds([0.0, 100.0])
+                    .bounds(self.signal_tick)
+                    // .bounds([0.0, 100.0])
                     .title("time")
                     .style(Style::default().fg(Color::Yellow)),
             );
@@ -177,7 +196,6 @@ impl WifiScan {
     }
 
     fn parse_char_data(&mut self, nets: &Vec<WifiInfo>) {
-        self.signal_tick += 1.0;
         for w in nets {
             let seconds: f64 = w.time.second() as f64;
             if let Some(n) = self
@@ -185,15 +203,11 @@ impl WifiScan {
                 .iter_mut()
                 .find(|item| item.ssid == w.ssid)
             {
-                // println!("{}", self.signal_tick);
                 let signal: f64 = w.signal as f64;
-                n.data.push((signal * -1.0, seconds));
-                // n.data.push((signal * -1.0, self.signal_tick));
+                n.data.push((self.signal_tick[1], signal * -1.0));
                 if n.data.len() > 50 {
-                    // let d = n.data.drai
+                    n.data.remove(0);
                 }
-                // n.data = n.data[n.data.len()-50]
-                // n.data = n.data.clone().into_iter().take(50).collect();
             } else {
                 self.wifi_datasets.push(WifiDataset {
                     ssid: w.ssid.clone(),
@@ -201,7 +215,8 @@ impl WifiScan {
                 });
             }
         }
-        // println!("{:?}", self.wifi_datasets);
+        self.signal_tick[0] += 1.0;
+        self.signal_tick[1] += 1.0;
     }
 
     fn app_tick(&mut self) -> Result<()> {
@@ -247,8 +262,8 @@ impl Component for WifiScan {
     fn draw(&mut self, f: &mut Frame<'_>, rect: Rect) -> Result<()> {
         let rects = Layout::default()
             .direction(Direction::Vertical)
-            // .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
-            .constraints(vec![Constraint::Length(15), Constraint::Length(50)])
+            .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
+            // .constraints(vec![Constraint::Length(15), Constraint::Length(50)])
             .split(f.size());
 
         let mut rect = rects[0];
