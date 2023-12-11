@@ -2,8 +2,8 @@
 name = "netscanner"
 version = "0.1.0"
 edition = "2021"
-description = "Scanner of network"
-
+description = "WiFi Scanner of Networks signal"
+license = "MIT"
 authors = ["Chleba <chlebik@gmail.com>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
