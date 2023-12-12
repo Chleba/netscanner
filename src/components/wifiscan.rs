@@ -18,6 +18,16 @@ pub struct WifiInfo {
     mac: String,
 }
 
+impl WifiInfo {
+    fn copy_values(&mut self, net: WifiInfo) {
+        self.time = net.time;
+        self.ssid = net.ssid;
+        self.channel = net.channel;
+        self.signal = net.signal;
+        self.mac = net.mac;
+    }
+}
+
 #[derive(Debug)]
 pub struct WifiDataset {
     ssid: String,
@@ -48,6 +58,7 @@ const COLORS_SIGNAL: [Color; 7] = [
     Color::LightGreen,
     Color::Green,
 ];
+
 const COLORS_NAMES: [Color; 8] = [
     Color::Yellow,
     Color::Red,
@@ -234,6 +245,16 @@ impl WifiScan {
         });
     }
 
+    fn parse_networks_data(&mut self, nets: &Vec<WifiInfo>) {
+        for w in nets {
+            if let Some(n) = self.wifis.iter_mut().find(|item| item.ssid == w.ssid) {
+                n.copy_values(w.clone());
+            } else {
+                self.wifis.push(w.clone());
+            }
+        }
+    }
+
     fn parse_char_data(&mut self, nets: &Vec<WifiInfo>) {
         for w in nets {
             let seconds: f64 = w.time.second() as f64;
@@ -294,7 +315,8 @@ impl Component for WifiScan {
         // -- custom actions
         if let Action::Scan(nets) = action {
             self.parse_char_data(&nets);
-            self.wifis = nets;
+            self.parse_networks_data(&nets);
+            // self.wifis = nets;
         }
 
         Ok(None)
