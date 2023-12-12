@@ -52,12 +52,15 @@ impl Interfaces {
         for w in &self.interfaces {
             let name = w.name.clone();
             let mac = w.mac.unwrap().to_string();
-            let ipv4: Vec<Span> = w
+            let ipv4: Vec<Line> = w
                 .ips
                 .iter()
                 .filter(|f| f.is_ipv4())
                 .cloned()
-                .map(|ip| Span::from(ip.ip().to_string()))
+                .map(|ip| {
+                    let ip_str = ip.ip().to_string();
+                    Line::from(vec![Span::styled(format!("{ip_str:<2}"), Style::default().fg(Color::Blue))])
+                })
                 .collect();
             let ipv6: Vec<Span> = w
                 .ips
@@ -67,12 +70,22 @@ impl Interfaces {
                 .map(|ip| Span::from(ip.ip().to_string()))
                 .collect();
 
-            rows.push(Row::new(vec![
-                Cell::from(name),
-                Cell::from(mac),
-                Cell::from(vec![Line::from(ipv4)]),
-                Cell::from(vec![Line::from(ipv6)]),
-            ]));
+            let mut row_height = 1;
+            if ipv4.len() > 1 {
+                row_height = ipv4.clone().len() as u16;
+            }
+            rows.push(
+                Row::new(vec![
+                    Cell::from(Span::styled(
+                        format!("{name:<2}"),
+                        Style::default().fg(Color::Green),
+                    )),
+                    Cell::from(mac),
+                    Cell::from(ipv4.clone()),
+                    Cell::from(vec![Line::from(ipv6)]),
+                ])
+                .height(row_height), // .bottom_margin((ipv4.len()) as u16)
+            );
         }
 
         let table = Table::new(rows)

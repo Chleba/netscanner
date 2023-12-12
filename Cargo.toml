@@ -1,8 +1,8 @@
 [package]
 name = "netscanner"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
-description = "WiFi Scanner of Networks signal"
+description = "Network Scanner"
 license = "MIT"
 authors = ["Chleba <chlebik@gmail.com>"]
 

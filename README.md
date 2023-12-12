@@ -1,7 +1,13 @@
 # netscanner
 
-[![CI](https://github.com//netscanner/workflows/CI/badge.svg)](https://github.com//netscanner/actions)
 
 WiFi Networks Scanner
+
+must be run with sudo priviliges
+
+## Install
+```
+cargo install netscanner
+```
 
 ![netscanner screenshot](./netscanner.png?raw=true)
