@@ -1,4 +1,5 @@
 use chrono::{DateTime, Timelike, Utc};
+use config::Source;
 use std::time::Instant;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_wifiscanner::Wifi;
@@ -106,7 +107,7 @@ impl WifiScan {
                 .collect();
 
             let signal = format!("({}){}", w.signal, gauge);
-            let color = (percent * (COLORS_SIGNAL.len() as f32)) as usize;
+            let color = (percent * ((COLORS_SIGNAL.len()-1) as f32)) as usize;
             let signal = format!("({}){}", w.signal, gauge);
             let ssid = w.ssid.clone();
 
@@ -204,7 +205,7 @@ impl WifiScan {
             .x_axis(
                 Axis::default()
                     .bounds(self.signal_tick)
-                    .title("[check]")
+                    .title("[scans]")
                     .labels(x_labels)
                     .style(Style::default().fg(Color::Yellow)),
             );
@@ -246,6 +247,7 @@ impl WifiScan {
     }
 
     fn parse_networks_data(&mut self, nets: &Vec<WifiInfo>) {
+        self.wifis.iter_mut().for_each(|item|{ item.signal = 0.0; });
         for w in nets {
             if let Some(n) = self.wifis.iter_mut().find(|item| item.ssid == w.ssid) {
                 n.copy_values(w.clone());
