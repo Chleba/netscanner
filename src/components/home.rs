@@ -8,48 +8,52 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use super::{Component, Frame};
 use crate::{
-  action::Action,
-  config::{Config, KeyBindings},
+    action::Action,
+    config::{Config, KeyBindings},
+    mode::Mode,
 };
 
 #[derive(Default)]
 pub struct Home {
-  command_tx: Option<UnboundedSender<Action>>,
-  config: Config,
+    command_tx: Option<UnboundedSender<Action>>,
+    config: Config,
+    mode: Mode,
 }
 
 impl Home {
-  pub fn new() -> Self {
-    Self::default()
-  }
+    pub fn new() -> Self {
+        Self {
+            command_tx: None,
+            config: Config::default(),
+            mode: Mode::Home,
+        }
+    }
 }
 
 impl Component for Home {
-  fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
-    self.command_tx = Some(tx);
-    Ok(())
-  }
-
-  fn register_config_handler(&mut self, config: Config) -> Result<()> {
-    self.config = config;
-    Ok(())
-  }
-
-  fn update(&mut self, action: Action) -> Result<Option<Action>> {
-    match action {
-      Action::Tick => {
-      },
-      _ => {},
+    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+        self.command_tx = Some(tx);
+        Ok(())
     }
-    Ok(None)
-  }
 
-  fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-    let rect = Rect::new(0, 0, f.size().width, 1);
-    let version: &str = env!("CARGO_PKG_VERSION");
-    let title = format!(" Network Scanner (v{})", version);
-    f.render_widget(Paragraph::new(title), rect);
-    Ok(())
-  }
+    fn register_config_handler(&mut self, config: Config) -> Result<()> {
+        self.config = config;
+        Ok(())
+    }
+
+    fn update(&mut self, action: Action) -> Result<Option<Action>> {
+        match action {
+            Action::Tick => {}
+            _ => {}
+        }
+        Ok(None)
+    }
+
+    fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
+        let rect = Rect::new(0, 0, f.size().width, 1);
+        let version: &str = env!("CARGO_PKG_VERSION");
+        let title = format!(" Network Scanner (v{})", version);
+        f.render_widget(Paragraph::new(title), rect);
+        Ok(())
+    }
 }
-

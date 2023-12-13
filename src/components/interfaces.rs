@@ -6,12 +6,13 @@ use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::Component;
-use crate::{action::Action, tui::Frame};
+use crate::{action::Action, mode::Mode, tui::Frame};
 
 pub struct Interfaces {
     pub action_tx: Option<UnboundedSender<Action>>,
     pub interfaces: Vec<NetworkInterface>,
     pub scan_start_time: Instant,
+    pub mode: Mode,
 }
 
 impl Default for Interfaces {
@@ -26,6 +27,7 @@ impl Interfaces {
             action_tx: None,
             interfaces: Vec::new(),
             scan_start_time: Instant::now(),
+            mode: Mode::Interfaces,
         }
     }
 
@@ -59,7 +61,10 @@ impl Interfaces {
                 .cloned()
                 .map(|ip| {
                     let ip_str = ip.ip().to_string();
-                    Line::from(vec![Span::styled(format!("{ip_str:<2}"), Style::default().fg(Color::Blue))])
+                    Line::from(vec![Span::styled(
+                        format!("{ip_str:<2}"),
+                        Style::default().fg(Color::Blue),
+                    )])
                 })
                 .collect();
             let ipv6: Vec<Span> = w
@@ -124,7 +129,7 @@ impl Component for Interfaces {
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        let rect = Rect::new(area.width / 2, 1, area.width / 2, area.height / 2);
+        let rect = Rect::new(area.width / 2, 1, area.width / 2, (area.height / 4) + 1);
 
         let block = self.make_table();
         f.render_widget(block, rect);

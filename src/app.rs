@@ -6,7 +6,13 @@ use tokio::sync::mpsc;
 
 use crate::{
     action::Action,
-    components::{home::Home, interfaces::Interfaces, wifiscan::WifiScan, Component},
+    components::{
+        home::Home, 
+        interfaces::Interfaces, 
+        wifiscan::WifiScan, 
+        connected::WifiConnected,
+        Component
+    },
     config::Config,
     mode::Mode,
     tui,
@@ -28,13 +34,19 @@ impl App {
         let home = Home::new();
         let wifiscan = WifiScan::default();
         let interfaces = Interfaces::default();
+        let wificonn = WifiConnected::default(); 
         let config = Config::new()?;
         let mode = Mode::Home;
         Ok(Self {
             tick_rate: 1.0,
             // tick_rate,
             frame_rate,
-            components: vec![Box::new(home), Box::new(interfaces), Box::new(wifiscan)],
+            components: vec![
+                Box::new(home), 
+                Box::new(interfaces), 
+                Box::new(wifiscan),
+                Box::new(wificonn),
+            ],
             should_quit: false,
             should_suspend: false,
             config,

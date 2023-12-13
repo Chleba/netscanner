@@ -7,6 +7,7 @@ use serde::{
 };
 
 use crate::components::wifiscan::WifiInfo;
+use crate::mode::Mode;
 
 // #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[derive(Debug, Clone, PartialEq)]
@@ -23,6 +24,7 @@ pub enum Action {
 
     // -- custom actions
     Scan(Vec<WifiInfo>),
+    Mode(Mode),
 }
 
 impl<'de> Deserialize<'de> for Action {

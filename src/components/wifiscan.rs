@@ -8,7 +8,7 @@ use color_eyre::eyre::Result;
 use ratatui::{prelude::*, widgets::*};
 
 use super::Component;
-use crate::{action::Action, tui::Frame};
+use crate::{action::Action, mode::Mode, tui::Frame};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct WifiInfo {
@@ -42,6 +42,7 @@ pub struct WifiScan {
     pub wifis: Vec<WifiInfo>,
     pub wifi_datasets: Vec<WifiDataset>,
     pub signal_tick: [f64; 2],
+    pub mode: Mode,
 }
 
 impl Default for WifiScan {
@@ -79,6 +80,7 @@ impl WifiScan {
             wifi_datasets: Vec::new(),
             action_tx: None,
             signal_tick: [0.0, 40.0],
+            mode: Mode::Networks,
         }
     }
 
@@ -107,9 +109,15 @@ impl WifiScan {
                 .collect();
 
             let signal = format!("({}){}", w.signal, gauge);
-            let color = (percent * ((COLORS_SIGNAL.len()-1) as f32)) as usize;
-            let signal = format!("({}){}", w.signal, gauge);
+            let color = (percent * ((COLORS_SIGNAL.len() - 1) as f32)) as usize;
             let ssid = w.ssid.clone();
+            let mut signal_span = Span::from("");
+            if w.signal < 0.0 {
+                signal_span = Span::styled(
+                    format!("{signal:<2}"),
+                    Style::default().fg(COLORS_SIGNAL[color]),
+                );
+            }
 
             rows.push(Row::new(vec![
                 Cell::from(w.time.format("%H:%M:%S").to_string()),
@@ -117,12 +125,14 @@ impl WifiScan {
                     format!("{ssid:<2}"),
                     Style::default().fg(color_name),
                 )),
+                // Cell::from(signal_span),
+                // Cell::from(Span::styled(
+                //     format!("{signal:<2}"),
+                //     Style::default().fg(COLORS_SIGNAL[color]),
+                // )),
                 Cell::from(w.channel.to_string()),
                 Cell::from(w.mac.clone()),
-                Cell::from(Span::styled(
-                    format!("{signal:<2}"),
-                    Style::default().fg(COLORS_SIGNAL[color]),
-                )),
+                Cell::from(signal_span),
             ]));
         }
 
@@ -151,7 +161,7 @@ impl WifiScan {
     pub fn make_chart(&mut self) -> Chart {
         let mut datasets = Vec::new();
         let mut index = 0;
-        let colors = vec![
+        let colors = [
             Color::Yellow,
             Color::Red,
             Color::Green,
@@ -247,7 +257,9 @@ impl WifiScan {
     }
 
     fn parse_networks_data(&mut self, nets: &Vec<WifiInfo>) {
-        self.wifis.iter_mut().for_each(|item|{ item.signal = 0.0; });
+        self.wifis.iter_mut().for_each(|item| {
+            item.signal = 0.0;
+        });
         for w in nets {
             if let Some(n) = self.wifis.iter_mut().find(|item| item.ssid == w.ssid) {
                 n.copy_values(w.clone());
@@ -325,8 +337,13 @@ impl Component for WifiScan {
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, rect: Rect) -> Result<()> {
-        let table_rect = Rect::new(0, 1, f.size().width/2, f.size().height/2);
-        let chart_rect = Rect::new(0, (f.size().height/2) + 1, f.size().width, (f.size().height/2)-1);
+        let table_rect = Rect::new(0, 1, f.size().width / 2, f.size().height / 2);
+        let chart_rect = Rect::new(
+            0,
+            (f.size().height / 2) + 1,
+            f.size().width,
+            (f.size().height / 2) - 1,
+        );
 
         let block = self.make_table();
         f.render_widget(block, table_rect);
