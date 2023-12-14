@@ -2,6 +2,7 @@ use chrono::Timelike;
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
 use dns_lookup::{lookup_addr, lookup_host};
+use futures::future::join_all;
 use itertools::Position;
 use pnet::datalink::{self, NetworkInterface};
 use ratatui::{prelude::*, widgets::*};
@@ -92,12 +93,13 @@ impl Discovery {
     fn scan(&mut self) {
         self.scanned_ips.clear();
         if let Some(cidr) = self.cidr {
+            let mut tasks = Vec::new();
             for ip in cidr.iter() {
                 let ip = ip.address().to_string();
                 match ip.parse() {
                     Ok(IpAddr::V4(addr)) => {
                         let tx = self.action_tx.clone().unwrap();
-                        tokio::spawn(async move {
+                        tasks.push(tokio::spawn(async move {
                             let client =
                                 Client::new(&Config::default()).expect("Cannot create client");
                             let payload = [0; 56];
@@ -113,7 +115,26 @@ impl Discovery {
                                 Ok(_) => {}
                                 Err(_) => {}
                             }
-                        });
+                        }));
+
+                        // let tx = self.action_tx.clone().unwrap();
+                        // tokio::spawn(async move {
+                        //     let client =
+                        //         Client::new(&Config::default()).expect("Cannot create client");
+                        //     let payload = [0; 56];
+                        //     let mut pinger = client
+                        //         .pinger(IpAddr::V4(addr), PingIdentifier(random()))
+                        //         .await;
+                        //     pinger.timeout(Duration::from_secs(1));
+                        //     match pinger.ping(PingSequence(0), &payload).await {
+                        //         Ok((IcmpPacket::V4(packet), dur)) => {
+                        //             tx.send(Action::PingIp(packet.get_real_dest().to_string()))
+                        //                 .unwrap();
+                        //         }
+                        //         Ok(_) => {}
+                        //         Err(_) => {}
+                        //     }
+                        // });
                     }
                     Ok(_) => {}
                     Err(e) => {
@@ -122,6 +143,7 @@ impl Discovery {
                     }
                 }
             }
+            let _ = join_all(tasks);
         };
     }
 
