@@ -1,20 +1,23 @@
 use chrono::Timelike;
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
+use dns_lookup::{lookup_addr, lookup_host};
 use itertools::Position;
 use pnet::datalink::{self, NetworkInterface};
 use ratatui::{prelude::*, widgets::*};
 use std::collections::HashMap;
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::process::{Command, Output};
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence, ICMP};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::Component;
 use crate::{action::Action, mode::Mode, tui::Frame};
+use crossterm::event::{KeyCode, KeyEvent};
+use rand::random;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
-use crossterm::event::{KeyEvent, KeyCode};
 
 struct ScannedIp {
     ip: String,
@@ -31,6 +34,7 @@ pub struct Discovery {
     ips_to_scan: Vec<Ipv4Addr>,
     input: Input,
     cidr: Option<Ipv4Cidr>,
+    cidr_error: bool,
     mode: Mode,
 }
 
@@ -48,18 +52,20 @@ impl Discovery {
             scanning: false,
             scanned_ips: Vec::new(),
             ips_to_scan: Vec::new(),
-            input: Input::default(),
+            input: Input::default().with_value(String::from("192.168.1.0/24")),
             cidr: None,
+            cidr_error: false,
             mode: Mode::Normal,
         }
     }
 
     fn app_tick(&mut self) -> Result<()> {
         if self.cidr == None {
-            let cidr_range = "192.168.1.0/24"; // Replace with your CIDR range
+            let cidr_range = "192.168.1.0/24";
             match cidr_range.parse::<Ipv4Cidr>() {
                 Ok(ip_cidr) => {
                     self.cidr = Some(ip_cidr);
+                    self.scan();
                 }
                 Err(e) => {
                     // eprintln!("Error parsing CIDR range: {}", e);
@@ -70,69 +76,96 @@ impl Discovery {
         Ok(())
     }
 
+    fn set_cidr(&mut self, cidr_str: String) {
+        match &cidr_str.parse::<Ipv4Cidr>() {
+            Ok(ip_cidr) => {
+                self.cidr = Some(*ip_cidr);
+                self.scan();
+            }
+            Err(e) => {
+                let tx = self.action_tx.clone().unwrap();
+                let _ = tx.send(Action::CidrError);
+            }
+        }
+    }
+
+    fn scan(&mut self) {
+        if let Some(cidr) = self.cidr {
+            for ip in cidr.iter() {
+                let ip = ip.address().to_string();
+                match ip.parse() {
+                    Ok(IpAddr::V4(addr)) => {
+                        let tx = self.action_tx.clone().unwrap();
+                        tokio::spawn(async move {
+                            let client =
+                                Client::new(&Config::default()).expect("Cannot create client");
+                            let payload = [0; 56];
+                            let mut pinger = client
+                                .pinger(IpAddr::V4(addr), PingIdentifier(random()))
+                                .await;
+                            pinger.timeout(Duration::from_secs(1));
+                            match pinger.ping(PingSequence(0), &payload).await {
+                                Ok((IcmpPacket::V4(packet), dur)) => {
+                                    tx.send(Action::PingIp(packet.get_real_dest().to_string()))
+                                        .unwrap();
+                                }
+                                Ok(_) => {}
+                                Err(_) => {}
+                            }
+                        });
+                    }
+                    Ok(_) => {}
+                    Err(e) => {
+                        let tx = self.action_tx.clone().unwrap();
+                        let _ = tx.send(Action::CidrError);
+                    }
+                }
+            }
+        };
+    }
+
+    fn process_ip(&mut self, ip: &str) {
+        if let Some(n) = self
+            .scanned_ips
+            .iter_mut()
+            .find(|item| item.ip == ip.to_string())
+        {
+            let hip: IpAddr = ip.parse().unwrap();
+            let host = lookup_addr(&hip).unwrap_or(String::from(""));
+            n.hostname = host;
+            n.ip = ip.to_string();
+        } else {
+            let hip: IpAddr = ip.parse().unwrap();
+            let host = lookup_addr(&hip).unwrap_or(String::from(""));
+            // let mac = get_mac_address()
+            self.scanned_ips.push(ScannedIp {
+                ip: ip.to_string(),
+                mac: String::from(""),
+                hostname: host,
+                vendor: String::from(""),
+            })
+        }
+    }
+
     pub fn make_ui(&mut self) -> Table {
-        let header = Row::new(vec!["ip", "mac", "hostname", "vendor"])
+        let header = Row::new(vec!["ip", "hostname"])
             .style(Style::default().fg(Color::Yellow))
             .bottom_margin(1);
         let mut rows = Vec::new();
 
-        if let Some(cidr) = self.cidr {
-            for ip in cidr.iter() {
-                let ip = ip.address().to_string();
-                rows.push(Row::new(vec![
-                    // Cell::from(ip.addr().to_string()),
-                    Cell::from(Span::styled(
-                        format!("{ip:<2}"),
-                        Style::default().fg(Color::Blue),
-                    )),
-                    Cell::from("maslo"),
-                    Cell::from("chleba"),
-                    Cell::from("rohlik"),
-                ]));
-            }
-        };
-
-        // for w in &self.interfaces {
-        //     let name = w.name.clone();
-        //     let mac = w.mac.unwrap().to_string();
-        //     let ipv4: Vec<Line> = w
-        //         .ips
-        //         .iter()
-        //         .filter(|f| f.is_ipv4())
-        //         .cloned()
-        //         .map(|ip| {
-        //             let ip_str = ip.ip().to_string();
-        //             Line::from(vec![Span::styled(
-        //                 format!("{ip_str:<2}"),
-        //                 Style::default().fg(Color::Blue),
-        //             )])
-        //         })
-        //         .collect();
-        //     let ipv6: Vec<Span> = w
-        //         .ips
-        //         .iter()
-        //         .filter(|f| f.is_ipv6())
-        //         .cloned()
-        //         .map(|ip| Span::from(ip.ip().to_string()))
-        //         .collect();
-
-        //     let mut row_height = 1;
-        //     if ipv4.len() > 1 {
-        //         row_height = ipv4.clone().len() as u16;
-        //     }
-        //     rows.push(
-        //         Row::new(vec![
-        //             Cell::from(Span::styled(
-        //                 format!("{name:<2}"),
-        //                 Style::default().fg(Color::Green),
-        //             )),
-        //             Cell::from(mac),
-        //             Cell::from(ipv4.clone()),
-        //             Cell::from(vec![Line::from(ipv6)]),
-        //         ])
-        //         .height(row_height), // .bottom_margin((ipv4.len()) as u16)
-        //     );
-        // }
+        for sip in &self.scanned_ips {
+            let ip = &sip.ip;
+            rows.push(Row::new(vec![
+                Cell::from(Span::styled(
+                    format!("{ip:<2}"),
+                    Style::default().fg(Color::Blue),
+                )),
+                // Cell::from(""),
+                Cell::from(sip.hostname.clone()),
+                // Cell::from(""),
+                // Cell::from(""),
+            ]));
+        }
 
         let table = Table::new(rows)
             .header(header)
@@ -147,9 +180,10 @@ impl Discovery {
             )
             .widths(&[
                 Constraint::Length(16),
-                Constraint::Length(18),
-                Constraint::Length(14),
+                // Constraint::Length(18),
                 Constraint::Length(25),
+                // Constraint::Length(35),
+                // Constraint::Length(25),
             ])
             .column_spacing(1);
         table
@@ -186,6 +220,18 @@ impl Discovery {
             );
         input
     }
+
+    fn make_error(&mut self) -> Paragraph {
+        let error = Paragraph::new("CIDR parse error")
+            .style(Style::default().fg(Color::Red))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Double)
+                    .border_style(Style::default().fg(Color::Red)),
+            );
+        error
+    }
 }
 
 impl Component for Discovery {
@@ -197,20 +243,16 @@ impl Component for Discovery {
     fn handle_key_events(&mut self, key: KeyEvent) -> Result<Option<Action>> {
         let action = match self.mode {
             Mode::Normal => return Ok(None),
-            Mode::Input=> match key.code {
+            Mode::Input => match key.code {
                 KeyCode::Enter => {
                     if let Some(sender) = &self.action_tx {
-                        // if let Err(e) =
-                        //     // sender.send(Action::CompleteInput(self.input.value().to_string()))
-                        // {
-                        //     error!("Failed to send action: {:?}", e);
-                        // }
+                        self.set_cidr(self.input.value().to_string());
                     }
                     Action::ModeChange(Mode::Normal)
                 }
                 _ => {
                     self.input.handle_event(&crossterm::event::Event::Key(key));
-                    return Ok(None)
+                    return Ok(None);
                 }
             },
         };
@@ -222,9 +264,18 @@ impl Component for Discovery {
             self.app_tick()?
         }
         // -- custom actions
+        if let Action::PingIp(ref ip) = action {
+            self.process_ip(ip);
+        }
+
+        if let Action::CidrError = action {
+            self.cidr_error = true;
+        }
+
         if let Action::ModeChange(mode) = action {
             if mode == Mode::Input {
                 self.input.reset();
+                self.cidr_error = false;
             }
             self.mode = mode;
         }
@@ -237,16 +288,23 @@ impl Component for Discovery {
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(area);
+
+        // -- TABLE
         let mut table_rect = layout[1].clone();
         table_rect.y += 1;
         table_rect.height -= 1;
-
-        let input_rect = Rect::new(table_rect.width - 41, table_rect.y + 1, 40, 3);
-
         let block = self.make_ui();
         f.render_widget(block, table_rect);
 
-        
+        // -- ERROR
+        if self.cidr_error == true {
+            let error_rect = Rect::new(table_rect.width - 19, table_rect.y + 4, 18, 3);
+            let block = self.make_error();
+            f.render_widget(block, error_rect);
+        }
+
+        // -- INPUT
+        let input_rect = Rect::new(table_rect.width - 41, table_rect.y + 1, 40, 3);
         let scroll = self.input.visual_scroll(40);
         let block = self.make_input(scroll);
         f.render_widget(block, input_rect);

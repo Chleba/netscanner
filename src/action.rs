@@ -25,6 +25,8 @@ pub enum Action {
     // -- custom actions
     Scan(Vec<WifiInfo>),
     ModeChange(Mode),
+    PingIp(String),
+    CidrError,
 }
 
 impl<'de> Deserialize<'de> for Action {
