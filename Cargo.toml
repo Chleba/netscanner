@@ -18,8 +18,10 @@ config = "0.13.3"
 crossterm = { version = "0.27.0", features = ["serde", "event-stream"] }
 derive_deref = "1.1.1"
 directories = "5.0.1"
+dns-lookup = "2.0.4"
 futures = "0.3.28"
 human-panic = "1.2.0"
+ipnetwork = "0.20.0"
 itertools = "0.12.0"
 json5 = "0.4.1"
 lazy_static = "1.4.0"
@@ -38,4 +40,4 @@ tokio-wifiscanner = "0.2.1"
 tracing = "0.1.37"
 tracing-error = "0.2.0"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter", "serde"] }
-wifiscanner = "0.5.1"
+tui-input = { version = "0.8.0", features = ["serde"] }

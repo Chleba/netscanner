@@ -9,8 +9,10 @@ use crate::{
     components::{
         home::Home, 
         interfaces::Interfaces, 
-        wifiscan::WifiScan, 
-        connected::WifiConnected,
+        wifi_scan::WifiScan, 
+        wifi_interface::WifiInterface,
+        wifi_chart::WifiChart,
+        discovery::Discovery,
         Component
     },
     config::Config,
@@ -32,20 +34,23 @@ pub struct App {
 impl App {
     pub fn new(tick_rate: f64, frame_rate: f64) -> Result<Self> {
         let home = Home::new();
-        let wifiscan = WifiScan::default();
         let interfaces = Interfaces::default();
-        let wificonn = WifiConnected::default(); 
+        let wifiscan = WifiScan::default();
+        let wifi_interface = WifiInterface::default(); 
+        let wifi_chart = WifiChart::default(); 
+        let discovery = Discovery::default();
         let config = Config::new()?;
         let mode = Mode::Home;
         Ok(Self {
             tick_rate: 1.0,
-            // tick_rate,
             frame_rate,
             components: vec![
                 Box::new(home), 
                 Box::new(interfaces), 
                 Box::new(wifiscan),
-                Box::new(wificonn),
+                Box::new(wifi_interface),
+                Box::new(wifi_chart),
+                Box::new(discovery),
             ],
             should_quit: false,
             should_suspend: false,

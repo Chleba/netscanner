@@ -12,11 +12,12 @@ use crate::{action::Action, mode::Mode, tui::Frame};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct WifiInfo {
-    time: DateTime<Utc>,
-    ssid: String,
-    channel: u8,
-    signal: f32,
-    mac: String,
+    pub time: DateTime<Utc>,
+    pub ssid: String,
+    pub channel: u8,
+    pub signal: f32,
+    pub mac: String,
+    pub color: Color,
 }
 
 impl WifiInfo {
@@ -29,18 +30,10 @@ impl WifiInfo {
     }
 }
 
-#[derive(Debug)]
-pub struct WifiDataset {
-    ssid: String,
-    data: Vec<(f64, f64)>,
-    color: Color,
-}
-
 pub struct WifiScan {
     pub action_tx: Option<UnboundedSender<Action>>,
     pub scan_start_time: Instant,
     pub wifis: Vec<WifiInfo>,
-    pub wifi_datasets: Vec<WifiDataset>,
     pub signal_tick: [f64; 2],
     pub mode: Mode,
 }
@@ -77,7 +70,6 @@ impl WifiScan {
         Self {
             scan_start_time: Instant::now(),
             wifis: Vec::new(),
-            wifi_datasets: Vec::new(),
             action_tx: None,
             signal_tick: [0.0, 40.0],
             mode: Mode::Networks,
@@ -90,14 +82,6 @@ impl WifiScan {
             .bottom_margin(1);
         let mut rows = Vec::new();
         for w in &self.wifis {
-            let mut color_name = Color::Gray;
-            if let Some(p) = self
-                .wifi_datasets
-                .iter_mut()
-                .position(|item| item.ssid == w.ssid)
-            {
-                color_name = COLORS_NAMES[p];
-            };
             let max_dbm: f32 = -30.0;
             let min_dbm: f32 = -90.0;
             let s_clamp = w.signal.max(min_dbm).min(max_dbm);
@@ -123,13 +107,8 @@ impl WifiScan {
                 Cell::from(w.time.format("%H:%M:%S").to_string()),
                 Cell::from(Span::styled(
                     format!("{ssid:<2}"),
-                    Style::default().fg(color_name),
+                    Style::default().fg(w.color.clone()),
                 )),
-                // Cell::from(signal_span),
-                // Cell::from(Span::styled(
-                //     format!("{signal:<2}"),
-                //     Style::default().fg(COLORS_SIGNAL[color]),
-                // )),
                 Cell::from(w.channel.to_string()),
                 Cell::from(w.mac.clone()),
                 Cell::from(signal_span),
@@ -158,70 +137,6 @@ impl WifiScan {
         table
     }
 
-    pub fn make_chart(&mut self) -> Chart {
-        let mut datasets = Vec::new();
-        let mut index = 0;
-        let colors = [
-            Color::Yellow,
-            Color::Red,
-            Color::Green,
-            Color::Blue,
-            Color::Gray,
-            Color::Cyan,
-        ];
-        for d in &self.wifi_datasets {
-            let dataset = Dataset::default()
-                .name(d.ssid.clone())
-                .marker(symbols::Marker::Dot)
-                .style(Style::default().fg(colors[index]))
-                .graph_type(GraphType::Line)
-                // .graph_type(GraphType::Scatter)
-                .data(&d.data);
-            datasets.push(dataset);
-            index += 1;
-        }
-        let x_labels = [
-            self.signal_tick[0].to_string(),
-            (((self.signal_tick[1] - self.signal_tick[0]) / 2.0) + self.signal_tick[0]).to_string(),
-            self.signal_tick[1].to_string(),
-        ]
-        .iter()
-        .cloned()
-        .map(Span::from)
-        .collect();
-        let chart = Chart::new(datasets)
-            .block(
-                Block::default()
-                    .title("|Wifi signals|")
-                    .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                    .title_style(Style::default().fg(Color::Yellow))
-                    .title_alignment(Alignment::Right)
-                    .borders(Borders::ALL)
-                    .padding(Padding::new(1, 1, 1, 1)),
-            )
-            .y_axis(
-                Axis::default()
-                    .bounds([25.0, 100.0])
-                    .title("[signal(dbm)]")
-                    .labels(
-                        ["-25.0", "-52.0", "-100.0"]
-                            .iter()
-                            .cloned()
-                            .map(Span::from)
-                            .collect(),
-                    )
-                    .style(Style::default().fg(Color::Yellow)),
-            )
-            .x_axis(
-                Axis::default()
-                    .bounds(self.signal_tick)
-                    .title("[scans]")
-                    .labels(x_labels)
-                    .style(Style::default().fg(Color::Yellow)),
-            );
-        chart
-    }
-
     pub fn scan(&mut self) {
         let tx = self.action_tx.clone().unwrap();
         tokio::spawn(async move {
@@ -246,6 +161,7 @@ impl WifiScan {
                                 channel: w.channel.parse::<u8>().unwrap_or(0),
                                 signal: w.signal_level.parse::<f32>().unwrap_or(-100.00),
                                 mac: w.mac.clone(),
+                                color: COLORS_NAMES[wifi_nets.len()],
                             });
                         }
                     }
@@ -257,9 +173,11 @@ impl WifiScan {
     }
 
     fn parse_networks_data(&mut self, nets: &Vec<WifiInfo>) {
+        // -- clear signal values
         self.wifis.iter_mut().for_each(|item| {
             item.signal = 0.0;
         });
+        // -- add or update wifi info
         for w in nets {
             if let Some(n) = self.wifis.iter_mut().find(|item| item.ssid == w.ssid) {
                 n.copy_values(w.clone());
@@ -267,33 +185,6 @@ impl WifiScan {
                 self.wifis.push(w.clone());
             }
         }
-    }
-
-    fn parse_char_data(&mut self, nets: &Vec<WifiInfo>) {
-        for w in nets {
-            let seconds: f64 = w.time.second() as f64;
-            if let Some(p) = self
-                .wifi_datasets
-                .iter_mut()
-                .position(|item| item.ssid == w.ssid)
-            {
-                let n = &mut self.wifi_datasets[p];
-                let signal: f64 = w.signal as f64;
-                n.data.push((self.signal_tick[1], signal * -1.0));
-                if n.data.len() > 50 {
-                    n.data.remove(0);
-                }
-                n.color = COLORS_NAMES[p];
-            } else {
-                self.wifi_datasets.push(WifiDataset {
-                    ssid: w.ssid.clone(),
-                    data: vec![(0.0, 0.0)],
-                    color: Color::Gray,
-                });
-            }
-        }
-        self.signal_tick[0] += 1.0;
-        self.signal_tick[1] += 1.0;
     }
 
     fn app_tick(&mut self) -> Result<()> {
@@ -325,31 +216,22 @@ impl Component for WifiScan {
         if let Action::Render = action {
             self.render_tick()?
         };
-
         // -- custom actions
         if let Action::Scan(nets) = action {
-            self.parse_char_data(&nets);
             self.parse_networks_data(&nets);
-            // self.wifis = nets;
         }
-
         Ok(None)
     }
 
-    fn draw(&mut self, f: &mut Frame<'_>, rect: Rect) -> Result<()> {
-        let table_rect = Rect::new(0, 1, f.size().width / 2, f.size().height / 2);
-        let chart_rect = Rect::new(
-            0,
-            (f.size().height / 2) + 1,
-            f.size().width,
-            (f.size().height / 2) - 1,
-        );
+    fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+            .split(area);
+        let table_rect = Rect::new(0, 1, area.width/2, layout[0].height);
 
         let block = self.make_table();
         f.render_widget(block, table_rect);
-
-        let block = self.make_chart();
-        f.render_widget(block, chart_rect);
 
         Ok(())
     }

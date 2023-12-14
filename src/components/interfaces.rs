@@ -11,7 +11,7 @@ use crate::{action::Action, mode::Mode, tui::Frame};
 pub struct Interfaces {
     pub action_tx: Option<UnboundedSender<Action>>,
     pub interfaces: Vec<NetworkInterface>,
-    pub scan_start_time: Instant,
+    pub last_update_time: Instant,
     pub mode: Mode,
 }
 
@@ -26,17 +26,17 @@ impl Interfaces {
         Self {
             action_tx: None,
             interfaces: Vec::new(),
-            scan_start_time: Instant::now(),
+            last_update_time: Instant::now(),
             mode: Mode::Interfaces,
         }
     }
 
     fn app_tick(&mut self) -> Result<()> {
         let now = Instant::now();
-        let elapsed = (now - self.scan_start_time).as_secs_f64();
+        let elapsed = (now - self.last_update_time).as_secs_f64();
 
         if self.interfaces.len() == 0 || elapsed > 5.0 {
-            self.scan_start_time = now;
+            self.last_update_time = now;
             self.interfaces.clear();
             let interfaces = datalink::interfaces();
             for intf in interfaces {
@@ -129,7 +129,11 @@ impl Component for Interfaces {
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        let rect = Rect::new(area.width / 2, 1, area.width / 2, (area.height / 4) + 1);
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+            .split(area);
+        let rect = Rect::new(area.width/2, 1, area.width/2, layout[0].height);
 
         let block = self.make_table();
         f.render_widget(block, rect);

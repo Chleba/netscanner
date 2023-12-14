@@ -23,19 +23,19 @@ struct CommandError {
     desc: String,
 }
 
-pub struct WifiConnected {
+pub struct WifiInterface {
     action_tx: Option<UnboundedSender<Action>>,
     last_update: Instant,
     wifi_info: Option<WifiConn>,
 }
 
-impl Default for WifiConnected {
+impl Default for WifiInterface {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl WifiConnected {
+impl WifiInterface {
     pub fn new() -> Self {
         Self {
             action_tx: None,
@@ -120,16 +120,16 @@ impl WifiConnected {
             let mac = &wifi_info.mac.clone();
             let mac_label = "Mac addr:";
             List::new(vec![ListItem::new(vec![
-                Line::from(vec![
-                    Span::styled(
-                        format!("{interface_label:<12}"),
-                        Style::default().fg(Color::White),
-                    ),
-                    Span::styled(
-                        format!("{interface:<12}"),
-                        Style::default().fg(Color::Green),
-                    ),
-                ]),
+                // Line::from(vec![
+                //     Span::styled(
+                //         format!("{interface_label:<12}"),
+                //         Style::default().fg(Color::White),
+                //     ),
+                //     Span::styled(
+                //         format!("{interface:<12}"),
+                //         Style::default().fg(Color::Green),
+                //     ),
+                // ]),
 
                 Line::from(vec![
                     Span::styled(
@@ -142,27 +142,27 @@ impl WifiConnected {
                     ),
                 ]),
 
-                Line::from(vec![
-                    Span::styled(
-                        format!("{mac_label:<12}"),
-                        Style::default().fg(Color::White),
-                    ),
-                    Span::styled(
-                        format!("{mac:<12}"),
-                        Style::default().fg(Color::Green),
-                    ),
-                ]),
+                // Line::from(vec![
+                //     Span::styled(
+                //         format!("{mac_label:<12}"),
+                //         Style::default().fg(Color::White),
+                //     ),
+                //     Span::styled(
+                //         format!("{mac:<12}"),
+                //         Style::default().fg(Color::Green),
+                //     ),
+                // ]),
 
-                Line::from(vec![
-                    Span::styled(
-                        format!("{txpower_label:<12}"),
-                        Style::default().fg(Color::White),
-                    ),
-                    Span::styled(
-                        format!("{txpower}dBm"),
-                        Style::default().fg(Color::Green),
-                    ),
-                ]),
+                // Line::from(vec![
+                //     Span::styled(
+                //         format!("{txpower_label:<12}"),
+                //         Style::default().fg(Color::White),
+                //     ),
+                //     Span::styled(
+                //         format!("{txpower}dBm"),
+                //         Style::default().fg(Color::Green),
+                //     ),
+                // ]),
 
                 Line::from(vec![
                     Span::styled(
@@ -179,19 +179,18 @@ impl WifiConnected {
                 Block::default()
                     .borders(Borders::ALL)
                     .title("|WiFi Interface|")
-                    .padding(Padding::new(1, 1, 1, 1))
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
+                    // .border_type(BorderType::Rounded)
                     .title_style(Style::default().fg(Color::Yellow))
                     .title_alignment(Alignment::Right),
             )
         } else {
             List::new(vec![])
         }
-        // let list = List:new();
     }
 }
 
-impl Component for WifiConnected {
+impl Component for WifiInterface {
     fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
@@ -205,14 +204,13 @@ impl Component for WifiConnected {
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        let rect = Rect::new(
-            area.width / 2,
-            (area.height / 4) + 2,
-            area.width / 2,
-            ((area.height / 2)-1)/2,
-        );
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+            .split(area);
+        let rect = Rect::new((area.width/2) + 1, (layout[0].y + layout[0].height)-4, (area.width/2)-2, 4);
 
-        let block = self.make_list();
+         let block = self.make_list();
         f.render_widget(block, rect);
 
         Ok(())

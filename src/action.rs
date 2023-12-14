@@ -6,7 +6,7 @@ use serde::{
     Deserialize, Serialize,
 };
 
-use crate::components::wifiscan::WifiInfo;
+use crate::components::wifi_scan::WifiInfo;
 use crate::mode::Mode;
 
 // #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
