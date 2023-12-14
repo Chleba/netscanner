@@ -10,14 +10,13 @@ use super::{Component, Frame};
 use crate::{
     action::Action,
     config::{Config, KeyBindings},
-    mode::Mode,
+    // mode::Mode,
 };
 
 #[derive(Default)]
 pub struct Home {
     command_tx: Option<UnboundedSender<Action>>,
     config: Config,
-    mode: Mode,
 }
 
 impl Home {
@@ -25,7 +24,6 @@ impl Home {
         Self {
             command_tx: None,
             config: Config::default(),
-            mode: Mode::Home,
         }
     }
 }
@@ -44,6 +42,9 @@ impl Component for Home {
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::Tick => {}
+            // Action::Scan(nets) => {
+                // self.parse_char_data(&nets);
+            // }
             _ => {}
         }
         Ok(None)

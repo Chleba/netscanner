@@ -35,7 +35,7 @@ pub struct WifiScan {
     pub scan_start_time: Instant,
     pub wifis: Vec<WifiInfo>,
     pub signal_tick: [f64; 2],
-    pub mode: Mode,
+    // pub mode: Mode,
 }
 
 impl Default for WifiScan {
@@ -72,7 +72,7 @@ impl WifiScan {
             wifis: Vec::new(),
             action_tx: None,
             signal_tick: [0.0, 40.0],
-            mode: Mode::Networks,
+            // mode: Mode::Networks,
         }
     }
 

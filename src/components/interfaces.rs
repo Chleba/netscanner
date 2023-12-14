@@ -12,7 +12,7 @@ pub struct Interfaces {
     pub action_tx: Option<UnboundedSender<Action>>,
     pub interfaces: Vec<NetworkInterface>,
     pub last_update_time: Instant,
-    pub mode: Mode,
+    // pub mode: Mode,
 }
 
 impl Default for Interfaces {
@@ -27,7 +27,7 @@ impl Interfaces {
             action_tx: None,
             interfaces: Vec::new(),
             last_update_time: Instant::now(),
-            mode: Mode::Interfaces,
+            // mode: Mode::Interfaces,
         }
     }
 

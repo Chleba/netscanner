@@ -24,7 +24,7 @@ pub enum Action {
 
     // -- custom actions
     Scan(Vec<WifiInfo>),
-    Mode(Mode),
+    ModeChange(Mode),
 }
 
 impl<'de> Deserialize<'de> for Action {
@@ -46,6 +46,12 @@ impl<'de> Deserialize<'de> for Action {
                 E: de::Error,
             {
                 match value {
+                    // -- custom actions
+                    // "InputMode" => Ok(Action::InputMode),
+                    "InputMode" => Ok(Action::ModeChange(Mode::Input)),
+                    "NormalMode" => Ok(Action::ModeChange(Mode::Normal)),
+
+                    // -- default actions
                     "Tick" => Ok(Action::Tick),
                     "Render" => Ok(Action::Render),
                     "Suspend" => Ok(Action::Suspend),

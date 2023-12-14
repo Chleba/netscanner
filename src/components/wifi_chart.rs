@@ -9,7 +9,7 @@ use crate::components::wifi_scan::WifiInfo;
 use chrono::Timelike;
 
 use super::Component;
-use crate::{action::Action, mode::Mode, tui::Frame};
+use crate::{action::Action, tui::Frame};
 
 #[derive(Debug)]
 pub struct WifiDataset {

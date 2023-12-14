@@ -40,7 +40,7 @@ impl App {
         let wifi_chart = WifiChart::default(); 
         let discovery = Discovery::default();
         let config = Config::new()?;
-        let mode = Mode::Home;
+        let mode = Mode::Normal;
         Ok(Self {
             tick_rate: 1.0,
             frame_rate,
@@ -120,6 +120,10 @@ impl App {
                     log::debug!("{action:?}");
                 }
                 match action {
+                    Action::ModeChange(mode) => {
+                        self.mode = mode;
+                    },
+
                     Action::Tick => {
                         self.last_tick_key_events.drain(..);
                     }
