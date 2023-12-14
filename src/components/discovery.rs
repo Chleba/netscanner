@@ -90,6 +90,7 @@ impl Discovery {
     }
 
     fn scan(&mut self) {
+        self.scanned_ips.clear();
         if let Some(cidr) = self.cidr {
             for ip in cidr.iter() {
                 let ip = ip.address().to_string();
