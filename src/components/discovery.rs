@@ -12,6 +12,7 @@ use std::process::{Command, Output};
 use std::time::{Duration, Instant};
 use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence, ICMP};
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::task;
 
 use super::Component;
 use crate::{action::Action, mode::Mode, tui::Frame};
@@ -90,24 +91,34 @@ impl Discovery {
         }
     }
 
+    fn get_ips(&mut self, cidr: Ipv4Cidr) -> Vec<Ipv4Addr> {
+        let mut ips = Vec::new();
+        for ip in cidr.iter() {
+            ips.push(ip.address());
+        }
+        ips
+    }
+
     fn scan(&mut self) {
         self.scanned_ips.clear();
         if let Some(cidr) = self.cidr {
-            let mut tasks = Vec::new();
-            for ip in cidr.iter() {
-                let ip = ip.address().to_string();
-                match ip.parse() {
-                    Ok(IpAddr::V4(addr)) => {
+            let pool_size = 8;
+            let ips = self.get_ips(cidr);
+            let chunks: Vec<_> = ips.chunks(pool_size).collect();
+            for chunk in chunks {
+                let tasks: Vec<_> = chunk
+                    .iter()
+                    .map(|&ip| {
                         let tx = self.action_tx.clone().unwrap();
-                        tasks.push(tokio::spawn(async move {
+                        let closure = || async move {
                             let client =
                                 Client::new(&Config::default()).expect("Cannot create client");
                             let payload = [0; 56];
                             let mut pinger = client
-                                .pinger(IpAddr::V4(addr), PingIdentifier(random()))
+                                .pinger(IpAddr::V4(ip), PingIdentifier(random()))
                                 .await;
                             pinger.timeout(Duration::from_secs(1));
-                            match pinger.ping(PingSequence(0), &payload).await {
+                            match pinger.ping(PingSequence(5), &payload).await {
                                 Ok((IcmpPacket::V4(packet), dur)) => {
                                     tx.send(Action::PingIp(packet.get_real_dest().to_string()))
                                         .unwrap();
@@ -115,35 +126,13 @@ impl Discovery {
                                 Ok(_) => {}
                                 Err(_) => {}
                             }
-                        }));
+                        };
+                        task::spawn(closure())
+                    })
+                    .collect();
 
-                        // let tx = self.action_tx.clone().unwrap();
-                        // tokio::spawn(async move {
-                        //     let client =
-                        //         Client::new(&Config::default()).expect("Cannot create client");
-                        //     let payload = [0; 56];
-                        //     let mut pinger = client
-                        //         .pinger(IpAddr::V4(addr), PingIdentifier(random()))
-                        //         .await;
-                        //     pinger.timeout(Duration::from_secs(1));
-                        //     match pinger.ping(PingSequence(0), &payload).await {
-                        //         Ok((IcmpPacket::V4(packet), dur)) => {
-                        //             tx.send(Action::PingIp(packet.get_real_dest().to_string()))
-                        //                 .unwrap();
-                        //         }
-                        //         Ok(_) => {}
-                        //         Err(_) => {}
-                        //     }
-                        // });
-                    }
-                    Ok(_) => {}
-                    Err(e) => {
-                        let tx = self.action_tx.clone().unwrap();
-                        let _ = tx.send(Action::CidrError);
-                    }
-                }
+                let _ = join_all(tasks);
             }
-            let _ = join_all(tasks);
         };
     }
 
