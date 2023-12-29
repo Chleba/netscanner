@@ -1,6 +1,7 @@
 use chrono::Timelike;
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
+use color_eyre::owo_colors::OwoColorize;
 use dns_lookup::{lookup_addr, lookup_host};
 use futures::future::join_all;
 use itertools::Position;
@@ -34,6 +35,7 @@ pub struct Discovery {
     scanning: bool,
     scanned_ips: Vec<ScannedIp>,
     ips_to_scan: Vec<Ipv4Addr>,
+    ip_num: i32,
     input: Input,
     cidr: Option<Ipv4Cidr>,
     cidr_error: bool,
@@ -54,6 +56,7 @@ impl Discovery {
             scanning: false,
             scanned_ips: Vec::new(),
             ips_to_scan: Vec::new(),
+            ip_num: 0,
             input: Input::default().with_value(String::from("192.168.1.0/24")),
             cidr: None,
             cidr_error: false,
@@ -100,7 +103,10 @@ impl Discovery {
     }
 
     fn scan(&mut self) {
+
         self.scanned_ips.clear();
+        self.ip_num = 0;
+
         if let Some(cidr) = self.cidr {
             let pool_size = 8;
             let ips = self.get_ips(cidr);
@@ -123,8 +129,12 @@ impl Discovery {
                                     tx.send(Action::PingIp(packet.get_real_dest().to_string()))
                                         .unwrap();
                                 }
-                                Ok(_) => {}
-                                Err(_) => {}
+                                Ok(_) => {
+                                    tx.send(Action::CountIp).unwrap();
+                                }
+                                Err(_) => {
+                                    tx.send(Action::CountIp).unwrap();
+                                }
                             }
                         };
                         task::spawn(closure())
@@ -182,11 +192,21 @@ impl Discovery {
         let table = Table::new(rows)
             .header(header)
             .block(
-                Block::default()
-                    .title("|Discovery|")
+                // Block::default()
+                Block::new()
+                    .title(
+                        ratatui::widgets::block::Title::from("|Discovery|".yellow())
+                            .position(ratatui::widgets::block::Position::Top)
+                            .alignment(Alignment::Right),
+                    )
+                    .title(
+                        ratatui::widgets::block::Title::from(
+                            String::from(format!("|{} ip scanned|", self.ip_num.to_string())).red(),
+                        )
+                        .position(ratatui::widgets::block::Position::Top)
+                        .alignment(Alignment::Left),
+                    )
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                    .title_style(Style::default().fg(Color::Yellow))
-                    .title_alignment(Alignment::Right)
                     .borders(Borders::ALL)
                     .padding(Padding::new(1, 0, 1, 0)),
             )
@@ -278,6 +298,10 @@ impl Component for Discovery {
         // -- custom actions
         if let Action::PingIp(ref ip) = action {
             self.process_ip(ip);
+        }
+
+        if let Action::CountIp = action {
+            self.ip_num += 1;
         }
 
         if let Action::CidrError = action {
