@@ -123,7 +123,7 @@ impl Discovery {
                             let mut pinger = client
                                 .pinger(IpAddr::V4(ip), PingIdentifier(random()))
                                 .await;
-                            pinger.timeout(Duration::from_secs(1));
+                            pinger.timeout(Duration::from_secs(2));
                             match pinger.ping(PingSequence(5), &payload).await {
                                 Ok((IcmpPacket::V4(packet), dur)) => {
                                     tx.send(Action::PingIp(packet.get_real_dest().to_string()))
