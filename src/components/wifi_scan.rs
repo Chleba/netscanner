@@ -127,7 +127,7 @@ impl WifiScan {
                     .padding(Padding::new(1, 0, 1, 0)),
             )
             .widths(&[
-                Constraint::Length(8),
+                Constraint::Length(9),
                 Constraint::Length(11),
                 Constraint::Length(4),
                 Constraint::Length(17),

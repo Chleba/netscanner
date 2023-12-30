@@ -4,16 +4,16 @@ use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use dns_lookup::{lookup_addr, lookup_host};
 use futures::future::join_all;
-use itertools::Position;
-use pnet::datalink::{self, NetworkInterface};
 use ratatui::{prelude::*, widgets::*};
-use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::process::{Command, Output};
 use std::time::{Duration, Instant};
 use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence, ICMP};
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::task;
+use std::sync::{Arc, Mutex};
+use tokio::{
+    sync::mpsc::{self, UnboundedSender},
+    task::{self, JoinHandle},
+};
 
 use super::Component;
 use crate::{action::Action, mode::Mode, tui::Frame};
@@ -32,14 +32,13 @@ struct ScannedIp {
 pub struct Discovery {
     action_tx: Option<UnboundedSender<Action>>,
     last_update_time: Instant,
-    scanning: bool,
     scanned_ips: Vec<ScannedIp>,
-    ips_to_scan: Vec<Ipv4Addr>,
     ip_num: i32,
     input: Input,
     cidr: Option<Ipv4Cidr>,
     cidr_error: bool,
     mode: Mode,
+    task: JoinHandle<()>,
 }
 
 impl Default for Discovery {
@@ -51,11 +50,10 @@ impl Default for Discovery {
 impl Discovery {
     pub fn new() -> Self {
         Self {
+            task: tokio::spawn(async {}),
             action_tx: None,
             last_update_time: Instant::now(),
-            scanning: false,
             scanned_ips: Vec::new(),
-            ips_to_scan: Vec::new(),
             ip_num: 0,
             input: Input::default().with_value(String::from("192.168.1.0/24")),
             cidr: None,
@@ -94,7 +92,15 @@ impl Discovery {
         }
     }
 
-    fn get_ips(&mut self, cidr: Ipv4Cidr) -> Vec<Ipv4Addr> {
+    // fn get_ips(&mut self, cidr: Ipv4Cidr) -> Vec<Ipv4Addr> {
+    //     let mut ips = Vec::new();
+    //     for ip in cidr.iter() {
+    //         ips.push(ip.address());
+    //     }
+    //     ips
+    // }
+
+    fn get_ips(cidr: Ipv4Cidr) -> Vec<Ipv4Addr> {
         let mut ips = Vec::new();
         for ip in cidr.iter() {
             ips.push(ip.address());
@@ -102,47 +108,59 @@ impl Discovery {
         ips
     }
 
-    fn scan(&mut self) {
-
+    fn reset_scan(&mut self) {
         self.scanned_ips.clear();
         self.ip_num = 0;
+    }
+
+    fn scan(&mut self) {
+        self.reset_scan();
 
         if let Some(cidr) = self.cidr {
-            let pool_size = 8;
-            let ips = self.get_ips(cidr);
-            let chunks: Vec<_> = ips.chunks(pool_size).collect();
-            for chunk in chunks {
-                let tasks: Vec<_> = chunk
-                    .iter()
-                    .map(|&ip| {
-                        let tx = self.action_tx.clone().unwrap();
-                        let closure = || async move {
-                            let client =
-                                Client::new(&Config::default()).expect("Cannot create client");
-                            let payload = [0; 56];
-                            let mut pinger = client
-                                .pinger(IpAddr::V4(ip), PingIdentifier(random()))
-                                .await;
-                            pinger.timeout(Duration::from_secs(2));
-                            match pinger.ping(PingSequence(5), &payload).await {
-                                Ok((IcmpPacket::V4(packet), dur)) => {
-                                    tx.send(Action::PingIp(packet.get_real_dest().to_string()))
-                                        .unwrap();
+            let tx = self.action_tx.clone().unwrap();
+            // let s_data = Arc::new(Mutex::new(self.clone()));
+            self.task = tokio::spawn(async move {
+                let pool_size = 64;
+                let ips = Self::get_ips(cidr);
+                let tx = tx.clone();
+                let chunks: Vec<_> = ips.chunks(pool_size).collect();
+                for chunk in chunks {
+                    let tasks: Vec<_> = chunk
+                        .iter()
+                        .map(|&ip| {
+                            // let tx = s_data.lock().unwrap();
+                            // let tx = *tx.action_tx.clone().unwrap();
+                            let tx = tx.clone();
+                            let closure = || async move {
+                                let client =
+                                    Client::new(&Config::default()).expect("Cannot create client");
+                                let payload = [0; 56];
+                                let mut pinger = client
+                                    .pinger(IpAddr::V4(ip), PingIdentifier(random()))
+                                    .await;
+                                pinger.timeout(Duration::from_secs(2));
+                                match pinger.ping(PingSequence(3), &payload).await {
+                                    Ok((IcmpPacket::V4(packet), dur)) => {
+                                        tx.send(Action::PingIp(packet.get_real_dest().to_string()))
+                                            .unwrap();
+                                    }
+                                    Ok(_) => {
+                                        tx.send(Action::CountIp).unwrap();
+                                    }
+                                    Err(_) => {
+                                        tx.send(Action::CountIp).unwrap();
+                                    }
                                 }
-                                Ok(_) => {
-                                    tx.send(Action::CountIp).unwrap();
-                                }
-                                Err(_) => {
-                                    tx.send(Action::CountIp).unwrap();
-                                }
-                            }
-                        };
-                        task::spawn(closure())
-                    })
-                    .collect();
+                            };
+                            task::spawn(closure())
+                        })
+                        .collect();
 
-                let _ = join_all(tasks);
-            }
+                    for task in tasks {
+                        let _ = task.await;
+                    }
+                }
+            });
         };
     }
 
@@ -192,7 +210,6 @@ impl Discovery {
         let table = Table::new(rows)
             .header(header)
             .block(
-                // Block::default()
                 Block::new()
                     .title(
                         ratatui::widgets::block::Title::from("|Discovery|".yellow())
@@ -201,7 +218,14 @@ impl Discovery {
                     )
                     .title(
                         ratatui::widgets::block::Title::from(
-                            String::from(format!("|{} ip scanned|", self.ip_num.to_string())).red(),
+                            Line::from(vec![
+                                Span::styled("|", Style::default().fg(Color::Yellow)),
+                                Span::styled(
+                                    String::from(format!("{}", self.ip_num.to_string())),
+                                    Style::default().fg(Color::Green),
+                                ),
+                                Span::styled(" ip scanned|", Style::default().fg(Color::Yellow)),
+                            ]),
                         )
                         .position(ratatui::widgets::block::Position::Top)
                         .alignment(Alignment::Left),
@@ -298,6 +322,7 @@ impl Component for Discovery {
         // -- custom actions
         if let Action::PingIp(ref ip) = action {
             self.process_ip(ip);
+            self.ip_num += 1;
         }
 
         if let Action::CountIp = action {

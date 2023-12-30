@@ -99,7 +99,7 @@ impl WifiChart {
         let chart = Chart::new(datasets)
             .block(
                 Block::default()
-                    .title("|Wifi signals|")
+                    .title("|WiFi signals|")
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                     .title_style(Style::default().fg(Color::Yellow))
                     .title_alignment(Alignment::Right)
