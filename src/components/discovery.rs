@@ -3,13 +3,10 @@ use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use dns_lookup::{lookup_addr, lookup_host};
-use futures::future::join_all;
 use ratatui::{prelude::*, widgets::*};
 use std::net::{IpAddr, Ipv4Addr};
-use std::process::{Command, Output};
 use std::time::{Duration, Instant};
 use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence, ICMP};
-use std::sync::{Arc, Mutex};
 use tokio::{
     sync::mpsc::{self, UnboundedSender},
     task::{self, JoinHandle},
@@ -22,6 +19,8 @@ use rand::random;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
+static POOL_SIZE: usize = 32;
+
 struct ScannedIp {
     ip: String,
     mac: String,
@@ -31,7 +30,6 @@ struct ScannedIp {
 
 pub struct Discovery {
     action_tx: Option<UnboundedSender<Action>>,
-    last_update_time: Instant,
     scanned_ips: Vec<ScannedIp>,
     ip_num: i32,
     input: Input,
@@ -52,7 +50,6 @@ impl Discovery {
         Self {
             task: tokio::spawn(async {}),
             action_tx: None,
-            last_update_time: Instant::now(),
             scanned_ips: Vec::new(),
             ip_num: 0,
             input: Input::default().with_value(String::from("192.168.1.0/24")),
@@ -62,22 +59,9 @@ impl Discovery {
         }
     }
 
-    fn app_tick(&mut self) -> Result<()> {
-        if self.cidr == None {
-            let cidr_range = "192.168.1.0/24";
-            match cidr_range.parse::<Ipv4Cidr>() {
-                Ok(ip_cidr) => {
-                    self.cidr = Some(ip_cidr);
-                    self.scan();
-                }
-                Err(e) => {
-                    // eprintln!("Error parsing CIDR range: {}", e);
-                }
-            }
-        }
-
-        Ok(())
-    }
+    // fn app_tick(&mut self) -> Result<()> {
+    //     Ok(())
+    // }
 
     fn set_cidr(&mut self, cidr_str: String) {
         match &cidr_str.parse::<Ipv4Cidr>() {
@@ -91,14 +75,6 @@ impl Discovery {
             }
         }
     }
-
-    // fn get_ips(&mut self, cidr: Ipv4Cidr) -> Vec<Ipv4Addr> {
-    //     let mut ips = Vec::new();
-    //     for ip in cidr.iter() {
-    //         ips.push(ip.address());
-    //     }
-    //     ips
-    // }
 
     fn get_ips(cidr: Ipv4Cidr) -> Vec<Ipv4Addr> {
         let mut ips = Vec::new();
@@ -118,18 +94,14 @@ impl Discovery {
 
         if let Some(cidr) = self.cidr {
             let tx = self.action_tx.clone().unwrap();
-            // let s_data = Arc::new(Mutex::new(self.clone()));
             self.task = tokio::spawn(async move {
-                let pool_size = 64;
                 let ips = Self::get_ips(cidr);
                 let tx = tx.clone();
-                let chunks: Vec<_> = ips.chunks(pool_size).collect();
+                let chunks: Vec<_> = ips.chunks(POOL_SIZE).collect();
                 for chunk in chunks {
                     let tasks: Vec<_> = chunk
                         .iter()
                         .map(|&ip| {
-                            // let tx = s_data.lock().unwrap();
-                            // let tx = *tx.action_tx.clone().unwrap();
                             let tx = tx.clone();
                             let closure = || async move {
                                 let client =
@@ -177,7 +149,6 @@ impl Discovery {
         } else {
             let hip: IpAddr = ip.parse().unwrap();
             let host = lookup_addr(&hip).unwrap_or(String::from(""));
-            // let mac = get_mac_address()
             self.scanned_ips.push(ScannedIp {
                 ip: ip.to_string(),
                 mac: String::from(""),
@@ -188,7 +159,7 @@ impl Discovery {
     }
 
     pub fn make_ui(&mut self) -> Table {
-        let header = Row::new(vec!["ip", "hostname"])
+        let header = Row::new(vec!["ip", "hostname", "mac", "vendor"])
             .style(Style::default().fg(Color::Yellow))
             .bottom_margin(1);
         let mut rows = Vec::new();
@@ -200,10 +171,9 @@ impl Discovery {
                     format!("{ip:<2}"),
                     Style::default().fg(Color::Blue),
                 )),
-                // Cell::from(""),
                 Cell::from(sip.hostname.clone()),
-                // Cell::from(""),
-                // Cell::from(""),
+                Cell::from(""),
+                Cell::from(""),
             ]));
         }
 
@@ -217,29 +187,26 @@ impl Discovery {
                             .alignment(Alignment::Right),
                     )
                     .title(
-                        ratatui::widgets::block::Title::from(
-                            Line::from(vec![
-                                Span::styled("|", Style::default().fg(Color::Yellow)),
-                                Span::styled(
-                                    String::from(format!("{}", self.ip_num.to_string())),
-                                    Style::default().fg(Color::Green),
-                                ),
-                                Span::styled(" ip scanned|", Style::default().fg(Color::Yellow)),
-                            ]),
-                        )
+                        ratatui::widgets::block::Title::from(Line::from(vec![
+                            Span::styled("|", Style::default().fg(Color::Yellow)),
+                            Span::styled(
+                                String::from(format!("{}", self.ip_num.to_string())),
+                                Style::default().fg(Color::Green),
+                            ),
+                            Span::styled(" ip scanned|", Style::default().fg(Color::Yellow)),
+                        ]))
                         .position(ratatui::widgets::block::Position::Top)
                         .alignment(Alignment::Left),
                     )
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                     .borders(Borders::ALL)
-                    .padding(Padding::new(1, 0, 1, 0)),
+                    .padding(Padding::new(1, 0, 2, 0)),
             )
             .widths(&[
                 Constraint::Length(16),
-                // Constraint::Length(18),
                 Constraint::Length(25),
-                // Constraint::Length(35),
-                // Constraint::Length(25),
+                Constraint::Length(35),
+                Constraint::Length(25),
             ])
             .column_spacing(1);
         table
@@ -291,6 +258,23 @@ impl Discovery {
 }
 
 impl Component for Discovery {
+    fn init(&mut self, area: Rect) -> Result<()> {
+        if self.cidr == None {
+            let cidr_range = "192.168.1.0/24";
+            match cidr_range.parse::<Ipv4Cidr>() {
+                Ok(ip_cidr) => {
+                    self.cidr = Some(ip_cidr);
+                    self.scan();
+                }
+                Err(e) => {
+                    // eprintln!("Error parsing CIDR range: {}", e);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
@@ -316,9 +300,9 @@ impl Component for Discovery {
     }
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
-        if let Action::Tick = action {
-            self.app_tick()?
-        }
+        // if let Action::Tick = action {
+        //     self.app_tick()?
+        // }
         // -- custom actions
         if let Action::PingIp(ref ip) = action {
             self.process_ip(ip);
@@ -359,7 +343,7 @@ impl Component for Discovery {
 
         // -- ERROR
         if self.cidr_error == true {
-            let error_rect = Rect::new(table_rect.width - 19, table_rect.y + 4, 18, 3);
+            let error_rect = Rect::new(table_rect.width - (19 + 41), table_rect.y + 1, 18, 3);
             let block = self.make_error();
             f.render_widget(block, error_rect);
         }

@@ -10,7 +10,6 @@ use super::{Component, Frame};
 use crate::{
     action::Action,
     config::{Config, KeyBindings},
-    // mode::Mode,
 };
 
 #[derive(Default)]
@@ -42,9 +41,6 @@ impl Component for Home {
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::Tick => {}
-            // Action::Scan(nets) => {
-                // self.parse_char_data(&nets);
-            // }
             _ => {}
         }
         Ok(None)

@@ -13,6 +13,7 @@ use crate::{
         wifi_interface::WifiInterface,
         wifi_chart::WifiChart,
         discovery::Discovery,
+        packetdump::PacketDump,
         Component
     },
     config::Config,
@@ -39,6 +40,7 @@ impl App {
         let wifi_interface = WifiInterface::default(); 
         let wifi_chart = WifiChart::default(); 
         let discovery = Discovery::default();
+        let packetdump = PacketDump::default();
         let config = Config::new()?;
         let mode = Mode::Normal;
         Ok(Self {
@@ -51,6 +53,7 @@ impl App {
                 Box::new(wifi_interface),
                 Box::new(wifi_chart),
                 Box::new(discovery),
+                Box::new(packetdump),
             ],
             should_quit: false,
             should_suspend: false,
