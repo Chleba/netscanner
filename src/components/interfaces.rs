@@ -1,3 +1,4 @@
+use ipnetwork::IpNetwork;
 use pnet::datalink::{self, NetworkInterface};
 use std::time::Instant;
 
@@ -9,10 +10,10 @@ use super::Component;
 use crate::{action::Action, mode::Mode, tui::Frame};
 
 pub struct Interfaces {
-    pub action_tx: Option<UnboundedSender<Action>>,
-    pub interfaces: Vec<NetworkInterface>,
-    pub last_update_time: Instant,
-    // pub mode: Mode,
+    action_tx: Option<UnboundedSender<Action>>,
+    interfaces: Vec<NetworkInterface>,
+    last_update_time: Instant,
+    active_interface: Option<NetworkInterface>,
 }
 
 impl Default for Interfaces {
@@ -27,7 +28,7 @@ impl Interfaces {
             action_tx: None,
             interfaces: Vec::new(),
             last_update_time: Instant::now(),
-            // mode: Mode::Interfaces,
+            active_interface: None,
         }
     }
 
@@ -39,19 +40,37 @@ impl Interfaces {
             self.last_update_time = now;
             self.interfaces.clear();
             let interfaces = datalink::interfaces();
-            for intf in interfaces {
-                self.interfaces.push(intf);
+            for intf in &interfaces {
+                // if intf.is_up() && !intf.ips.is_empty() {
+                //     for ip in &intf.ips {
+                //         if ip.is_ipv4() && ip.ip().to_string() != "127.0.0.1" {
+                //             self.active_interface = Some(intf.clone());
+                //         }
+                //     }
+                // }
+                self.interfaces.push(intf.clone());
             }
+            let localhost: IpNetwork = "127.0.0.1".parse().unwrap();
+            self.active_interface = interfaces
+                .iter()
+                .find(|e| e.is_up() && e.is_loopback() && !e.ips.is_empty() && !e.ips.contains(&localhost))
+                .cloned();
         }
         Ok(())
     }
 
     fn make_table(&mut self) -> Table {
-        let header = Row::new(vec!["name", "mac", "ipv4", "ipv6"])
+        let header = Row::new(vec!["", "name", "mac", "ipv4", "ipv6"])
             .style(Style::default().fg(Color::Yellow))
             .bottom_margin(1);
         let mut rows = Vec::new();
         for w in &self.interfaces {
+            let mut active = String::from("");
+            if let Some(si) = &self.active_interface {
+                if si == w {
+                    active = String::from("*");
+                }
+            }
             let name = w.name.clone();
             let mac = w.mac.unwrap().to_string();
             let ipv4: Vec<Line> = w
@@ -82,6 +101,10 @@ impl Interfaces {
             rows.push(
                 Row::new(vec![
                     Cell::from(Span::styled(
+                        format!("{active:<1}"),
+                        Style::default().fg(Color::Red),
+                    )),
+                    Cell::from(Span::styled(
                         format!("{name:<2}"),
                         Style::default().fg(Color::Green),
                     )),
@@ -105,6 +128,7 @@ impl Interfaces {
                     .padding(Padding::new(1, 0, 1, 0)),
             )
             .widths(&[
+                Constraint::Length(1),
                 Constraint::Length(8),
                 Constraint::Length(18),
                 Constraint::Length(14),
@@ -133,7 +157,7 @@ impl Component for Interfaces {
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
             .split(area);
-        let rect = Rect::new(area.width/2, 1, area.width/2, layout[0].height);
+        let rect = Rect::new(area.width / 2, 1, area.width / 2, layout[0].height);
 
         let block = self.make_table();
         f.render_widget(block, rect);
