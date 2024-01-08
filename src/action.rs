@@ -1,6 +1,6 @@
-use std::fmt;
-use tokio_wifiscanner::Wifi;
-
+use std::{fmt, net::Ipv4Addr};
+use pnet::util::MacAddr;
+use pnet::datalink::NetworkInterface;
 use serde::{
     de::{self, Deserializer, Visitor},
     Deserialize, Serialize,
@@ -23,6 +23,9 @@ pub enum Action {
     Help,
 
     // -- custom actions
+    ActiveInterface(NetworkInterface),
+    ArpSend(Ipv4Addr),
+    ArpRecieve(Ipv4Addr, MacAddr),
     Scan(Vec<WifiInfo>),
     ModeChange(Mode),
     PingIp(String),

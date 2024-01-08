@@ -3,6 +3,13 @@ use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use dns_lookup::{lookup_addr, lookup_host};
+use pnet::datalink::{Channel, NetworkInterface};
+use pnet::packet::{
+    arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
+    ethernet::{EtherTypes, MutableEthernetPacket},
+    MutablePacket, Packet,
+};
+use pnet::util::MacAddr;
 use ratatui::{prelude::*, widgets::*};
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::{Duration, Instant};
@@ -15,6 +22,7 @@ use tokio::{
 use super::Component;
 use crate::{action::Action, mode::Mode, tui::Frame};
 use crossterm::event::{KeyCode, KeyEvent};
+use mac_oui::Oui;
 use rand::random;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
@@ -29,6 +37,7 @@ struct ScannedIp {
 }
 
 pub struct Discovery {
+    active_interface: Option<NetworkInterface>,
     action_tx: Option<UnboundedSender<Action>>,
     scanned_ips: Vec<ScannedIp>,
     ip_num: i32,
@@ -37,6 +46,7 @@ pub struct Discovery {
     cidr_error: bool,
     mode: Mode,
     task: JoinHandle<()>,
+    oui: Option<Oui>,
 }
 
 impl Default for Discovery {
@@ -48,6 +58,7 @@ impl Default for Discovery {
 impl Discovery {
     pub fn new() -> Self {
         Self {
+            active_interface: None,
             task: tokio::spawn(async {}),
             action_tx: None,
             scanned_ips: Vec::new(),
@@ -56,12 +67,81 @@ impl Discovery {
             cidr: None,
             cidr_error: false,
             mode: Mode::Normal,
+            oui: None,
         }
     }
 
-    // fn app_tick(&mut self) -> Result<()> {
-    //     Ok(())
-    // }
+    fn send_arp(&mut self, target_ip: Ipv4Addr) {
+        let active_interface = self.active_interface.clone().unwrap();
+
+        let ipv4 = active_interface
+            .clone()
+            .ips
+            .iter()
+            .find(|f| f.is_ipv4())
+            .unwrap()
+            .clone();
+        let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
+
+        let (mut sender, mut receiver) =
+            match pnet::datalink::channel(&active_interface, Default::default()) {
+                Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
+                Ok(_) => panic!("Unknown channel type"),
+                Err(e) => panic!("Error happened {}", e),
+            };
+
+        let mut ethernet_buffer = [0u8; 42];
+        let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer).unwrap();
+
+        ethernet_packet.set_destination(MacAddr::broadcast());
+        ethernet_packet.set_source(active_interface.mac.unwrap());
+        ethernet_packet.set_ethertype(EtherTypes::Arp);
+
+        let mut arp_buffer = [0u8; 28];
+        let mut arp_packet = MutableArpPacket::new(&mut arp_buffer).unwrap();
+
+        arp_packet.set_hardware_type(ArpHardwareTypes::Ethernet);
+        arp_packet.set_protocol_type(EtherTypes::Ipv4);
+        arp_packet.set_hw_addr_len(6);
+        arp_packet.set_proto_addr_len(4);
+        arp_packet.set_operation(ArpOperations::Request);
+        arp_packet.set_sender_hw_addr(active_interface.mac.unwrap());
+        arp_packet.set_sender_proto_addr(source_ip);
+        arp_packet.set_target_hw_addr(MacAddr::zero());
+        arp_packet.set_target_proto_addr(target_ip);
+
+        ethernet_packet.set_payload(arp_packet.packet_mut());
+
+        sender
+            .send_to(ethernet_packet.packet(), None)
+            .unwrap()
+            .unwrap();
+
+        let tx = self.action_tx.clone().unwrap();
+        let task = tokio::spawn(async move {
+            let dur = Duration::from_secs(5);
+            let end = Instant::now() + dur;
+            while Instant::now() < end {
+                match receiver.next() {
+                    Ok(buf) => {
+                        let arp =
+                            ArpPacket::new(&buf[MutableEthernetPacket::minimum_packet_size()..])
+                                .unwrap();
+                        if arp.get_sender_proto_addr() == target_ip
+                            && arp.get_target_hw_addr() == active_interface.mac.unwrap()
+                        {
+                            tx.send(Action::ArpRecieve(target_ip, arp.get_sender_hw_addr()))
+                                .unwrap();
+                        }
+                    }
+                    Err(err) => {}
+                }
+
+                // tokio::time::sleep(Duration::from_millis(1)).await;
+                tokio::task::yield_now().await;
+            }
+        });
+    }
 
     fn set_cidr(&mut self, cidr_str: String) {
         match &cidr_str.parse::<Ipv4Cidr>() {
@@ -71,7 +151,7 @@ impl Discovery {
             }
             Err(e) => {
                 let tx = self.action_tx.clone().unwrap();
-                let _ = tx.send(Action::CidrError);
+                tx.send(Action::CidrError).unwrap();
             }
         }
     }
@@ -129,7 +209,7 @@ impl Discovery {
                         .collect();
 
                     for task in tasks {
-                        let _ = task.await;
+                        task.await.unwrap();
                     }
                 }
             });
@@ -137,6 +217,12 @@ impl Discovery {
     }
 
     fn process_ip(&mut self, ip: &str) {
+        let tx = self.action_tx.clone().unwrap();
+
+        let ipv4: Ipv4Addr = ip.parse().unwrap();
+        self.send_arp(ipv4);
+        // tx.send(Action::ArpSend(ipv4)).unwrap();
+
         if let Some(n) = self
             .scanned_ips
             .iter_mut()
@@ -158,6 +244,29 @@ impl Discovery {
         }
     }
 
+    fn process_mac(&mut self, ip: Ipv4Addr, mac: MacAddr) {
+        if let Some(n) = self
+            .scanned_ips
+            .iter_mut()
+            .find(|item| item.ip == ip.to_string())
+        {
+            n.mac = mac.to_string();
+
+            if let Some(oui) = &self.oui {
+                let oui_res = oui.lookup_by_mac(&n.mac);
+                match oui_res {
+                    Ok(e) => {
+                        if let Some(oui_res) = e {
+                            let cn = oui_res.company_name.clone();
+                            n.vendor = cn;
+                        }
+                    }
+                    Err(_) => {}
+                }
+            }
+        }
+    }
+
     pub fn make_ui(&mut self) -> Table {
         let header = Row::new(vec!["ip", "hostname", "mac", "vendor"])
             .style(Style::default().fg(Color::Yellow))
@@ -172,8 +281,8 @@ impl Discovery {
                     Style::default().fg(Color::Blue),
                 )),
                 Cell::from(sip.hostname.clone()),
-                Cell::from(""),
-                Cell::from(""),
+                Cell::from(sip.mac.clone()),
+                Cell::from(sip.vendor.clone()),
             ]));
         }
 
@@ -205,7 +314,7 @@ impl Discovery {
             .widths(&[
                 Constraint::Length(16),
                 Constraint::Length(25),
-                Constraint::Length(35),
+                Constraint::Length(20),
                 Constraint::Length(25),
             ])
             .column_spacing(1);
@@ -264,12 +373,17 @@ impl Component for Discovery {
             match cidr_range.parse::<Ipv4Cidr>() {
                 Ok(ip_cidr) => {
                     self.cidr = Some(ip_cidr);
-                    self.scan();
+                    // self.scan();
                 }
                 Err(e) => {
                     // eprintln!("Error parsing CIDR range: {}", e);
                 }
             }
+        }
+
+        match Oui::default() {
+            Ok(s) => self.oui = Some(s),
+            Err(_) => self.oui = None,
         }
 
         Ok(())
@@ -303,10 +417,15 @@ impl Component for Discovery {
         // if let Action::Tick = action {
         //     self.app_tick()?
         // }
+
         // -- custom actions
         if let Action::PingIp(ref ip) = action {
             self.process_ip(ip);
             self.ip_num += 1;
+        }
+
+        if let Action::ActiveInterface(_) = action {
+            self.scan();
         }
 
         if let Action::CountIp = action {
@@ -315,6 +434,14 @@ impl Component for Discovery {
 
         if let Action::CidrError = action {
             self.cidr_error = true;
+        }
+
+        if let Action::ActiveInterface(ref interface) = action {
+            self.active_interface = Some(interface.clone());
+        }
+
+        if let Action::ArpRecieve(target_ip, mac) = action {
+            self.process_mac(target_ip, mac);
         }
 
         if let Action::ModeChange(mode) = action {

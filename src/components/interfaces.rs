@@ -1,5 +1,7 @@
 use ipnetwork::IpNetwork;
+// use itertools::Itertools;
 use pnet::datalink::{self, NetworkInterface};
+use std::net::IpAddr;
 use std::time::Instant;
 
 use color_eyre::eyre::Result;
@@ -41,20 +43,32 @@ impl Interfaces {
             self.interfaces.clear();
             let interfaces = datalink::interfaces();
             for intf in &interfaces {
-                // if intf.is_up() && !intf.ips.is_empty() {
-                //     for ip in &intf.ips {
-                //         if ip.is_ipv4() && ip.ip().to_string() != "127.0.0.1" {
-                //             self.active_interface = Some(intf.clone());
-                //         }
-                //     }
-                // }
+                // -- get active interface with non-local IP
+                if intf.is_up() && !intf.ips.is_empty() {
+                    for ip in &intf.ips {
+                        if ip.is_ipv4() && ip.ip().to_string() != "127.0.0.1" {
+                            if self.active_interface != Some(intf.clone()) {
+                                self.active_interface = Some(intf.clone());
+
+                                let tx = self.action_tx.clone().unwrap();
+                                tx.send(Action::ActiveInterface(intf.clone())).unwrap();
+                            }
+                        }
+                    }
+                }
+
+                // -- store interfaces into a vec
                 self.interfaces.push(intf.clone());
             }
-            let localhost: IpNetwork = "127.0.0.1".parse().unwrap();
-            self.active_interface = interfaces
-                .iter()
-                .find(|e| e.is_up() && e.is_loopback() && !e.ips.is_empty() && !e.ips.contains(&localhost))
-                .cloned();
+
+            // -- TODO not working, dunno why the fuck not!!!
+            // let localhost: IpNetwork = "127.0.0.1".parse().unwrap();
+            // let localhost: IpAddr = "127.0.0.1".parse().unwrap();
+            // self.active_interface = interfaces
+            //     .iter()
+            //     // .find(|e| e.is_up() && !e.ips.is_empty() && !e.ips.iter().contains(&localhost))
+            //     .find(|e| e.is_up() && !e.ips.is_empty() && !e.ips.contains(&localhost))
+            //     .cloned();
         }
         Ok(())
     }
