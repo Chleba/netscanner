@@ -1,3 +1,5 @@
+use crate::components::wifi_scan::WifiInfo;
+use chrono::Timelike;
 use color_eyre::eyre::Result;
 use pnet::datalink::{self, NetworkInterface};
 use ratatui::{prelude::*, widgets::*};
@@ -5,8 +7,6 @@ use std::collections::HashMap;
 use std::process::{Command, Output};
 use std::time::Instant;
 use tokio::sync::mpsc::UnboundedSender;
-use crate::components::wifi_scan::WifiInfo;
-use chrono::Timelike;
 
 use super::Component;
 use crate::{action::Action, tui::Frame};
@@ -23,6 +23,7 @@ pub struct WifiChart {
     last_update_time: Instant,
     wifi_datasets: Vec<WifiDataset>,
     signal_tick: [f64; 2],
+    show_graph: bool,
 }
 
 impl Default for WifiChart {
@@ -34,6 +35,7 @@ impl Default for WifiChart {
 impl WifiChart {
     pub fn new() -> Self {
         Self {
+            show_graph: false,
             action_tx: None,
             last_update_time: Instant::now(),
             wifi_datasets: Vec::new(),
@@ -95,14 +97,25 @@ impl WifiChart {
         .cloned()
         .map(Span::from)
         .collect();
-        
+
         let chart = Chart::new(datasets)
             .block(
-                Block::default()
-                    .title("|WiFi signals|")
+                Block::new()
+                    .title(
+                        ratatui::widgets::block::Title::from("|WiFi signals|".yellow())
+                            .position(ratatui::widgets::block::Position::Top)
+                            .alignment(Alignment::Right),
+                    )
+                    .title(
+                        ratatui::widgets::block::Title::from(Line::from(vec![
+                            Span::styled("|hide ", Style::default().fg(Color::Yellow)),
+                            Span::styled("g", Style::default().fg(Color::Red)),
+                            Span::styled("raph|", Style::default().fg(Color::Yellow)),
+                        ]))
+                        .position(ratatui::widgets::block::Position::Bottom)
+                        .alignment(Alignment::Right),
+                    )
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                    .title_style(Style::default().fg(Color::Yellow))
-                    .title_alignment(Alignment::Right)
                     .borders(Borders::ALL)
                     .padding(Padding::new(1, 1, 1, 1)),
             )
@@ -141,22 +154,35 @@ impl Component for WifiChart {
             self.app_tick()?
         }
         // -- custom actions
-        if let Action::Scan(nets) = action {
+        if let Action::Scan(ref nets) = action {
             self.parse_char_data(&nets);
         }
+
+        if let Action::GraphToggle = action {
+            self.show_graph = !self.show_graph;
+        }
+
         Ok(None)
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(30), Constraint::Percentage(20), Constraint::Percentage(50)])
-            .split(area);
-        let mut rect = layout[1].clone();
-        rect.y += 1;
+        // let layout = Layout::default()
+        //     .direction(Direction::Vertical)
+        //     .constraints([Constraint::Percentage(30), Constraint::Percentage(20), Constraint::Percentage(50)])
+        //     .split(area);
+        // let mut rect = layout[1].clone();
+        // rect.y += 1;
 
-        let block = self.make_chart();
-        f.render_widget(block, rect);
+        if self.show_graph {
+            let layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+                .split(area);
+            let rect = Rect::new(0, 1, area.width / 2, layout[0].height);
+
+            let block = self.make_chart();
+            f.render_widget(block, rect);
+        }
 
         Ok(())
     }

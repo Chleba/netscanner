@@ -23,6 +23,7 @@ pub enum Action {
     Help,
 
     // -- custom actions
+    GraphToggle,
     ActiveInterface(NetworkInterface),
     ArpSend(Ipv4Addr),
     ArpRecieve(Ipv4Addr, MacAddr),
@@ -56,6 +57,7 @@ impl<'de> Deserialize<'de> for Action {
                     // "InputMode" => Ok(Action::InputMode),
                     "InputMode" => Ok(Action::ModeChange(Mode::Input)),
                     "NormalMode" => Ok(Action::ModeChange(Mode::Normal)),
+                    "Graph" => Ok(Action::GraphToggle),
 
                     // -- default actions
                     "Tick" => Ok(Action::Tick),

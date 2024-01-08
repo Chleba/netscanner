@@ -35,6 +35,7 @@ pub struct WifiScan {
     pub scan_start_time: Instant,
     pub wifis: Vec<WifiInfo>,
     pub signal_tick: [f64; 2],
+    show_graph: bool,
     // pub mode: Mode,
 }
 
@@ -68,6 +69,7 @@ const COLORS_NAMES: [Color; 8] = [
 impl WifiScan {
     pub fn new() -> Self {
         Self {
+            show_graph: false,
             scan_start_time: Instant::now(),
             wifis: Vec::new(),
             action_tx: None,
@@ -118,11 +120,22 @@ impl WifiScan {
         let table = Table::new(rows)
             .header(header)
             .block(
-                Block::default()
-                    .title("|WiFi Networks|")
+                Block::new()
+                    .title(
+                        ratatui::widgets::block::Title::from("|WiFi Networks|".yellow())
+                            .position(ratatui::widgets::block::Position::Top)
+                            .alignment(Alignment::Right),
+                    )
+                    .title(
+                        ratatui::widgets::block::Title::from(Line::from(vec![
+                            Span::styled("|show ", Style::default().fg(Color::Yellow)),
+                            Span::styled("g", Style::default().fg(Color::Red)),
+                            Span::styled("raph|", Style::default().fg(Color::Yellow)),
+                        ]))
+                        .position(ratatui::widgets::block::Position::Bottom)
+                        .alignment(Alignment::Right),
+                    )
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                    .title_style(Style::default().fg(Color::Yellow))
-                    .title_alignment(Alignment::Right)
                     .borders(Borders::ALL)
                     .padding(Padding::new(1, 0, 1, 0)),
             )
@@ -217,21 +230,28 @@ impl Component for WifiScan {
             self.render_tick()?
         };
         // -- custom actions
-        if let Action::Scan(nets) = action {
+        if let Action::Scan(ref nets) = action {
             self.parse_networks_data(&nets);
         }
+
+        if let Action::GraphToggle = action {
+            self.show_graph = !self.show_graph;
+        }
+
         Ok(None)
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
-            .split(area);
-        let table_rect = Rect::new(0, 1, area.width/2, layout[0].height);
+        if !self.show_graph {
+            let layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+                .split(area);
+            let table_rect = Rect::new(0, 1, area.width / 2, layout[0].height);
 
-        let block = self.make_table();
-        f.render_widget(block, table_rect);
+            let block = self.make_table();
+            f.render_widget(block, table_rect);
+        }
 
         Ok(())
     }

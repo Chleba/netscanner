@@ -169,7 +169,7 @@ impl Component for Interfaces {
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         let layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
             .split(area);
         let rect = Rect::new(area.width / 2, 1, area.width / 2, layout[0].height);
 

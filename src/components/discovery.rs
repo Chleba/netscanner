@@ -281,8 +281,8 @@ impl Discovery {
                     Style::default().fg(Color::Blue),
                 )),
                 Cell::from(sip.hostname.clone()),
-                Cell::from(sip.mac.clone()),
-                Cell::from(sip.vendor.clone()),
+                Cell::from(sip.mac.clone().green()),
+                Cell::from(sip.vendor.clone().yellow()),
             ]));
         }
 
@@ -458,7 +458,7 @@ impl Component for Discovery {
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         let layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
             .split(area);
 
         // -- TABLE

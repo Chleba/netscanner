@@ -206,7 +206,7 @@ impl Component for WifiInterface {
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         let layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
             .split(area);
         let rect = Rect::new((area.width/2) + 1, (layout[0].y + layout[0].height)-4, (area.width/2)-2, 4);
 
