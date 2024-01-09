@@ -138,7 +138,9 @@ impl WifiChart {
                     .title("[scans]")
                     .labels(x_labels)
                     .style(Style::default().fg(Color::Yellow)),
-            );
+            )
+            .legend_position(Some(LegendPosition::TopLeft))
+            .hidden_legend_constraints((Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)));
         chart
     }
 }

@@ -286,38 +286,41 @@ impl Discovery {
             ]));
         }
 
-        let table = Table::new(rows)
-            .header(header)
-            .block(
-                Block::new()
-                    .title(
-                        ratatui::widgets::block::Title::from("|Discovery|".yellow())
-                            .position(ratatui::widgets::block::Position::Top)
-                            .alignment(Alignment::Right),
-                    )
-                    .title(
-                        ratatui::widgets::block::Title::from(Line::from(vec![
-                            Span::styled("|", Style::default().fg(Color::Yellow)),
-                            Span::styled(
-                                String::from(format!("{}", self.ip_num.to_string())),
-                                Style::default().fg(Color::Green),
-                            ),
-                            Span::styled(" ip scanned|", Style::default().fg(Color::Yellow)),
-                        ]))
-                        .position(ratatui::widgets::block::Position::Top)
-                        .alignment(Alignment::Left),
-                    )
-                    .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                    .borders(Borders::ALL)
-                    .padding(Padding::new(1, 0, 2, 0)),
-            )
-            .widths(&[
+        let table = Table::new(
+            rows,
+            [
                 Constraint::Length(16),
                 Constraint::Length(25),
                 Constraint::Length(20),
                 Constraint::Length(25),
-            ])
-            .column_spacing(1);
+            ],
+        )
+        .header(header)
+        .block(
+            Block::new()
+                .title(
+                    ratatui::widgets::block::Title::from("|Discovery|".yellow())
+                        .position(ratatui::widgets::block::Position::Top)
+                        .alignment(Alignment::Right),
+                )
+                .title(
+                    ratatui::widgets::block::Title::from(Line::from(vec![
+                        Span::styled("|", Style::default().fg(Color::Yellow)),
+                        Span::styled(
+                            String::from(format!("{}", self.ip_num.to_string())),
+                            Style::default().fg(Color::Green),
+                        ),
+                        Span::styled(" ip scanned|", Style::default().fg(Color::Yellow)),
+                    ]))
+                    .position(ratatui::widgets::block::Position::Top)
+                    .alignment(Alignment::Left),
+                )
+                .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
+                .borders(Borders::ALL)
+                .padding(Padding::new(1, 0, 2, 0)),
+        )
+        .highlight_symbol("*")
+        .column_spacing(1);
         table
     }
 
@@ -467,6 +470,7 @@ impl Component for Discovery {
         table_rect.height -= 1;
         let block = self.make_ui();
         f.render_widget(block, table_rect);
+        // f.render_stateful_widget(block, table_rect);
 
         // -- ERROR
         if self.cidr_error == true {

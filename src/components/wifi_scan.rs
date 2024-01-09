@@ -117,7 +117,13 @@ impl WifiScan {
             ]));
         }
 
-        let table = Table::new(rows)
+        let table = Table::new(rows, [
+                Constraint::Length(9),
+                Constraint::Length(11),
+                Constraint::Length(4),
+                Constraint::Length(17),
+                Constraint::Length(18),
+            ])
             .header(header)
             .block(
                 Block::new()
@@ -139,13 +145,6 @@ impl WifiScan {
                     .borders(Borders::ALL)
                     .padding(Padding::new(1, 0, 1, 0)),
             )
-            .widths(&[
-                Constraint::Length(9),
-                Constraint::Length(11),
-                Constraint::Length(4),
-                Constraint::Length(17),
-                Constraint::Length(18),
-            ])
             .column_spacing(1);
         table
     }

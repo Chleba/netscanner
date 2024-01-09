@@ -83,12 +83,24 @@ impl WifiInterface {
             }
         }
         WifiConn {
-            interface: hash.get("Interface").unwrap_or(&"").parse::<String>().unwrap(),
+            interface: hash
+                .get("Interface")
+                .unwrap_or(&"")
+                .parse::<String>()
+                .unwrap(),
             ssid: hash.get("ssid").unwrap_or(&"").parse::<String>().unwrap(),
             ifindex: hash.get("ifindex").unwrap_or(&"").parse::<u8>().unwrap(),
             mac: hash.get("addr").unwrap_or(&"").parse::<String>().unwrap(),
-            channel: hash.get("channel").unwrap_or(&"").parse::<String>().unwrap(),
-            txpower: hash.get("txpower").unwrap_or(&"").parse::<String>().unwrap(),
+            channel: hash
+                .get("channel")
+                .unwrap_or(&"")
+                .parse::<String>()
+                .unwrap(),
+            txpower: hash
+                .get("txpower")
+                .unwrap_or(&"")
+                .parse::<String>()
+                .unwrap(),
         }
     }
 
@@ -119,73 +131,101 @@ impl WifiInterface {
             let txpower_label = "TxPower:";
             let mac = &wifi_info.mac.clone();
             let mac_label = "Mac addr:";
-            List::new(vec![ListItem::new(vec![
-                // Line::from(vec![
-                //     Span::styled(
-                //         format!("{interface_label:<12}"),
-                //         Style::default().fg(Color::White),
-                //     ),
-                //     Span::styled(
-                //         format!("{interface:<12}"),
-                //         Style::default().fg(Color::Green),
-                //     ),
-                // ]),
 
+            // let list = List::new()
+            let mut items: Vec<ListItem> = Vec::new();
+            // let list = List::new(items);
+
+            items.push(ListItem::new(vec![
                 Line::from(vec![
                     Span::styled(
                         format!("{ssid_label:<12}"),
                         Style::default().fg(Color::White),
                     ),
-                    Span::styled(
-                        format!("{ssid:<12}"),
-                        Style::default().fg(Color::Green),
-                    ),
+                    Span::styled(format!("{ssid:<12}"), Style::default().fg(Color::Green)),
                 ]),
-
-                // Line::from(vec![
-                //     Span::styled(
-                //         format!("{mac_label:<12}"),
-                //         Style::default().fg(Color::White),
-                //     ),
-                //     Span::styled(
-                //         format!("{mac:<12}"),
-                //         Style::default().fg(Color::Green),
-                //     ),
-                // ]),
-
-                // Line::from(vec![
-                //     Span::styled(
-                //         format!("{txpower_label:<12}"),
-                //         Style::default().fg(Color::White),
-                //     ),
-                //     Span::styled(
-                //         format!("{txpower}dBm"),
-                //         Style::default().fg(Color::Green),
-                //     ),
-                // ]),
-
                 Line::from(vec![
                     Span::styled(
                         format!("{channel_label:<12}"),
                         Style::default().fg(Color::White),
                     ),
-                    Span::styled(
-                        format!("{channel:<12}"),
-                        Style::default().fg(Color::Green),
-                    ),
+                    Span::styled(format!("{channel:<12}"), Style::default().fg(Color::Green)),
                 ]),
-            ])])
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title("|WiFi Interface|")
-                    .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                    // .border_type(BorderType::Rounded)
-                    .title_style(Style::default().fg(Color::Yellow))
-                    .title_alignment(Alignment::Right),
-            )
+            ]));
+
+            let list = List::new(items);
+
+            list
+
+            // List::new::<ListItem>(vec![ListItem::new(vec![
+            //     // Line::from(vec![
+            //     //     Span::styled(
+            //     //         format!("{interface_label:<12}"),
+            //     //         Style::default().fg(Color::White),
+            //     //     ),
+            //     //     Span::styled(
+            //     //         format!("{interface:<12}"),
+            //     //         Style::default().fg(Color::Green),
+            //     //     ),
+            //     // ]),
+
+            //     Line::from(vec![
+            //         Span::styled(
+            //             format!("{ssid_label:<12}"),
+            //             Style::default().fg(Color::White),
+            //         ),
+            //         Span::styled(
+            //             format!("{ssid:<12}"),
+            //             Style::default().fg(Color::Green),
+            //         ),
+            //     ]),
+
+            //     // Line::from(vec![
+            //     //     Span::styled(
+            //     //         format!("{mac_label:<12}"),
+            //     //         Style::default().fg(Color::White),
+            //     //     ),
+            //     //     Span::styled(
+            //     //         format!("{mac:<12}"),
+            //     //         Style::default().fg(Color::Green),
+            //     //     ),
+            //     // ]),
+
+            //     // Line::from(vec![
+            //     //     Span::styled(
+            //     //         format!("{txpower_label:<12}"),
+            //     //         Style::default().fg(Color::White),
+            //     //     ),
+            //     //     Span::styled(
+            //     //         format!("{txpower}dBm"),
+            //     //         Style::default().fg(Color::Green),
+            //     //     ),
+            //     // ]),
+
+            //     Line::from(vec![
+            //         Span::styled(
+            //             format!("{channel_label:<12}"),
+            //             Style::default().fg(Color::White),
+            //         ),
+            //         Span::styled(
+            //             format!("{channel:<12}"),
+            //             Style::default().fg(Color::Green),
+            //         ),
+            //     ]),
+            //     ])
+            // ])
+            //     .block(
+            //         Block::default()
+            //             .borders(Borders::ALL)
+            //             .title("|WiFi Interface|")
+            //             .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
+            //             // .border_type(BorderType::Rounded)
+            //             .title_style(Style::default().fg(Color::Yellow))
+            //             .title_alignment(Alignment::Right),
+            //     )
         } else {
-            List::new(vec![])
+            let items: Vec<ListItem> = Vec::new();
+            List::new(items)
         }
     }
 }
@@ -208,9 +248,14 @@ impl Component for WifiInterface {
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
             .split(area);
-        let rect = Rect::new((area.width/2) + 1, (layout[0].y + layout[0].height)-4, (area.width/2)-2, 4);
+        let rect = Rect::new(
+            (area.width / 2) + 1,
+            (layout[0].y + layout[0].height) - 4,
+            (area.width / 2) - 2,
+            4,
+        );
 
-         let block = self.make_list();
+        let block = self.make_list();
         f.render_widget(block, rect);
 
         Ok(())

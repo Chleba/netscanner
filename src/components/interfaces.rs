@@ -130,7 +130,13 @@ impl Interfaces {
             );
         }
 
-        let table = Table::new(rows)
+        let table = Table::new(rows, [
+                Constraint::Length(1),
+                Constraint::Length(8),
+                Constraint::Length(18),
+                Constraint::Length(14),
+                Constraint::Length(25),
+            ])
             .header(header)
             .block(
                 Block::default()
@@ -141,13 +147,6 @@ impl Interfaces {
                     .borders(Borders::ALL)
                     .padding(Padding::new(1, 0, 1, 0)),
             )
-            .widths(&[
-                Constraint::Length(1),
-                Constraint::Length(8),
-                Constraint::Length(18),
-                Constraint::Length(14),
-                Constraint::Length(25),
-            ])
             .column_spacing(1);
         table
     }
