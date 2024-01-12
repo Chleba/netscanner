@@ -428,7 +428,8 @@ impl Component for Discovery {
         }
 
         if let Action::ActiveInterface(_) = action {
-            self.scan();
+            println!("ACTIVE INTERFACE");
+            // self.scan();
         }
 
         if let Action::CountIp = action {
@@ -440,7 +441,12 @@ impl Component for Discovery {
         }
 
         if let Action::ActiveInterface(ref interface) = action {
-            self.active_interface = Some(interface.clone());
+            let intf = interface.clone();
+            // -- first time scan after setting of interface
+            if self.active_interface == None {
+                self.scan();
+            }
+            self.active_interface = Some(intf);
         }
 
         if let Action::ArpRecieve(target_ip, mac) = action {
