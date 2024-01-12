@@ -153,7 +153,15 @@ impl WifiInterface {
                 ]),
             ]));
 
-            let list = List::new(items);
+            let list = List::new(items).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("|WiFi Interface|")
+                    .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
+                    // .border_type(BorderType::Rounded)
+                    .title_style(Style::default().fg(Color::Yellow))
+                    .title_alignment(Alignment::Right),
+            );
 
             list
 
