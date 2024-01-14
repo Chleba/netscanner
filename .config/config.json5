@@ -6,7 +6,8 @@
       "<Ctrl-c>": "Quit", // Yet another way to quit
       "<Ctrl-z>": "Suspend", // Suspend the application
       "<i>": "InputMode",
-      "<g>": "Graph"
+      "<g>": "Graph",
+      "<f>": "Interface"
     },
     "Input": {
       "<Esc>": "NormalMode"

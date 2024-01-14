@@ -31,6 +31,7 @@ impl Interfaces {
             interfaces: Vec::new(),
             last_update_time: Instant::now(),
             active_interface: None,
+            // active_interfaces: Vec::new(),
         }
     }
 
@@ -60,15 +61,6 @@ impl Interfaces {
                 // -- store interfaces into a vec
                 self.interfaces.push(intf.clone());
             }
-
-            // -- TODO not working, dunno why the fuck not!!!
-            // let localhost: IpNetwork = "127.0.0.1".parse().unwrap();
-            // let localhost: IpAddr = "127.0.0.1".parse().unwrap();
-            // self.active_interface = interfaces
-            //     .iter()
-            //     // .find(|e| e.is_up() && !e.ips.is_empty() && !e.ips.iter().contains(&localhost))
-            //     .find(|e| e.is_up() && !e.ips.is_empty() && !e.ips.contains(&localhost))
-            //     .cloned();
         }
         Ok(())
     }
