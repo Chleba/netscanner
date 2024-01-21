@@ -274,13 +274,13 @@ impl Discovery {
                                 match pinger.ping(PingSequence(3), &payload).await {
                                     Ok((IcmpPacket::V4(packet), dur)) => {
                                         tx.send(Action::PingIp(packet.get_real_dest().to_string()))
-                                            .unwrap();
+                                            .unwrap_or_default();
                                     }
                                     Ok(_) => {
-                                        tx.send(Action::CountIp).unwrap();
+                                        tx.send(Action::CountIp).unwrap_or_default();
                                     }
                                     Err(_) => {
-                                        tx.send(Action::CountIp).unwrap();
+                                        tx.send(Action::CountIp).unwrap_or_default();
                                     }
                                 }
                             };
