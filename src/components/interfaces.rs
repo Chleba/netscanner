@@ -1,5 +1,4 @@
 use ipnetwork::IpNetwork;
-// use itertools::Itertools;
 use pnet::datalink::{self, NetworkInterface};
 use std::net::IpAddr;
 use std::time::Instant;

@@ -117,35 +117,38 @@ impl WifiScan {
             ]));
         }
 
-        let table = Table::new(rows, [
+        let table = Table::new(
+            rows,
+            [
                 Constraint::Length(9),
                 Constraint::Length(11),
                 Constraint::Length(4),
                 Constraint::Length(17),
                 Constraint::Length(18),
-            ])
-            .header(header)
-            .block(
-                Block::new()
-                    .title(
-                        ratatui::widgets::block::Title::from("|WiFi Networks|".yellow())
-                            .position(ratatui::widgets::block::Position::Top)
-                            .alignment(Alignment::Right),
-                    )
-                    .title(
-                        ratatui::widgets::block::Title::from(Line::from(vec![
-                            Span::styled("|show ", Style::default().fg(Color::Yellow)),
-                            Span::styled("g", Style::default().fg(Color::Red)),
-                            Span::styled("raph|", Style::default().fg(Color::Yellow)),
-                        ]))
-                        .position(ratatui::widgets::block::Position::Bottom)
+            ],
+        )
+        .header(header)
+        .block(
+            Block::new()
+                .title(
+                    ratatui::widgets::block::Title::from("|WiFi Networks|".yellow())
+                        .position(ratatui::widgets::block::Position::Top)
                         .alignment(Alignment::Right),
-                    )
-                    .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                    .borders(Borders::ALL)
-                    .padding(Padding::new(1, 0, 1, 0)),
-            )
-            .column_spacing(1);
+                )
+                .title(
+                    ratatui::widgets::block::Title::from(Line::from(vec![
+                        Span::styled("|show ", Style::default().fg(Color::Yellow)),
+                        Span::styled("g", Style::default().fg(Color::Red)),
+                        Span::styled("raph|", Style::default().fg(Color::Yellow)),
+                    ]))
+                    .position(ratatui::widgets::block::Position::Bottom)
+                    .alignment(Alignment::Right),
+                )
+                .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
+                .borders(Borders::ALL)
+                .padding(Padding::new(1, 0, 1, 0)),
+        )
+        .column_spacing(1);
         table
     }
 
@@ -177,7 +180,12 @@ impl WifiScan {
                             });
                         }
                     }
-                    tx.send(Action::Scan(wifi_nets)).unwrap();
+
+                    let t_send = tx.send(Action::Scan(wifi_nets));
+                    match t_send {
+                        Ok(n) => (),
+                        Err(e) => (),
+                    }
                 }
                 Err(_e) => (),
             };

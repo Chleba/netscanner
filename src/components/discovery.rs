@@ -3,6 +3,7 @@ use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use dns_lookup::{lookup_addr, lookup_host};
+use futures::future::{join_all, AbortHandle, Abortable};
 use pnet::datalink::{Channel, NetworkInterface};
 use pnet::packet::{
     arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
@@ -14,10 +15,12 @@ use ratatui::{prelude::*, widgets::*};
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::{Duration, Instant};
 use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence, ICMP};
+// use tokio::select;
 use tokio::{
     sync::mpsc::{self, UnboundedSender},
     task::{self, JoinHandle},
 };
+// use tokio_util::sync::CancellationToken;
 
 use super::Component;
 use crate::{action::Action, mode::Mode, tui::Frame};
@@ -46,7 +49,9 @@ pub struct Discovery {
     cidr_error: bool,
     mode: Mode,
     task: JoinHandle<()>,
+    // arp_tasks: Vec<Abortable<_>>,
     oui: Option<Oui>,
+    // cancel_token: CancellationToken,
 }
 
 impl Default for Discovery {
@@ -60,6 +65,7 @@ impl Discovery {
         Self {
             active_interface: None,
             task: tokio::spawn(async {}),
+            // arp_tasks: Vec::new(),
             action_tx: None,
             scanned_ips: Vec::new(),
             ip_num: 0,
@@ -68,8 +74,13 @@ impl Discovery {
             cidr_error: false,
             mode: Mode::Normal,
             oui: None,
+            // cancel_token: CancellationToken::new(),
         }
     }
+
+    // async move fn arp_task() {
+
+    // }
 
     fn send_arp(&mut self, target_ip: Ipv4Addr) {
         let active_interface = self.active_interface.clone().unwrap();
@@ -118,12 +129,12 @@ impl Discovery {
             .unwrap();
 
         let tx = self.action_tx.clone().unwrap();
-        let task = tokio::spawn(async move {
-            let dur = Duration::from_secs(5);
-            let end = Instant::now() + dur;
-            while Instant::now() < end {
-                match receiver.next() {
-                    Ok(buf) => {
+        let (abort_handle, abort_reg) = AbortHandle::new_pair();
+        let task = tokio::spawn(Abortable::new(
+            async move {
+                loop {
+                    let buf = receiver.next().unwrap_or_default();
+                    if buf.len() >= MutableEthernetPacket::minimum_packet_size() {
                         let arp =
                             ArpPacket::new(&buf[MutableEthernetPacket::minimum_packet_size()..])
                                 .unwrap();
@@ -134,13 +145,82 @@ impl Discovery {
                                 .unwrap();
                         }
                     }
-                    Err(err) => {}
+                    tokio::task::yield_now().await;
                 }
-
-                // tokio::time::sleep(Duration::from_millis(1)).await;
-                tokio::task::yield_now().await;
-            }
+            },
+            abort_reg,
+        ));
+        let timeout_task = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+            abort_handle.abort();
         });
+        // join_all(vec![task, timeout_task]);
+
+        // let tx = self.action_tx.clone().unwrap();
+        // let ct = self.cancel_token.clone();
+        // let task = tokio::spawn(async move {
+        //     let dur = Duration::from_secs(1);
+        //     let end = Instant::now() + dur;
+
+        //     while Instant::now() < end {
+        //         let buf = receiver.next().unwrap_or_default();
+        //         if buf.len() >= MutableEthernetPacket::minimum_packet_size() {
+        //             let arp = ArpPacket::new(&buf[MutableEthernetPacket::minimum_packet_size()..])
+        //                 .unwrap();
+        //             if arp.get_sender_proto_addr() == target_ip
+        //                 && arp.get_target_hw_addr() == active_interface.mac.unwrap()
+        //             {
+        //                 tx.send(Action::ArpRecieve(target_ip, arp.get_sender_hw_addr()))
+        //                     .unwrap();
+        //             }
+        //         }
+
+        //         // if ct.is_cancelled() {
+        //         //     break;
+        //         // }
+        //         // match receiver.next() {
+        //         //     Ok(buf) => {
+        //         //         println!("{:?}", buf);
+        //         //         let arp =
+        //         //             ArpPacket::new(&buf[MutableEthernetPacket::minimum_packet_size()..])
+        //         //                 .unwrap();
+        //         //         if arp.get_sender_proto_addr() == target_ip
+        //         //             && arp.get_target_hw_addr() == active_interface.mac.unwrap()
+        //         //         {
+        //         //             tx.send(Action::ArpRecieve(target_ip, arp.get_sender_hw_addr()))
+        //         //                 .unwrap();
+        //         //         }
+        //         //     }
+        //         //     Err(err) => {}
+        //         // }
+        //         // println!("AHoj");
+        //         // // tokio::time::sleep(Duration::from_millis(1)).await;
+        //         // tokio::task::yield_now().await;
+
+        //         // tokio::select! {
+        //         //     _ = ct.cancelled() => {
+        //         //         break;
+        //         //     }
+        //         // }
+        //         // match receiver.next() {
+        //         //     Ok(buf) => {
+        //         //         let arp =
+        //         //             ArpPacket::new(&buf[MutableEthernetPacket::minimum_packet_size()..])
+        //         //                 .unwrap();
+        //         //         if arp.get_sender_proto_addr() == target_ip
+        //         //             && arp.get_target_hw_addr() == active_interface.mac.unwrap()
+        //         //         {
+        //         //             tx.send(Action::ArpRecieve(target_ip, arp.get_sender_hw_addr()))
+        //         //                 .unwrap();
+        //         //         }
+        //         //     }
+        //         //     Err(err) => {}
+        //         // }
+
+        //         // tokio::time::sleep(Duration::from_millis(1)).await;
+        //         tokio::task::yield_now().await;
+        //     }
+        // });
     }
 
     fn set_cidr(&mut self, cidr_str: String) {
@@ -427,10 +507,9 @@ impl Component for Discovery {
             self.ip_num += 1;
         }
 
-        if let Action::ActiveInterface(_) = action {
-            println!("ACTIVE INTERFACE");
-            // self.scan();
-        }
+        // if let Action::Quit = action {
+        //     self.cancel_token.cancel();
+        // }
 
         if let Action::CountIp = action {
             self.ip_num += 1;
