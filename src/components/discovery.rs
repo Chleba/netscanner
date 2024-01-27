@@ -241,7 +241,6 @@ impl Discovery {
 
     fn process_ip(&mut self, ip: &str) {
         let tx = self.action_tx.clone().unwrap();
-
         let ipv4: Ipv4Addr = ip.parse().unwrap();
         // self.send_arp(ipv4);
 
@@ -506,8 +505,8 @@ impl Component for Discovery {
         }
 
         // -- INPUT
-        let input_rect = Rect::new(table_rect.width - 41, table_rect.y + 1, 40, 3);
-        let scroll = self.input.visual_scroll(40);
+        let input_rect = Rect::new(table_rect.width - 31, table_rect.y + 1, 30, 3);
+        let scroll = self.input.visual_scroll(30);
         let block = self.make_input(scroll);
         f.render_widget(block, input_rect);
         // -- cursor

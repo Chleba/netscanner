@@ -15,6 +15,7 @@ pub struct Interfaces {
     interfaces: Vec<NetworkInterface>,
     last_update_time: Instant,
     active_interface: Option<NetworkInterface>,
+    interface_index: usize,
 }
 
 impl Default for Interfaces {
@@ -30,36 +31,43 @@ impl Interfaces {
             interfaces: Vec::new(),
             last_update_time: Instant::now(),
             active_interface: None,
-            // active_interfaces: Vec::new(),
+            interface_index: 0,
         }
+    }
+
+    fn get_interfaces(&mut self) {
+        if self.interfaces.len() > 0 {
+            self.interfaces.clear();
+        }
+        let interfaces = datalink::interfaces();
+        for intf in &interfaces {
+            // -- get active interface with non-local IP
+            if intf.is_up() && !intf.ips.is_empty() {
+                for ip in &intf.ips {
+                    // -- set active interface that's not localhost
+                    if ip.is_ipv4() && ip.ip().to_string() != "127.0.0.1" {
+                        if self.active_interface != Some(intf.clone()) {
+                            self.active_interface = Some(intf.clone());
+
+                            let tx = self.action_tx.clone().unwrap();
+                            tx.send(Action::ActiveInterface(intf.clone())).unwrap();
+                        }
+                    }
+                }
+            }
+            // -- store interfaces into a vec
+            self.interfaces.push(intf.clone());
+        }
+        // -- sort interfaces
+        self.interfaces.sort_by(|a, b| a.name.cmp(&b.name));
     }
 
     fn app_tick(&mut self) -> Result<()> {
         let now = Instant::now();
         let elapsed = (now - self.last_update_time).as_secs_f64();
-
-        if self.interfaces.len() == 0 || elapsed > 5.0 {
+        if elapsed > 5.0 {
             self.last_update_time = now;
-            self.interfaces.clear();
-            let interfaces = datalink::interfaces();
-            for intf in &interfaces {
-                // -- get active interface with non-local IP
-                if intf.is_up() && !intf.ips.is_empty() {
-                    for ip in &intf.ips {
-                        if ip.is_ipv4() && ip.ip().to_string() != "127.0.0.1" {
-                            if self.active_interface != Some(intf.clone()) {
-                                self.active_interface = Some(intf.clone());
-
-                                let tx = self.action_tx.clone().unwrap();
-                                tx.send(Action::ActiveInterface(intf.clone())).unwrap();
-                            }
-                        }
-                    }
-                }
-
-                // -- store interfaces into a vec
-                self.interfaces.push(intf.clone());
-            }
+            self.get_interfaces();
         }
         Ok(())
     }
@@ -121,29 +129,42 @@ impl Interfaces {
             );
         }
 
-        let table = Table::new(rows, [
+        let table = Table::new(
+            rows,
+            [
                 Constraint::Length(1),
                 Constraint::Length(8),
                 Constraint::Length(18),
                 Constraint::Length(14),
                 Constraint::Length(25),
-            ])
-            .header(header)
-            .block(
-                Block::default()
-                    .title("|Interfaces|")
-                    .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                    .title_style(Style::default().fg(Color::Yellow))
-                    .title_alignment(Alignment::Right)
-                    .borders(Borders::ALL)
-                    .padding(Padding::new(1, 0, 1, 0)),
-            )
-            .column_spacing(1);
+            ],
+        )
+        .header(header)
+        .block(
+            Block::default()
+                // .title("|Interfaces|")
+                .title(Line::from(vec![
+                    Span::styled("|Inter", Style::default().fg(Color::Yellow)),
+                    Span::styled("f", Style::default().fg(Color::Red)),
+                    Span::styled("ace|", Style::default().fg(Color::Yellow)),
+                ]))
+                .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
+                .title_style(Style::default().fg(Color::Yellow))
+                .title_alignment(Alignment::Right)
+                .borders(Borders::ALL)
+                .padding(Padding::new(1, 0, 1, 0)),
+        )
+        .column_spacing(1);
         table
     }
 }
 
 impl Component for Interfaces {
+    fn init(&mut self, area: Rect) -> Result<()> {
+        self.get_interfaces();
+        Ok(())
+    }
+
     fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
@@ -153,6 +174,8 @@ impl Component for Interfaces {
         if let Action::Tick = action {
             self.app_tick()?
         }
+        if let Action::InterfaceSwitch = action {}
+
         Ok(None)
     }
 
