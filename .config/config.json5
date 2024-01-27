@@ -7,7 +7,8 @@
       "<Ctrl-z>": "Suspend", // Suspend the application
       "<i>": "InputMode",
       "<g>": "Graph",
-      "<f>": "Interface"
+      "<f>": "Interface",
+      "<a>": "Abort" 
     },
     "Input": {
       "<Esc>": "NormalMode"

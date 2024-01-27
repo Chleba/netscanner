@@ -34,6 +34,7 @@ pub struct App {
 
 impl App {
     pub fn new(tick_rate: f64, frame_rate: f64) -> Result<Self> {
+        
         let home = Home::new();
         let interfaces = Interfaces::default();
         let wifiscan = WifiScan::default();
@@ -42,7 +43,9 @@ impl App {
         let discovery = Discovery::default();
         let packetdump = PacketDump::default();
         let config = Config::new()?;
+
         let mode = Mode::Normal;
+        
         Ok(Self {
             tick_rate: 1.0,
             frame_rate,

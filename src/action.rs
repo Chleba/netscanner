@@ -33,6 +33,7 @@ pub enum Action {
     PingIp(String),
     CountIp,
     CidrError,
+    Abort,
 }
 
 impl<'de> Deserialize<'de> for Action {
@@ -59,6 +60,7 @@ impl<'de> Deserialize<'de> for Action {
                     "NormalMode" => Ok(Action::ModeChange(Mode::Normal)),
                     "Graph" => Ok(Action::GraphToggle),
                     "Interface" => Ok(Action::InterfaceSwitch),
+                    "Abort" => Ok(Action::Abort),
 
                     // -- default actions
                     "Tick" => Ok(Action::Tick),
