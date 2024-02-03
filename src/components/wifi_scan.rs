@@ -176,7 +176,7 @@ impl WifiScan {
                                 channel: w.channel.parse::<u8>().unwrap_or(0),
                                 signal: w.signal_level.parse::<f32>().unwrap_or(-100.00),
                                 mac: w.mac.clone(),
-                                color: COLORS_NAMES[wifi_nets.len()],
+                                color: COLORS_NAMES[wifi_nets.len() % COLORS_NAMES.len()],
                             });
                         }
                     }
