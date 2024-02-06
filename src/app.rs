@@ -2,7 +2,7 @@ use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
 use ratatui::prelude::Rect;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, UnboundedSender, UnboundedReceiver};
 
 use crate::{
     action::Action,
@@ -30,6 +30,8 @@ pub struct App {
     pub should_suspend: bool,
     pub mode: Mode,
     pub last_tick_key_events: Vec<KeyEvent>,
+    pub action_tx: UnboundedSender<Action>,
+    pub action_rx: UnboundedReceiver<Action>,
 }
 
 impl App {
@@ -45,6 +47,7 @@ impl App {
         let config = Config::new()?;
 
         let mode = Mode::Normal;
+        let (action_tx, action_rx) = mpsc::unbounded_channel();
         
         Ok(Self {
             tick_rate: 1.0,
@@ -56,18 +59,22 @@ impl App {
                 Box::new(wifi_interface),
                 Box::new(wifi_chart),
                 Box::new(discovery),
-                Box::new(packetdump),
+                // Box::new(packetdump),
             ],
             should_quit: false,
             should_suspend: false,
             config,
             mode,
             last_tick_key_events: Vec::new(),
+            action_tx,
+            action_rx,
         })
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        let (action_tx, mut action_rx) = mpsc::unbounded_channel();
+        // let (action: action_rx_tx, mut action_rx) = mpsc::unbounded_channel();
+        let action_tx = &self.action_tx;
+        let action_rx = &mut self.action_rx;
 
         let mut tui = tui::Tui::new()?
             .tick_rate(self.tick_rate)

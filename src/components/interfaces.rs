@@ -14,8 +14,8 @@ pub struct Interfaces {
     action_tx: Option<UnboundedSender<Action>>,
     interfaces: Vec<NetworkInterface>,
     last_update_time: Instant,
-    active_interface: Option<NetworkInterface>,
-    interface_index: usize,
+    active_interfaces: Vec<NetworkInterface>,
+    active_interface_index: usize,
 }
 
 impl Default for Interfaces {
@@ -30,15 +30,15 @@ impl Interfaces {
             action_tx: None,
             interfaces: Vec::new(),
             last_update_time: Instant::now(),
-            active_interface: None,
-            interface_index: 0,
+            active_interfaces: Vec::new(),
+            active_interface_index: 0,
         }
     }
 
     fn get_interfaces(&mut self) {
-        if self.interfaces.len() > 0 {
-            self.interfaces.clear();
-        }
+        self.interfaces.clear();
+        self.active_interfaces.clear();
+
         let interfaces = datalink::interfaces();
         for intf in &interfaces {
             // -- get active interface with non-local IP
@@ -46,12 +46,8 @@ impl Interfaces {
                 for ip in &intf.ips {
                     // -- set active interface that's not localhost
                     if ip.is_ipv4() && ip.ip().to_string() != "127.0.0.1" {
-                        if self.active_interface != Some(intf.clone()) {
-                            self.active_interface = Some(intf.clone());
-
-                            let tx = self.action_tx.clone().unwrap();
-                            tx.send(Action::ActiveInterface(intf.clone())).unwrap();
-                        }
+                        self.active_interfaces.push(intf.clone());
+                        break;
                     }
                 }
             }
@@ -60,6 +56,26 @@ impl Interfaces {
         }
         // -- sort interfaces
         self.interfaces.sort_by(|a, b| a.name.cmp(&b.name));
+    }
+
+    fn next_active_interface(&mut self) {
+        let mut new_index = self.active_interface_index + 1;
+        if new_index >= self.active_interfaces.len() {
+            new_index = 0;
+        }
+        if new_index != self.active_interface_index {
+            self.active_interface_index = new_index;
+            self.send_active_interface();
+        }
+    }
+
+    fn send_active_interface(&mut self) {
+        if self.active_interfaces.len() > 0 {
+            let tx = self.action_tx.clone().unwrap();
+            let active_interface = &self.active_interfaces[self.active_interface_index];
+            tx.send(Action::ActiveInterface(active_interface.clone()))
+                .unwrap();
+        }
     }
 
     fn app_tick(&mut self) -> Result<()> {
@@ -73,17 +89,21 @@ impl Interfaces {
     }
 
     fn make_table(&mut self) -> Table {
+        let active_interface = &self.active_interfaces[self.active_interface_index];
         let header = Row::new(vec!["", "name", "mac", "ipv4", "ipv6"])
             .style(Style::default().fg(Color::Yellow))
             .bottom_margin(1);
         let mut rows = Vec::new();
         for w in &self.interfaces {
             let mut active = String::from("");
-            if let Some(si) = &self.active_interface {
-                if si == w {
-                    active = String::from("*");
-                }
+            if active_interface == w {
+                active = String::from("*");
             }
+            // if let si = Some(&active_interface) {
+            //     if si == w {
+            //         active = String::from("*");
+            //     }
+            // }
             let name = w.name.clone();
             let mac = w.mac.unwrap().to_string();
             let ipv4: Vec<Line> = w
@@ -162,6 +182,7 @@ impl Interfaces {
 impl Component for Interfaces {
     fn init(&mut self, area: Rect) -> Result<()> {
         self.get_interfaces();
+        self.send_active_interface();
         Ok(())
     }
 
@@ -174,7 +195,10 @@ impl Component for Interfaces {
         if let Action::Tick = action {
             self.app_tick()?
         }
-        if let Action::InterfaceSwitch = action {}
+        if let Action::InterfaceSwitch = action {
+            self.next_active_interface();
+            // self.interface_index += 1;
+        }
 
         Ok(None)
     }
