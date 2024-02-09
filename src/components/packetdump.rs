@@ -119,17 +119,16 @@ impl PacketDump {
     fn handle_ethernet_frame(interface: &NetworkInterface, ethernet: &EthernetPacket) {
         let interface_name = &interface.name[..];
         match ethernet.get_ethertype() {
-            // EtherTypes::Ipv4 => handle_ipv4_packet(interface_name, ethernet),
-            // EtherTypes::Ipv6 => handle_ipv6_packet(interface_name, ethernet),
             EtherTypes::Arp => Self::handle_arp_packet(interface_name, ethernet),
-            _ => println!(
-                "[{}]: Unknown packet: {} > {}; ethertype: {:?} length: {}",
-                interface_name,
-                ethernet.get_source(),
-                ethernet.get_destination(),
-                ethernet.get_ethertype(),
-                ethernet.packet().len()
-            ),
+            _ => {}
+            // _ => println!(
+            //     "[{}]: Unknown packet: {} > {}; ethertype: {:?} length: {}",
+            //     interface_name,
+            //     ethernet.get_source(),
+            //     ethernet.get_destination(),
+            //     ethernet.get_ethertype(),
+            //     ethernet.packet().len()
+            // ),
         }
     }
 
@@ -194,59 +193,6 @@ impl PacketDump {
             });
             self.loop_thread = Some(t_handle);
         }
-
-        // let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
-        // self.loop_tx = Some(action_tx);
-
-        // let active_interface = self.active_interface.clone().unwrap();
-
-        // self.loop_task = tokio::spawn(async move {
-        //     let (_, mut receiver) =
-        //         match pnet::datalink::channel(&active_interface, Default::default()) {
-        //             Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
-        //             Ok(_) => panic!("Unknown channel type"),
-        //             Err(e) => panic!("Error happened {}", e),
-        //         };
-        //     // let mut ips = vec![];
-        //     loop {
-        //         let buf = receiver.next().unwrap();
-        //         let arp = ArpPacket::new(&buf[MutableEthernetPacket::minimum_packet_size()..])
-        //             .unwrap();
-        //         if arp.get_sender_proto_addr() == target_ip
-        //             // && arp.get_target_hw_addr() == interface.mac.unwrap()
-        //         {
-        //             // println!("Received reply");
-        //             // return arp.get_sender_hw_addr();
-        //         }
-
-        //         // let mut should_quit = false;
-        //         // while let Ok(action) = action_rx.try_recv() {
-        //         //     match action {
-        //         //         Action::ArpSend(ip) => {
-        //         //             ips.push(ip);
-        //         //         }
-        //         //         // Action::Quit => {
-        //         //         //     should_quit = true;
-        //         //         // }
-        //         //         _ => {}
-        //         //     }
-        //         //     // if action == Action::Quit {
-        //         //     //     should_quit = true;
-        //         //     // }
-        //         //     // if action == Action::ArpSend(ip) {
-        //         //     //     ips.push(ip);
-        //         //     // }
-        //         // }
-        //         // println!("{}", ips.len());
-        //         // if should_quit {
-        //         //     println!("QQUIT PICO");
-        //         //     break;
-        //         // }
-
-        //         tokio::time::sleep(Duration::from_millis(1)).await;
-        //         tokio::task::yield_now().await;
-        //     }
-        // });
     }
 
     fn app_tick(&mut self) -> Result<()> {
@@ -255,52 +201,6 @@ impl PacketDump {
 }
 
 impl Component for PacketDump {
-    // fn init(&mut self, area: Rect) -> Result<()> {
-    //     // -- TODO: tokio async green thread infinite loop taking too much CPU
-    //     let tx = self.action_tx.clone().unwrap();
-    //     let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
-
-    //     if self.loop_created == false {
-    //         let active_interface = self.active_interface.clone().unwrap();
-    //         self.loop_task = tokio::spawn(async move {
-    //             // let active_interface = self.active_interface.clone().unwrap();
-    //             let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
-    //             let (_, mut receiver) =
-    //                 match pnet::datalink::channel(&active_interface, Default::default()) {
-    //                     Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
-    //                     Ok(_) => panic!("Unknown channel type"),
-    //                     Err(e) => panic!("Error happened {}", e),
-    //                 };
-    //             loop {
-    //                 // let buf = receiver.next().unwrap();
-    //                 // let arp = ArpPacket::new(&buf[MutableEthernetPacket::minimum_packet_size()..])
-    //                 //     .unwrap();
-    //                 // if arp.get_sender_proto_addr() == target_ip
-    //                 //     // && arp.get_target_hw_addr() == interface.mac.unwrap()
-    //                 // {
-    //                 //     println!("Received reply");
-    //                 //     return arp.get_sender_hw_addr();
-    //                 // }
-
-    //                 let mut should_quit = false;
-    //                 while let Ok(action) = action_rx.try_recv() {
-    //                     if action == Action::Quit {
-    //                         should_quit = true;
-    //                     }
-    //                 }
-    //                 if should_quit {
-    //                     break;
-    //                 }
-
-    //                 tokio::time::sleep(Duration::from_millis(1)).await;
-    //                 tokio::task::yield_now().await;
-    //             }
-    //         });
-    //         self.loop_created = true;
-    //     }
-    //     Ok(())
-    // }
-
     fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
