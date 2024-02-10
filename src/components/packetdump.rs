@@ -61,52 +61,6 @@ impl PacketDump {
         }
     }
 
-    // fn send_arp(&mut self, target_ip: Ipv4Addr) {
-    //     let active_interface = self.active_interface.clone().unwrap();
-
-    //     let ipv4 = active_interface
-    //         .clone()
-    //         .ips
-    //         .iter()
-    //         .find(|f| f.is_ipv4())
-    //         .unwrap()
-    //         .clone();
-    //     let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
-
-    //     let (mut sender, _) = match pnet::datalink::channel(&active_interface, Default::default()) {
-    //         Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
-    //         Ok(_) => panic!("Unknown channel type"),
-    //         Err(e) => panic!("Error happened {}", e),
-    //     };
-
-    //     let mut ethernet_buffer = [0u8; 42];
-    //     let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer).unwrap();
-
-    //     ethernet_packet.set_destination(MacAddr::broadcast());
-    //     ethernet_packet.set_source(active_interface.mac.unwrap());
-    //     ethernet_packet.set_ethertype(EtherTypes::Arp);
-
-    //     let mut arp_buffer = [0u8; 28];
-    //     let mut arp_packet = MutableArpPacket::new(&mut arp_buffer).unwrap();
-
-    //     arp_packet.set_hardware_type(ArpHardwareTypes::Ethernet);
-    //     arp_packet.set_protocol_type(EtherTypes::Ipv4);
-    //     arp_packet.set_hw_addr_len(6);
-    //     arp_packet.set_proto_addr_len(4);
-    //     arp_packet.set_operation(ArpOperations::Request);
-    //     arp_packet.set_sender_hw_addr(active_interface.mac.unwrap());
-    //     arp_packet.set_sender_proto_addr(source_ip);
-    //     arp_packet.set_target_hw_addr(MacAddr::zero());
-    //     arp_packet.set_target_proto_addr(target_ip);
-
-    //     ethernet_packet.set_payload(arp_packet.packet_mut());
-
-    //     sender
-    //         .send_to(ethernet_packet.packet(), None)
-    //         .unwrap()
-    //         .unwrap();
-    // }
-
     fn handle_arp_packet(
         interface_name: &str,
         ethernet: &EthernetPacket,
@@ -120,16 +74,6 @@ impl PacketDump {
                 target_mac: header.get_target_hw_addr(), 
                 target_ip: header.get_target_proto_addr() 
             })).unwrap();
-
-            // println!(
-            //     "[{}]: ARP packet: {}({}) > {}({}); operation: {:?}",
-            //     interface_name,
-            //     ethernet.get_source(),
-            //     header.get_sender_proto_addr(),
-            //     ethernet.get_destination(),
-            //     header.get_target_proto_addr(),
-            //     header.get_operation()
-            // );
         }
     }
 
@@ -154,8 +98,6 @@ impl PacketDump {
         loop {
             let mut buf: [u8; 1600] = [0u8; 1600];
             let mut fake_ethernet_frame = MutableEthernetPacket::new(&mut buf[..]).unwrap();
-
-            // std::thread::sleep(std::time::Duration::from_millis(10));
 
             match receiver.next() {
                 Ok(packet) => {
