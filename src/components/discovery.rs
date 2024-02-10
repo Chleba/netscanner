@@ -21,7 +21,10 @@ use tokio::{
 };
 
 use super::Component;
-use crate::{action::Action, mode::Mode, tui::Frame, utils::get_ips4_from_cidr};
+use crate::{
+    action::Action, components::packetdump::ArpPacketData, mode::Mode, tui::Frame,
+    utils::get_ips4_from_cidr,
+};
 use crossterm::event::{KeyCode, KeyEvent};
 use mac_oui::Oui;
 use rand::random;
@@ -95,6 +98,86 @@ impl Discovery {
         self.ip_num = 0;
     }
 
+    fn send_arp(&mut self, target_ip: Ipv4Addr) {
+        let active_interface = self.active_interface.clone().unwrap();
+
+        let ipv4 = active_interface
+            .clone()
+            .ips
+            .iter()
+            .find(|f| f.is_ipv4())
+            .unwrap()
+            .clone();
+        let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
+
+        let (mut sender, _) =
+            match pnet::datalink::channel(&active_interface, Default::default()) {
+                Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
+                Ok(_) => panic!("Unknown channel type"),
+                Err(e) => panic!("Error happened {}", e),
+            };
+
+        let mut ethernet_buffer = [0u8; 42];
+        let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer).unwrap();
+
+        ethernet_packet.set_destination(MacAddr::broadcast());
+        ethernet_packet.set_source(active_interface.mac.unwrap());
+        ethernet_packet.set_ethertype(EtherTypes::Arp);
+
+        let mut arp_buffer = [0u8; 28];
+        let mut arp_packet = MutableArpPacket::new(&mut arp_buffer).unwrap();
+
+        arp_packet.set_hardware_type(ArpHardwareTypes::Ethernet);
+        arp_packet.set_protocol_type(EtherTypes::Ipv4);
+        arp_packet.set_hw_addr_len(6);
+        arp_packet.set_proto_addr_len(4);
+        arp_packet.set_operation(ArpOperations::Request);
+        arp_packet.set_sender_hw_addr(active_interface.mac.unwrap());
+        arp_packet.set_sender_proto_addr(source_ip);
+        arp_packet.set_target_hw_addr(MacAddr::zero());
+        arp_packet.set_target_proto_addr(target_ip);
+
+        ethernet_packet.set_payload(arp_packet.packet_mut());
+
+        sender
+            .send_to(ethernet_packet.packet(), None)
+            .unwrap()
+            .unwrap();
+
+        // let tx = self.action_tx.clone().unwrap();
+        // let (abort_handle, abort_reg) = AbortHandle::new_pair();
+        // self.abortables.push(abort_handle.clone());
+        // let task = tokio::spawn(
+        //     Abortable::new(
+        //         async move {
+        //             loop {
+        //                 let buf = receiver.next().unwrap_or_default();
+        //                 if buf.len() >= MutableEthernetPacket::minimum_packet_size() {
+        //                     let arp = ArpPacket::new(
+        //                         &buf[MutableEthernetPacket::minimum_packet_size()..],
+        //                     )
+        //                     .unwrap();
+        //                     if arp.get_sender_proto_addr() == target_ip
+        //                         && arp.get_target_hw_addr() == active_interface.mac.unwrap()
+        //                     {
+        //                     }
+        //                 }
+        //                 // tokio::task::yield_now().await;
+        //             }
+        //         },
+        //         abort_reg,
+        //     )
+        //     .boxed(),
+        // );
+        // // self.arp_tasks.push(task);
+        // // let abort_handle = abort_handle.clone();
+        // // let abort_handle = abort_handle.clone();
+        // let timeout_task = tokio::spawn(async move {
+        //     tokio::time::sleep(Duration::from_secs(2)).await;
+        //     abort_handle.abort();
+        // });
+    }
+
     fn scan(&mut self) {
         self.reset_scan();
 
@@ -141,10 +224,33 @@ impl Discovery {
         };
     }
 
+    fn process_mac(&mut self, arp_data: ArpPacketData) {
+        if let Some(n) = self
+            .scanned_ips
+            .iter_mut()
+            .find(|item| item.ip == arp_data.sender_ip.to_string())
+        {
+            n.mac = arp_data.sender_mac.to_string();
+
+            if let Some(oui) = &self.oui {
+                let oui_res = oui.lookup_by_mac(&n.mac);
+                match oui_res {
+                    Ok(e) => {
+                        if let Some(oui_res) = e {
+                            let cn = oui_res.company_name.clone();
+                            n.vendor = cn;
+                        }
+                    }
+                    Err(_) => {}
+                }
+            }
+        }
+    }
+
     fn process_ip(&mut self, ip: &str) {
         let tx = self.action_tx.clone().unwrap();
         let ipv4: Ipv4Addr = ip.parse().unwrap();
-        // self.send_arp(ipv4);
+        self.send_arp(ipv4);
 
         if let Some(n) = self
             .scanned_ips
@@ -320,6 +426,11 @@ impl Component for Discovery {
         // -- CIDR error
         if let Action::CidrError = action {
             self.cidr_error = true;
+        }
+        // -- ARP packet recieved
+        if let Action::ArpRecieve(ref arp_data) = action {
+            // if let Action::ArpRecieve(target_ip, mac) = action {
+            self.process_mac(arp_data.clone());
         }
         // -- active interface
         if let Action::ActiveInterface(ref interface) = action {

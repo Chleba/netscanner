@@ -6,7 +6,10 @@ use serde::{
     Deserialize, Serialize,
 };
 
-use crate::components::wifi_scan::WifiInfo;
+use crate::components::{
+    packetdump::ArpPacketData,
+    wifi_scan::WifiInfo
+};
 use crate::mode::Mode;
 
 // #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -26,8 +29,9 @@ pub enum Action {
     GraphToggle,
     InterfaceSwitch,
     ActiveInterface(NetworkInterface),
-    ArpSend(Ipv4Addr),
-    ArpRecieve(Ipv4Addr, MacAddr),
+    // ArpSend(Ipv4Addr),
+    // ArpRecieve(Ipv4Addr, MacAddr),
+    ArpRecieve(ArpPacketData),
     Scan(Vec<WifiInfo>),
     ModeChange(Mode),
     PingIp(String),

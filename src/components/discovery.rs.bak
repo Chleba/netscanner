@@ -137,8 +137,6 @@ impl Discovery {
                         if arp.get_sender_proto_addr() == target_ip
                             && arp.get_target_hw_addr() == active_interface.mac.unwrap()
                         {
-                            tx.send(Action::ArpRecieve(target_ip, arp.get_sender_hw_addr()))
-                                .unwrap();
                         }
                     }
                     // tokio::task::yield_now().await;
