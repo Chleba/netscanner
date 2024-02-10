@@ -1,5 +1,4 @@
 use cidr::Ipv4Cidr;
-use std::net::Ipv4Addr;
 
 fn main() {
     let cidr_range = "192.168.1.0/24"; // Replace with your CIDR range

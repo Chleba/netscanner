@@ -25,8 +25,9 @@ fn get_available_port() {
 
 fn port_is_available(port: u16) -> bool {
     // match TcpListener::bind(("127.0.0.1", port)) {
-    match TcpListener::bind(("192.168.1.97", port)) {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    TcpListener::bind(("192.168.1.97", port)).is_ok()
+    // match TcpListener::bind(("192.168.1.97", port)) {
+    //     Ok(_) => true,
+    //     Err(_) => false,
+    // }
 }

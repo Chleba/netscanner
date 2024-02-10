@@ -47,7 +47,7 @@ async fn main() {
         }).collect();
 
         for task in tasks {
-            task.await;
+            task.await.unwrap();
             // match task.await {
             //     Ok(_) => {}
             //     Err(_) => {}
