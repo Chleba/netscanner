@@ -34,7 +34,8 @@ use tui_input::Input;
 static POOL_SIZE: usize = 32;
 static INPUT_SIZE: usize = 30;
 
-struct ScannedIp {
+#[derive(Clone)]
+pub struct ScannedIp {
     ip: String,
     mac: String,
     hostname: String,
@@ -52,7 +53,8 @@ pub struct Discovery {
     mode: Mode,
     task: JoinHandle<()>,
     oui: Option<Oui>,
-    // arp_tasks: Vec<JoinHandle<_, _>>,
+    table_state: TableState,
+    scrollbar_state: ScrollbarState,
 }
 
 impl Default for Discovery {
@@ -74,7 +76,8 @@ impl Discovery {
             cidr_error: false,
             mode: Mode::Normal,
             oui: None,
-            // arp_tasks: Vec::new(),
+            table_state: TableState::default().with_selected(0),
+            scrollbar_state: ScrollbarState::new(0),
         }
     }
 
@@ -110,12 +113,11 @@ impl Discovery {
             .clone();
         let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
 
-        let (mut sender, _) =
-            match pnet::datalink::channel(&active_interface, Default::default()) {
-                Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
-                Ok(_) => panic!("Unknown channel type"),
-                Err(e) => panic!("Error happened {}", e),
-            };
+        let (mut sender, _) = match pnet::datalink::channel(&active_interface, Default::default()) {
+            Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
+            Ok(_) => panic!("Unknown channel type"),
+            Err(e) => panic!("Error happened {}", e),
+        };
 
         let mut ethernet_buffer = [0u8; 42];
         let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer).unwrap();
@@ -234,6 +236,10 @@ impl Discovery {
 
             if let Some(oui) = &self.oui {
                 let oui_res = oui.lookup_by_mac(&n.mac);
+                // if let Some(oui_res) = oui_res {
+                //     let cn = oui_res.company_name.clone();
+                //     n.vendor = cn;
+                // }
                 match oui_res {
                     Ok(e) => {
                         if let Some(oui_res) = e {
@@ -252,11 +258,7 @@ impl Discovery {
         let ipv4: Ipv4Addr = ip.parse().unwrap();
         self.send_arp(ipv4);
 
-        if let Some(n) = self
-            .scanned_ips
-            .iter_mut()
-            .find(|item| item.ip == ip.to_string())
-        {
+        if let Some(n) = self.scanned_ips.iter_mut().find(|item| item.ip == ip) {
             let hip: IpAddr = ip.parse().unwrap();
             let host = lookup_addr(&hip).unwrap_or(String::from(""));
             n.hostname = host;
@@ -271,15 +273,51 @@ impl Discovery {
                 vendor: String::from(""),
             })
         }
+
+        self.set_scrollbar_height();
     }
 
-    pub fn make_table(&mut self) -> Table {
+    fn set_scrollbar_height(&mut self) {
+        self.scrollbar_state.content_length(self.scanned_ips.len() - 1);
+    }
+
+    fn previous_in_table(&mut self) {
+        let index = match self.table_state.selected() {
+            Some(index) => {
+                if index == 0 {
+                    self.scanned_ips.len() - 1
+                } else {
+                    index - 1
+                }
+            }
+            None => 0,
+        };
+        self.table_state.select(Some(index));
+        // self.
+    }
+
+    fn next_in_table(&mut self) {
+        let index = match self.table_state.selected() {
+            Some(index) => {
+                if index >= self.scanned_ips.len() - 1 {
+                    0
+                } else {
+                    index + 1
+                }
+            }
+            None => 0,
+        };
+        self.table_state.select(Some(index));
+        // self.
+    }
+
+    fn make_table(scanned_ips: Vec<ScannedIp>, ip_num: i32) -> Table<'static> {
         let header = Row::new(vec!["ip", "hostname", "mac", "vendor"])
             .style(Style::default().fg(Color::Yellow))
             .bottom_margin(1);
         let mut rows = Vec::new();
 
-        for sip in &self.scanned_ips {
+        for sip in scanned_ips {
             let ip = &sip.ip;
             rows.push(Row::new(vec![
                 Cell::from(Span::styled(
@@ -294,6 +332,7 @@ impl Discovery {
 
         let table = Table::new(
             rows,
+            // vec![],
             [
                 Constraint::Length(16),
                 Constraint::Length(25),
@@ -312,10 +351,7 @@ impl Discovery {
                 .title(
                     ratatui::widgets::block::Title::from(Line::from(vec![
                         Span::styled("|", Style::default().fg(Color::Yellow)),
-                        Span::styled(
-                            String::from(format!("{}", self.ip_num.to_string())),
-                            Style::default().fg(Color::Green),
-                        ),
+                        Span::styled(format!("{}", ip_num), Style::default().fg(Color::Green)),
                         Span::styled(" ip scanned|", Style::default().fg(Color::Yellow)),
                     ]))
                     .position(ratatui::widgets::block::Position::Top)
@@ -325,9 +361,17 @@ impl Discovery {
                 .borders(Borders::ALL)
                 .padding(Padding::new(1, 0, 2, 0)),
         )
-        .highlight_symbol("*")
+        .highlight_symbol(String::from(char::from_u32(0x25b7).unwrap_or('>')).red())
         .column_spacing(1);
         table
+    }
+
+    fn make_scrollbar(&mut self) -> Scrollbar {
+        let scrollbar = Scrollbar::default()
+            .orientation(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(None)
+            .end_symbol(None);
+        scrollbar
     }
 
     fn make_input(&mut self, scroll: usize) -> Paragraph {
@@ -449,6 +493,13 @@ impl Component for Discovery {
             }
             self.mode = mode;
         }
+        // -- prev & next select item in table
+        if let Action::Down = action {
+            self.next_in_table();
+        }
+        if let Action::Up = action {
+            self.previous_in_table();
+        }
 
         Ok(None)
     }
@@ -460,15 +511,17 @@ impl Component for Discovery {
             .split(area);
 
         // -- TABLE
-        let mut table_rect = layout[1].clone();
+        let mut table_rect = layout[1];
         table_rect.y += 1;
         table_rect.height -= 1;
-        let block = self.make_table();
-        f.render_widget(block, table_rect);
-        // f.render_stateful_widget(block, table_rect);
+        let table = Self::make_table(self.scanned_ips.clone(), self.ip_num);
+        f.render_stateful_widget(table, table_rect, &mut self.table_state.clone());
+
+        // -- SCROLLBAR
+        // let scrollbar = self.make_scrollbar();
 
         // -- ERROR
-        if self.cidr_error == true {
+        if self.cidr_error {
             let error_rect = Rect::new(table_rect.width - (19 + 41), table_rect.y + 1, 18, 3);
             let block = self.make_error();
             f.render_widget(block, error_rect);

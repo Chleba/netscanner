@@ -8,7 +8,8 @@
       "<i>": "InputMode",
       "<g>": "Graph",
       "<f>": "Interface",
-      "<a>": "Abort" 
+      "<up>": "Up",
+      "<down>": "Down"
     },
     "Input": {
       "<Esc>": "NormalMode"
