@@ -1,5 +1,6 @@
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
+use color_eyre::owo_colors::OwoColorize;
 use dns_lookup::{lookup_addr, lookup_host};
 use futures::future::join_all;
 
@@ -105,12 +106,10 @@ impl Discovery {
         let active_interface = self.active_interface.clone().unwrap();
 
         let ipv4 = active_interface
-            .clone()
             .ips
             .iter()
             .find(|f| f.is_ipv4())
-            .unwrap()
-            .clone();
+            .unwrap();
         let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
 
         let (mut sender, _) = match pnet::datalink::channel(&active_interface, Default::default()) {
@@ -278,7 +277,9 @@ impl Discovery {
     }
 
     fn set_scrollbar_height(&mut self) {
-        self.scrollbar_state.content_length(self.scanned_ips.len() - 1);
+        self.scrollbar_state = self
+            .scrollbar_state
+            .content_length(self.scanned_ips.len() - 1);
     }
 
     fn previous_in_table(&mut self) {
@@ -293,7 +294,7 @@ impl Discovery {
             None => 0,
         };
         self.table_state.select(Some(index));
-        // self.
+        self.scrollbar_state = self.scrollbar_state.position(index);
     }
 
     fn next_in_table(&mut self) {
@@ -308,7 +309,7 @@ impl Discovery {
             None => 0,
         };
         self.table_state.select(Some(index));
-        // self.
+        self.scrollbar_state = self.scrollbar_state.position(index);
     }
 
     fn make_table(scanned_ips: Vec<ScannedIp>, ip_num: i32) -> Table<'static> {
@@ -357,20 +358,34 @@ impl Discovery {
                     .position(ratatui::widgets::block::Position::Top)
                     .alignment(Alignment::Left),
                 )
+                .title(
+                    ratatui::widgets::block::Title::from(Line::from(vec![
+                        Span::styled("|", Style::default().fg(Color::Yellow)),
+                        String::from(char::from_u32(0x25b2).unwrap_or('>')).red(),
+                        String::from(char::from_u32(0x25bc).unwrap_or('>')).red(),
+                        Span::styled("Select|", Style::default().fg(Color::Yellow)),
+                    ]))
+                    .position(ratatui::widgets::block::Position::Bottom)
+                    .alignment(Alignment::Right),
+                )
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                .borders(Borders::ALL)
-                .padding(Padding::new(1, 0, 2, 0)),
+                .borders(Borders::ALL), // .padding(Padding::new(1, 0, 2, 0)),
         )
         .highlight_symbol(String::from(char::from_u32(0x25b7).unwrap_or('>')).red())
         .column_spacing(1);
         table
     }
 
-    fn make_scrollbar(&mut self) -> Scrollbar {
+    pub fn make_scrollbar<'a>() -> Scrollbar<'a> {
+        // let s_start = String::from(char::from_u32(0x25b2).unwrap_or('#'));
+        // let s_end = String::from(char::from_u32(0x25bc).unwrap_or('#'));
         let scrollbar = Scrollbar::default()
             .orientation(ScrollbarOrientation::VerticalRight)
+            .style(Style::default().fg(Color::Rgb(100, 100, 100)))
             .begin_symbol(None)
             .end_symbol(None);
+        // .begin_symbol(Some(s_start))
+        // .end_symbol(Some(s_end));
         scrollbar
     }
 
@@ -421,7 +436,7 @@ impl Discovery {
 
 impl Component for Discovery {
     fn init(&mut self, area: Rect) -> Result<()> {
-        if self.cidr == None {
+        if self.cidr.is_none() {
             let cidr_range = "192.168.1.0/24";
             self.set_cidr(String::from(cidr_range), false);
         }
@@ -480,7 +495,7 @@ impl Component for Discovery {
         if let Action::ActiveInterface(ref interface) = action {
             let intf = interface.clone();
             // -- first time scan after setting of interface
-            if self.active_interface == None {
+            if self.active_interface.is_none() {
                 self.scan();
             }
             self.active_interface = Some(intf);
@@ -518,7 +533,18 @@ impl Component for Discovery {
         f.render_stateful_widget(table, table_rect, &mut self.table_state.clone());
 
         // -- SCROLLBAR
-        // let scrollbar = self.make_scrollbar();
+        let scrollbar = Self::make_scrollbar();
+        let mut scroll_rect = table_rect;
+        scroll_rect.y += 3;
+        scroll_rect.height -= 3;
+        f.render_stateful_widget(
+            scrollbar,
+            scroll_rect.inner(&Margin {
+                vertical: 1,
+                horizontal: 1,
+            }),
+            &mut self.scrollbar_state,
+        );
 
         // -- ERROR
         if self.cidr_error {
