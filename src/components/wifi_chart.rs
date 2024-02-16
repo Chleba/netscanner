@@ -157,7 +157,7 @@ impl Component for WifiChart {
         }
         // -- custom actions
         if let Action::Scan(ref nets) = action {
-            self.parse_char_data(&nets);
+            self.parse_char_data(nets);
         }
 
         if let Action::GraphToggle = action {
@@ -168,13 +168,6 @@ impl Component for WifiChart {
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        // let layout = Layout::default()
-        //     .direction(Direction::Vertical)
-        //     .constraints([Constraint::Percentage(30), Constraint::Percentage(20), Constraint::Percentage(50)])
-        //     .split(area);
-        // let mut rect = layout[1].clone();
-        // rect.y += 1;
-
         if self.show_graph {
             let layout = Layout::default()
                 .direction(Direction::Vertical)
@@ -185,7 +178,6 @@ impl Component for WifiChart {
             let block = self.make_chart();
             f.render_widget(block, rect);
         }
-
         Ok(())
     }
 }

@@ -12,7 +12,11 @@ use pnet::datalink::{Channel, NetworkInterface};
 use pnet::packet::{
     arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
     ethernet::{EtherTypes, EthernetPacket, MutableEthernetPacket},
+    icmp::{echo_reply, echo_request, IcmpPacket, IcmpTypes},
+    ip::{IpNextHeaderProtocol, IpNextHeaderProtocols},
     ipv4::Ipv4Packet,
+    tcp::TcpPacket,
+    udp::UdpPacket,
     MutablePacket, Packet,
 };
 use pnet::util::MacAddr;
@@ -26,22 +30,43 @@ use super::{Component, Frame};
 use crate::{
     action::Action,
     config::{Config, KeyBindings},
+    utils::MaxSizeVec,
 };
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum PacketTypeEnum {
+    Arp,
+    Tcp,
+    Udp,
+    Icmp,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ArpPacketData {
-    pub sender_mac: MacAddr, 
+    pub sender_mac: MacAddr,
     pub sender_ip: Ipv4Addr,
     pub target_mac: MacAddr,
     pub target_ip: Ipv4Addr,
 }
+
+// struct
 
 pub struct PacketDump {
     action_tx: Option<UnboundedSender<Action>>,
     loop_thread: Option<JoinHandle<()>>,
     should_quit: bool,
     active_interface: Option<NetworkInterface>,
-    ips: Vec<Ipv4Addr>,
+    show_packets: bool,
+    arp_packets: MaxSizeVec<String>,
+    udp_packets: MaxSizeVec<String>,
+    tcp_packets: MaxSizeVec<String>,
+    icmp_packets: MaxSizeVec<String>,
+    all_packets: MaxSizeVec<String>,
+    // arp_packets: Vec<String>,
+    // udp_packets: Vec<String>,
+    // tcp_packets: Vec<String>,
+    // icmp_packets: Vec<String>,
+    // all_packets: Vec<String>,
 }
 
 impl Default for PacketDump {
@@ -57,7 +82,176 @@ impl PacketDump {
             loop_thread: None,
             should_quit: false,
             active_interface: None,
-            ips: vec![],
+            show_packets: false,
+            // arp_packets: vec![],
+            // udp_packets: vec![],
+            // tcp_packets: vec![],
+            // icmp_packets: vec![],
+            // all_packets: vec![],
+            arp_packets: MaxSizeVec::new(1000),
+            udp_packets: MaxSizeVec::new(1000),
+            tcp_packets: MaxSizeVec::new(1000),
+            icmp_packets: MaxSizeVec::new(1000),
+            all_packets: MaxSizeVec::new(1000),
+        }
+    }
+
+    fn handle_udp_packet(
+        interface_name: &str,
+        source: IpAddr,
+        destination: IpAddr,
+        packet: &[u8],
+        tx: UnboundedSender<Action>,
+    ) {
+        let udp = UdpPacket::new(packet);
+        if let Some(udp) = udp {
+            tx.send(Action::PacketDump(
+                format!(
+                    "[{}]: UDP Packet: {}:{} > {}:{}; length: {}",
+                    interface_name,
+                    source,
+                    udp.get_source(),
+                    destination,
+                    udp.get_destination(),
+                    udp.get_length()
+                ),
+                PacketTypeEnum::Udp,
+            ))
+            .unwrap();
+        }
+    }
+
+    fn handle_icmp_packet(
+        interface_name: &str,
+        source: IpAddr,
+        destination: IpAddr,
+        packet: &[u8],
+        tx: UnboundedSender<Action>,
+    ) {
+        let icmp_packet = IcmpPacket::new(packet);
+        if let Some(icmp_packet) = icmp_packet {
+            match icmp_packet.get_icmp_type() {
+                IcmpTypes::EchoReply => {
+                    let echo_reply_packet = echo_reply::EchoReplyPacket::new(packet).unwrap();
+                    tx.send(Action::PacketDump(
+                        format!(
+                            "[{}]: ICMP echo reply {} -> {} (seq={:?}, id={:?})",
+                            interface_name,
+                            source,
+                            destination,
+                            echo_reply_packet.get_sequence_number(),
+                            echo_reply_packet.get_identifier()
+                        ),
+                        PacketTypeEnum::Icmp,
+                    ))
+                    .unwrap();
+                }
+                IcmpTypes::EchoRequest => {
+                    let echo_request_packet = echo_request::EchoRequestPacket::new(packet).unwrap();
+                    tx.send(Action::PacketDump(
+                        format!(
+                            "[{}]: ICMP echo request {} -> {} (seq={:?}, id={:?})",
+                            interface_name,
+                            source,
+                            destination,
+                            echo_request_packet.get_sequence_number(),
+                            echo_request_packet.get_identifier()
+                        ),
+                        PacketTypeEnum::Icmp,
+                    ))
+                    .unwrap();
+                }
+                _ => {
+                    tx.send(Action::PacketDump(
+                        format!(
+                            "[{}]: ICMP packet {} -> {} (type={:?})",
+                            interface_name,
+                            source,
+                            destination,
+                            icmp_packet.get_icmp_type()
+                        ),
+                        PacketTypeEnum::Icmp,
+                    ))
+                    .unwrap();
+                }
+            }
+        }
+    }
+
+    fn handle_tcp_packet(
+        interface_name: &str,
+        source: IpAddr,
+        destination: IpAddr,
+        packet: &[u8],
+        tx: UnboundedSender<Action>,
+    ) {
+        let tcp = TcpPacket::new(packet);
+        if let Some(tcp) = tcp {
+            tx.send(Action::PacketDump(
+                format!(
+                    "[{}]: TCP Packet: {}:{} > {}:{}; length: {}",
+                    interface_name,
+                    source,
+                    tcp.get_source(),
+                    destination,
+                    tcp.get_destination(),
+                    packet.len()
+                ),
+                PacketTypeEnum::Tcp,
+            ))
+            .unwrap();
+        }
+    }
+
+    fn handle_transport_protocol(
+        interface_name: &str,
+        source: IpAddr,
+        destination: IpAddr,
+        protocol: IpNextHeaderProtocol,
+        packet: &[u8],
+        tx: UnboundedSender<Action>,
+    ) {
+        match protocol {
+            IpNextHeaderProtocols::Udp => {
+                Self::handle_udp_packet(interface_name, source, destination, packet, tx)
+            }
+            IpNextHeaderProtocols::Tcp => {
+                Self::handle_tcp_packet(interface_name, source, destination, packet, tx)
+            }
+            IpNextHeaderProtocols::Icmp => {
+                Self::handle_icmp_packet(interface_name, source, destination, packet, tx)
+            }
+            _ => {}
+            // _ => println!(
+            //     "[{}]: Unknown {} packet: {} > {}; protocol: {:?} length: {}",
+            //     interface_name,
+            //     match source {
+            //         IpAddr::V4(..) => "IPv4",
+            //         _ => "IPv6",
+            //     },
+            //     source,
+            //     destination,
+            //     protocol,
+            //     packet.len()
+            // ),
+        }
+    }
+
+    fn handle_ipv4_packet(
+        interface_name: &str,
+        ethernet: &EthernetPacket,
+        tx: UnboundedSender<Action>,
+    ) {
+        let header = Ipv4Packet::new(ethernet.payload());
+        if let Some(header) = header {
+            Self::handle_transport_protocol(
+                interface_name,
+                IpAddr::V4(header.get_source()),
+                IpAddr::V4(header.get_destination()),
+                header.get_next_level_protocol(),
+                header.payload(),
+                tx,
+            );
         }
     }
 
@@ -68,12 +262,27 @@ impl PacketDump {
     ) {
         let header = ArpPacket::new(ethernet.payload());
         if let Some(header) = header {
-            tx.send(Action::ArpRecieve(ArpPacketData { 
-                sender_mac: header.get_sender_hw_addr(), 
-                sender_ip: header.get_sender_proto_addr(), 
-                target_mac: header.get_target_hw_addr(), 
-                target_ip: header.get_target_proto_addr() 
-            })).unwrap();
+            tx.send(Action::ArpRecieve(ArpPacketData {
+                sender_mac: header.get_sender_hw_addr(),
+                sender_ip: header.get_sender_proto_addr(),
+                target_mac: header.get_target_hw_addr(),
+                target_ip: header.get_target_proto_addr(),
+            }))
+            .unwrap();
+
+            tx.send(Action::PacketDump(
+                format!(
+                    "[{}]: ARP packet: {}({}) > {}({}); operation: {:?}",
+                    interface_name,
+                    ethernet.get_source(),
+                    header.get_sender_proto_addr(),
+                    ethernet.get_destination(),
+                    header.get_target_proto_addr(),
+                    header.get_operation()
+                ),
+                PacketTypeEnum::Arp,
+            ))
+            .unwrap();
         }
     }
 
@@ -84,6 +293,7 @@ impl PacketDump {
     ) {
         let interface_name = &interface.name[..];
         match ethernet.get_ethertype() {
+            EtherTypes::Ipv4 => Self::handle_ipv4_packet(interface_name, ethernet, tx),
             EtherTypes::Arp => Self::handle_arp_packet(interface_name, ethernet, tx),
             _ => {}
         }
@@ -155,9 +365,7 @@ impl PacketDump {
         }
     }
 
-    fn app_tick(&mut self) -> Result<()> {
-        Ok(())
-    }
+    // fn make_li
 }
 
 impl Component for PacketDump {
@@ -167,19 +375,28 @@ impl Component for PacketDump {
     }
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
-        if let Action::Tick = action {
-            self.app_tick()?
-        }
-
         // -- active interface set
         if let Action::ActiveInterface(ref interface) = action {
             let mut was_none = false;
-            if self.active_interface == None {
+            if self.active_interface.is_none() {
                 was_none = true;
             }
             self.active_interface = Some(interface.clone());
             if was_none {
                 self.start_loop();
+            }
+        }
+        // -- packets toggle
+        if let Action::PacketToggle = action {
+            self.show_packets = !self.show_packets;
+        }
+        // -- packet recieved
+        if let Action::PacketDump(packet_str, packet_type) = action {
+            match packet_type {
+                PacketTypeEnum::Tcp => self.tcp_packets.push(packet_str),
+                PacketTypeEnum::Arp => self.arp_packets.push(packet_str),
+                PacketTypeEnum::Udp => self.udp_packets.push(packet_str),
+                PacketTypeEnum::Icmp => self.icmp_packets.push(packet_str),
             }
         }
 

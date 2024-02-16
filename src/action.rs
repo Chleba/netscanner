@@ -1,6 +1,7 @@
 use std::{fmt, net::Ipv4Addr};
 use pnet::util::MacAddr;
 use pnet::datalink::NetworkInterface;
+use ratatui::text::Line;
 use serde::{
     de::{self, Deserializer, Visitor},
     Deserialize, Serialize,
@@ -8,7 +9,8 @@ use serde::{
 
 use crate::components::{
     packetdump::ArpPacketData,
-    wifi_scan::WifiInfo
+    wifi_scan::WifiInfo,
+    packetdump::PacketTypeEnum,
 };
 use crate::mode::Mode;
 
@@ -29,6 +31,7 @@ pub enum Action {
     Up,
     Down,
     GraphToggle,
+    PacketToggle,
     InterfaceSwitch,
     ActiveInterface(NetworkInterface),
     ArpRecieve(ArpPacketData),
@@ -37,6 +40,7 @@ pub enum Action {
     PingIp(String),
     CountIp,
     CidrError,
+    PacketDump(String, PacketTypeEnum),
 }
 
 impl<'de> Deserialize<'de> for Action {
@@ -62,6 +66,7 @@ impl<'de> Deserialize<'de> for Action {
                     "InputMode" => Ok(Action::ModeChange(Mode::Input)),
                     "NormalMode" => Ok(Action::ModeChange(Mode::Normal)),
                     "Graph" => Ok(Action::GraphToggle),
+                    "Packets" => Ok(Action::PacketToggle),
                     "Interface" => Ok(Action::InterfaceSwitch),
                     "Up" => Ok(Action::Up),
                     "Down" => Ok(Action::Down),

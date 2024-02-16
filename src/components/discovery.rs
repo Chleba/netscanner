@@ -56,6 +56,7 @@ pub struct Discovery {
     oui: Option<Oui>,
     table_state: TableState,
     scrollbar_state: ScrollbarState,
+    show_packets: bool,
 }
 
 impl Default for Discovery {
@@ -79,6 +80,7 @@ impl Discovery {
             oui: None,
             table_state: TableState::default().with_selected(0),
             scrollbar_state: ScrollbarState::new(0),
+            show_packets: false,
         }
     }
 
@@ -105,11 +107,7 @@ impl Discovery {
     fn send_arp(&mut self, target_ip: Ipv4Addr) {
         let active_interface = self.active_interface.clone().unwrap();
 
-        let ipv4 = active_interface
-            .ips
-            .iter()
-            .find(|f| f.is_ipv4())
-            .unwrap();
+        let ipv4 = active_interface.ips.iter().find(|f| f.is_ipv4()).unwrap();
         let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
 
         let (mut sender, _) = match pnet::datalink::channel(&active_interface, Default::default()) {
@@ -366,6 +364,15 @@ impl Discovery {
                         Span::styled("Select|", Style::default().fg(Color::Yellow)),
                     ]))
                     .position(ratatui::widgets::block::Position::Bottom)
+                    .alignment(Alignment::Left),
+                )
+                .title(
+                    ratatui::widgets::block::Title::from(Line::from(vec![
+                        Span::styled("|show ", Style::default().fg(Color::Yellow)),
+                        Span::styled("p", Style::default().fg(Color::Red)),
+                        Span::styled("ackets|", Style::default().fg(Color::Yellow)),
+                    ]))
+                    .position(ratatui::widgets::block::Position::Bottom)
                     .alignment(Alignment::Right),
                 )
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
@@ -515,64 +522,72 @@ impl Component for Discovery {
         if let Action::Up = action {
             self.previous_in_table();
         }
+        // -- packets toggle
+        if let Action::PacketToggle = action {
+            self.show_packets = !self.show_packets;
+        }
 
         Ok(None)
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-            .split(area);
+        if !self.show_packets {
+            let layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+                .split(area);
 
-        // -- TABLE
-        let mut table_rect = layout[1];
-        table_rect.y += 1;
-        table_rect.height -= 1;
-        let table = Self::make_table(self.scanned_ips.clone(), self.ip_num);
-        f.render_stateful_widget(table, table_rect, &mut self.table_state.clone());
+            // -- TABLE
+            let mut table_rect = layout[1];
+            table_rect.y += 1;
+            table_rect.height -= 1;
+            let table = Self::make_table(self.scanned_ips.clone(), self.ip_num);
+            f.render_stateful_widget(table, table_rect, &mut self.table_state.clone());
 
-        // -- SCROLLBAR
-        let scrollbar = Self::make_scrollbar();
-        let mut scroll_rect = table_rect;
-        scroll_rect.y += 3;
-        scroll_rect.height -= 3;
-        f.render_stateful_widget(
-            scrollbar,
-            scroll_rect.inner(&Margin {
-                vertical: 1,
-                horizontal: 1,
-            }),
-            &mut self.scrollbar_state,
-        );
+            // -- SCROLLBAR
+            let scrollbar = Self::make_scrollbar();
+            let mut scroll_rect = table_rect;
+            scroll_rect.y += 3;
+            scroll_rect.height -= 3;
+            f.render_stateful_widget(
+                scrollbar,
+                scroll_rect.inner(&Margin {
+                    vertical: 1,
+                    horizontal: 1,
+                }),
+                &mut self.scrollbar_state,
+            );
 
-        // -- ERROR
-        if self.cidr_error {
-            let error_rect = Rect::new(table_rect.width - (19 + 41), table_rect.y + 1, 18, 3);
-            let block = self.make_error();
-            f.render_widget(block, error_rect);
-        }
-
-        // -- INPUT
-        let input_size: u16 = INPUT_SIZE as u16;
-        let input_rect = Rect::new(
-            table_rect.width - (input_size + 1),
-            table_rect.y + 1,
-            input_size,
-            3,
-        );
-        let scroll = self.input.visual_scroll(INPUT_SIZE);
-        let block = self.make_input(scroll);
-        f.render_widget(block, input_rect);
-        // -- cursor
-        match self.mode {
-            Mode::Input => {
-                f.set_cursor(
-                    input_rect.x + ((self.input.visual_cursor()).max(scroll) - scroll) as u16 + 1,
-                    input_rect.y + 1,
-                );
+            // -- ERROR
+            if self.cidr_error {
+                let error_rect = Rect::new(table_rect.width - (19 + 41), table_rect.y + 1, 18, 3);
+                let block = self.make_error();
+                f.render_widget(block, error_rect);
             }
-            Mode::Normal => {}
+
+            // -- INPUT
+            let input_size: u16 = INPUT_SIZE as u16;
+            let input_rect = Rect::new(
+                table_rect.width - (input_size + 1),
+                table_rect.y + 1,
+                input_size,
+                3,
+            );
+            let scroll = self.input.visual_scroll(INPUT_SIZE);
+            let block = self.make_input(scroll);
+            f.render_widget(block, input_rect);
+            // -- cursor
+            match self.mode {
+                Mode::Input => {
+                    f.set_cursor(
+                        input_rect.x
+                            + ((self.input.visual_cursor()).max(scroll) - scroll) as u16
+                            + 1,
+                        input_rect.y + 1,
+                    );
+                }
+                Mode::Normal => {}
+            }
         }
 
         Ok(())

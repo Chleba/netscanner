@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
 use cidr::Ipv4Cidr;
-use std::net::Ipv4Addr;
 use color_eyre::eyre::Result;
 use directories::ProjectDirs;
 use lazy_static::lazy_static;
+use std::net::Ipv4Addr;
 use tracing::error;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{
@@ -37,6 +37,31 @@ pub fn get_ips4_from_cidr(cidr: Ipv4Cidr) -> Vec<Ipv4Addr> {
         ips.push(ip.address());
     }
     ips
+}
+
+pub struct MaxSizeVec<T> {
+    p_vec: Vec<T>,
+    max_len: usize,
+}
+
+impl<T> MaxSizeVec<T> {
+    pub fn new(max_len: usize) -> Self {
+        Self {
+            p_vec: Vec::with_capacity(max_len),
+            max_len,
+        }
+    }
+
+    pub fn push(&mut self, item: T) {
+        if self.p_vec.len() == self.max_len {
+            self.p_vec.remove(0);
+        }
+        self.p_vec.push(item);
+    }
+
+    pub fn get_vec(&mut self) -> &Vec<T> {
+        &self.p_vec
+    }
 }
 
 pub fn initialize_panic_handler() -> Result<()> {

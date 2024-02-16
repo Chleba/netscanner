@@ -99,11 +99,6 @@ impl Interfaces {
             if active_interface == w {
                 active = String::from("*");
             }
-            // if let si = Some(&active_interface) {
-            //     if si == w {
-            //         active = String::from("*");
-            //     }
-            // }
             let name = w.name.clone();
             let mac = w.mac.unwrap().to_string();
             let ipv4: Vec<Line> = w
