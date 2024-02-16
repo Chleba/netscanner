@@ -361,7 +361,7 @@ impl Discovery {
                         Span::styled("|", Style::default().fg(Color::Yellow)),
                         String::from(char::from_u32(0x25b2).unwrap_or('>')).red(),
                         String::from(char::from_u32(0x25bc).unwrap_or('>')).red(),
-                        Span::styled("Select|", Style::default().fg(Color::Yellow)),
+                        Span::styled("select|", Style::default().fg(Color::Yellow)),
                     ]))
                     .position(ratatui::widgets::block::Position::Bottom)
                     .alignment(Alignment::Left),
@@ -378,7 +378,7 @@ impl Discovery {
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                 .borders(Borders::ALL), // .padding(Padding::new(1, 0, 2, 0)),
         )
-        .highlight_symbol(String::from(char::from_u32(0x25b7).unwrap_or('>')).red())
+        .highlight_symbol(String::from(char::from_u32(0x25b6).unwrap_or('>')).red())
         .column_spacing(1);
         table
     }

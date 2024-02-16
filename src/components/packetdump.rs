@@ -62,11 +62,6 @@ pub struct PacketDump {
     tcp_packets: MaxSizeVec<String>,
     icmp_packets: MaxSizeVec<String>,
     all_packets: MaxSizeVec<String>,
-    // arp_packets: Vec<String>,
-    // udp_packets: Vec<String>,
-    // tcp_packets: Vec<String>,
-    // icmp_packets: Vec<String>,
-    // all_packets: Vec<String>,
 }
 
 impl Default for PacketDump {
@@ -83,11 +78,6 @@ impl PacketDump {
             should_quit: false,
             active_interface: None,
             show_packets: false,
-            // arp_packets: vec![],
-            // udp_packets: vec![],
-            // tcp_packets: vec![],
-            // icmp_packets: vec![],
-            // all_packets: vec![],
             arp_packets: MaxSizeVec::new(1000),
             udp_packets: MaxSizeVec::new(1000),
             tcp_packets: MaxSizeVec::new(1000),
@@ -365,7 +355,39 @@ impl PacketDump {
         }
     }
 
-    // fn make_li
+    fn make_list(&self, packet_type: PacketTypeEnum) -> List<'static> {
+        let items: Vec<ListItem> = Vec::new();
+        let list = List::new(items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("|Packets|")
+                .title(
+                    ratatui::widgets::block::Title::from(Line::from(vec![
+                        Span::styled("|", Style::default().fg(Color::Yellow)),
+                        String::from(char::from_u32(0x25b2).unwrap_or('^')).red(),
+                        String::from(char::from_u32(0x25bc).unwrap_or('&')).red(),
+                        String::from(char::from_u32(0x25c0).unwrap_or('<')).red(),
+                        String::from(char::from_u32(0x25b6).unwrap_or('>')).red(),
+                        Span::styled("select|", Style::default().fg(Color::Yellow)),
+                    ]))
+                    .position(ratatui::widgets::block::Position::Bottom)
+                    .alignment(Alignment::Left),
+                )
+                .title(
+                    ratatui::widgets::block::Title::from(Line::from(vec![
+                        Span::styled("|hide ", Style::default().fg(Color::Yellow)),
+                        Span::styled("p", Style::default().fg(Color::Red)),
+                        Span::styled("ackets|", Style::default().fg(Color::Yellow)),
+                    ]))
+                    .position(ratatui::widgets::block::Position::Bottom)
+                    .alignment(Alignment::Right),
+                )
+                .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
+                .title_style(Style::default().fg(Color::Yellow))
+                .title_alignment(Alignment::Right),
+        );
+        list
+    }
 }
 
 impl Component for PacketDump {
@@ -404,9 +426,19 @@ impl Component for PacketDump {
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        // let rect = Rect::new(20, 0, f.size().width - 20, 1);
-        // let title = format!(" hovno");
-        // f.render_widget(Paragraph::new(title), rect);
+        if self.show_packets {
+            let layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+                .split(area);
+            let mut list_rect = layout[1];
+            list_rect.y += 1;
+            list_rect.height -= 1;
+
+            // -- LIST
+            let list = self.make_list(PacketTypeEnum::Arp);
+            f.render_widget(list, list_rect);
+        }
         Ok(())
     }
 }
