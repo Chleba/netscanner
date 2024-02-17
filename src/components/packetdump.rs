@@ -444,7 +444,6 @@ impl PacketDump {
                 let t = time.format("%H:%M:%S").to_string();
                 let l = <String as Clone>::clone(&log);
                 Row::new(vec![
-                    // Cell::from(String::from("time")),
                     Cell::from(t.red()),
                     Cell::from(l.green()),
                 ])
@@ -471,6 +470,13 @@ impl PacketDump {
                         ratatui::widgets::block::Title::from(Line::from(vec![
                             Span::styled("|", Style::default().fg(Color::Yellow)),
                             String::from(char::from_u32(0x25c0).unwrap_or('<')).red(),
+                            // PacketTypeEnum::iter().map(|p| {
+                            //     if p == packet_type {
+                            //         p.to_string().red()
+                            //     } else {
+                            //         p.to_string().green()
+                            //     }
+                            // }).collect(Vec<Span>),
                             Span::styled(
                                 packet_type.to_string(),
                                 Style::default().fg(Color::Yellow),
