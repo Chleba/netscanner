@@ -32,6 +32,7 @@ use crate::{
     config::{Config, KeyBindings},
     utils::MaxSizeVec,
 };
+use regex::Regex;
 use strum::{Display, EnumIter, FromRepr, IntoEnumIterator};
 
 #[derive(Default, Clone, Copy, Display, FromRepr, EnumIter, PartialEq, Debug)]
@@ -391,11 +392,11 @@ impl PacketDump {
         packet_type: PacketTypeEnum,
     ) -> &Vec<(DateTime<Local>, String)> {
         match packet_type {
-            PacketTypeEnum::Arp => &mut self.arp_packets.get_vec(),
-            PacketTypeEnum::Tcp => &mut self.tcp_packets.get_vec(),
-            PacketTypeEnum::Udp => &mut self.udp_packets.get_vec(),
-            PacketTypeEnum::Icmp => &mut self.icmp_packets.get_vec(),
-            PacketTypeEnum::All => &mut self.all_packets.get_vec(),
+            PacketTypeEnum::Arp => self.arp_packets.get_vec(),
+            PacketTypeEnum::Tcp => self.tcp_packets.get_vec(),
+            PacketTypeEnum::Udp => self.udp_packets.get_vec(),
+            PacketTypeEnum::Icmp => self.icmp_packets.get_vec(),
+            PacketTypeEnum::All => self.all_packets.get_vec(),
         }
     }
 
@@ -436,17 +437,58 @@ impl PacketDump {
         self.scrollbar_state = self.scrollbar_state.position(index);
     }
 
+    // fn parse_log(l: String) -> Vec<Span<'static>> {
+    //     let mut text = vec![];
+    //     let re = Regex::new(r"\[(?P<interface>\w+)\]: (?P<packet_type>Packet): (?P<source_ip>[\d\.]+:\d+) > (?P<destination_ip>[\d\.]+:\d+); length: (?P<length>\d+)").unwrap();
+    //     if let Some(caps) = re.captures(l.as_str()) {
+    //         let interface = String::from(caps.name("interface").map_or("", |m| m.as_str()));
+    //         // let p_type = caps.name("packet_type").map_or("", |m| m.as_str());
+    //         // let source_ip = caps.name("source_ip").map_or("", |m| m.as_str());
+    //         // let desctination_ip = caps.name("destination_ip").map_or("", |m| m.as_str());
+    //         // let length = caps.name("length").map_or("", |m| m.as_str());
+
+    //         text.push(interface.clone().green());
+    //         // text.push(p_type.clone().blue());
+    //         // text.push(source_ip.clone().yellow());
+    //         // text.push(desctination_ip.clone().white());
+    //         // text.push(length.clone().green());
+    //     } else {
+    //         text.push(l.clone().green());
+    //     }
+    //     text
+    // }
+
     fn get_table_rows_by_packet_type<'a>(&mut self, packet_type: PacketTypeEnum) -> Vec<Row<'a>> {
         let logs = self.get_array_by_packet_type(packet_type);
         let rows: Vec<Row> = logs
             .iter()
             .map(|(time, log)| {
                 let t = time.format("%H:%M:%S").to_string();
-                let l = <String as Clone>::clone(&log);
-                Row::new(vec![
-                    Cell::from(t.red()),
-                    Cell::from(l.green()),
-                ])
+                let l = <String as Clone>::clone(log);
+                // let text = Self::parse_log(l);
+
+                let text = vec![l.green()];
+                // -- TODO: doing something wrong here, when using regexp theres total clog of CPU
+                // let re = Regex::new(r"\[(?P<interface>\w+)\]: (?P<packet_type>Packet): (?P<source_ip>[\d\.]+:\d+) > (?P<destination_ip>[\d\.]+:\d+); length: (?P<length>\d+)").unwrap();
+                // if let Some(caps) = re.captures(l.as_str()) {
+                //     let interface = String::from(caps.name("interface").map_or("", |m| m.as_str()));
+                //     let p_type = String::from(caps.name("packet_type").map_or("", |m| m.as_str()));
+                //     let source_ip = String::from(caps.name("source_ip").map_or("", |m| m.as_str()));
+                //     let desctination_ip = String::from(caps.name("destination_ip").map_or("", |m| m.as_str()));
+                //     let length = String::from(caps.name("length").map_or("", |m| m.as_str()));
+
+                //     text.push(interface.clone().green());
+                //     text.push(p_type.clone().blue());
+                //     text.push(source_ip.clone().yellow());
+                //     text.push(desctination_ip.clone().white());
+                //     text.push(length.clone().green());
+                // } else {
+                //     text.push(l.clone().green());
+                // }
+                // text.push(l.clone().green());
+                let line = Line::from(text);
+
+                Row::new(vec![Cell::from(t.red()), Cell::from(line)])
             })
             .collect();
         rows
@@ -593,8 +635,8 @@ impl Component for PacketDump {
             table_rect.height -= 1;
 
             // -- TABLE
-            let rows = self.get_table_rows_by_packet_type(self.packet_type.clone());
-            let table = Self::make_table(rows, self.packet_type.clone());
+            let rows = self.get_table_rows_by_packet_type(self.packet_type);
+            let table = Self::make_table(rows, self.packet_type);
             f.render_stateful_widget(table, table_rect, &mut self.table_state.clone());
 
             // -- SCROLLBAR

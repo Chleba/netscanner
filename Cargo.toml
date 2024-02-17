@@ -1,6 +1,6 @@
 [package]
 name = "netscanner"
-version = "0.3.7"
+version = "0.4.0"
 edition = "2021"
 description = "Network Scanner"
 license = "MIT"
@@ -34,6 +34,7 @@ pnet = "0.34.0"
 pretty_assertions = "1.4.0"
 rand = "0.8.5"
 ratatui = { version = "0.26.1", features = ["serde", "macros"] }
+regex = "1.10.3"
 serde = { version = "1.0.188", features = ["derive"] }
 serde_json = "1.0.107"
 signal-hook = "0.3.17"
