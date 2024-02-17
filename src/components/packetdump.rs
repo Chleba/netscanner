@@ -71,8 +71,6 @@ pub struct ArpPacketData {
     pub target_ip: Ipv4Addr,
 }
 
-// static p_types = []
-
 pub struct PacketDump {
     action_tx: Option<UnboundedSender<Action>>,
     loop_thread: Option<JoinHandle<()>>,
@@ -403,9 +401,7 @@ impl PacketDump {
 
     fn set_scrollbar_height(&mut self) {
         let logs_len = self.get_array_by_packet_type(self.packet_type).len();
-        self.scrollbar_state = self
-            .scrollbar_state
-            .content_length(logs_len - 1);
+        self.scrollbar_state = self.scrollbar_state.content_length(logs_len - 1);
     }
 
     fn previous_in_table(&mut self) {
@@ -439,30 +435,6 @@ impl PacketDump {
         self.table_state.select(Some(index));
         self.scrollbar_state = self.scrollbar_state.position(index);
     }
-
-    // fn get_table_rows_by_packet_type<'a>(&mut self, packet_type: PacketTypeEnum) -> Vec<ListItem<'a>> {
-    //     let logs = match packet_type {
-    //         PacketTypeEnum::Arp => &mut self.arp_packets,
-    //         PacketTypeEnum::Tcp => &mut self.tcp_packets,
-    //         PacketTypeEnum::Udp => &mut self.udp_packets,
-    //         PacketTypeEnum::Icmp => &mut self.icmp_packets,
-    //         PacketTypeEnum::All => &mut self.all_packets,
-    //     };
-    //     let logs_vec: &Vec<(DateTime<Local>, String)> = &logs.get_vec();
-    //     let rows: Vec<Row> = logs_vec
-    //         .iter()
-    //         .map(|(time, log)| {
-    //             let t = time.format("%H:%M:%S").to_string();
-    //             let l = <String as Clone>::clone(&log);
-    //             Row::new(vec![
-    //                 // Cell::from(String::from("time")),
-    //                 Cell::from(t.red()),
-    //                 Cell::from(l.green()),
-    //             ])
-    //         })
-    //         .collect();
-    //     rows
-    // }
 
     fn get_table_rows_by_packet_type<'a>(&mut self, packet_type: PacketTypeEnum) -> Vec<Row<'a>> {
         let logs = self.get_array_by_packet_type(packet_type);
@@ -499,7 +471,10 @@ impl PacketDump {
                         ratatui::widgets::block::Title::from(Line::from(vec![
                             Span::styled("|", Style::default().fg(Color::Yellow)),
                             String::from(char::from_u32(0x25c0).unwrap_or('<')).red(),
-                            Span::styled(packet_type.to_string(), Style::default().fg(Color::Yellow)),
+                            Span::styled(
+                                packet_type.to_string(),
+                                Style::default().fg(Color::Yellow),
+                            ),
                             String::from(char::from_u32(0x25b6).unwrap_or('>')).red(),
                             Span::styled("|", Style::default().fg(Color::Yellow)),
                         ]))
@@ -534,64 +509,13 @@ impl PacketDump {
     }
 
     pub fn make_scrollbar<'a>() -> Scrollbar<'a> {
-        // let s_start = String::from(char::from_u32(0x25b2).unwrap_or('#'));
-        // let s_end = String::from(char::from_u32(0x25bc).unwrap_or('#'));
         let scrollbar = Scrollbar::default()
             .orientation(ScrollbarOrientation::VerticalRight)
             .style(Style::default().fg(Color::Rgb(100, 100, 100)))
             .begin_symbol(None)
             .end_symbol(None);
-        // .begin_symbol(Some(s_start))
-        // .end_symbol(Some(s_end));
         scrollbar
     }
-
-    // fn make_list<'a>(items: Vec<ListItems<'a>>, packet_type: PacketTypeEnum) -> List<'a> {
-    // // fn make_list(&self, packet_type: PacketTypeEnum) -> List<'static> {
-    //     // let items: Vec<ListItem> = Vec::new();
-    //     let list = List::new(items).block(
-    //         Block::default()
-    //             .borders(Borders::ALL)
-    //             .title(
-    //                 ratatui::widgets::block::Title::from("|Discovery|".yellow())
-    //                     .position(ratatui::widgets::block::Position::Top)
-    //                     .alignment(Alignment::Right),
-    //             )
-    //             .title(
-    //                 ratatui::widgets::block::Title::from(Line::from(vec![
-    //                     Span::styled("|", Style::default().fg(Color::Yellow)),
-    //                     String::from(char::from_u32(0x25c0).unwrap_or('<')).red(),
-    //                     Span::styled("ip scanned", Style::default().fg(Color::Yellow)),
-    //                     String::from(char::from_u32(0x25b6).unwrap_or('>')).red(),
-    //                     Span::styled("|", Style::default().fg(Color::Yellow)),
-    //                 ]))
-    //                 .position(ratatui::widgets::block::Position::Top)
-    //                 .alignment(Alignment::Left),
-    //             )
-    //             .title(
-    //                 ratatui::widgets::block::Title::from(Line::from(vec![
-    //                     Span::styled("|", Style::default().fg(Color::Yellow)),
-    //                     String::from(char::from_u32(0x25b2).unwrap_or('>')).red(),
-    //                     String::from(char::from_u32(0x25bc).unwrap_or('>')).red(),
-    //                     Span::styled("select|", Style::default().fg(Color::Yellow)),
-    //                 ]))
-    //                 .position(ratatui::widgets::block::Position::Bottom)
-    //                 .alignment(Alignment::Left),
-    //             )
-    //             .title(
-    //                 ratatui::widgets::block::Title::from(Line::from(vec![
-    //                     Span::styled("|hide ", Style::default().fg(Color::Yellow)),
-    //                     Span::styled("p", Style::default().fg(Color::Red)),
-    //                     Span::styled("ackets|", Style::default().fg(Color::Yellow)),
-    //                 ]))
-    //                 .position(ratatui::widgets::block::Position::Bottom)
-    //                 .alignment(Alignment::Right),
-    //             )
-    //             .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-    //             .borders(Borders::ALL), // .padding(Padding::new(1, 0, 2, 0)),
-    //     );
-    //     list
-    // }
 }
 
 impl Component for PacketDump {
@@ -612,20 +536,26 @@ impl Component for PacketDump {
                 self.start_loop();
             }
         }
-        // -- prev & next select item in table
-        if let Action::Down = action {
-            self.next_in_table();
-        }
-        if let Action::Up = action {
-            self.previous_in_table();
-        }
-        if let Action::Left = action {
-            self.packet_type = self.packet_type.previous();
-            self.set_scrollbar_height();
-        }
-        if let Action::Right = action {
-            self.packet_type = self.packet_type.next();
-            self.set_scrollbar_height();
+        if self.show_packets {
+            // -- prev & next select item in table
+            if let Action::Down = action {
+                self.next_in_table();
+            }
+            if let Action::Up = action {
+                self.previous_in_table();
+            }
+            if let Action::Left = action {
+                self.packet_type = self.packet_type.previous();
+                self.set_scrollbar_height();
+                self.table_state.select(Some(0));
+                self.set_scrollbar_height();
+            }
+            if let Action::Right = action {
+                self.packet_type = self.packet_type.next();
+                self.set_scrollbar_height();
+                self.table_state.select(Some(0));
+                self.set_scrollbar_height();
+            }
         }
         // -- packets toggle
         if let Action::PacketToggle = action {

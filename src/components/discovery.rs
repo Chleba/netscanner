@@ -516,12 +516,14 @@ impl Component for Discovery {
             }
             self.mode = mode;
         }
-        // -- prev & next select item in table
-        if let Action::Down = action {
-            self.next_in_table();
-        }
-        if let Action::Up = action {
-            self.previous_in_table();
+        if !self.show_packets {
+            // -- prev & next select item in table
+            if let Action::Down = action {
+                self.next_in_table();
+            }
+            if let Action::Up = action {
+                self.previous_in_table();
+            }
         }
         // -- packets toggle
         if let Action::PacketToggle = action {
