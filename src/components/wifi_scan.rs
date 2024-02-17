@@ -1,4 +1,4 @@
-use chrono::{DateTime, Timelike, Utc};
+use chrono::{DateTime, Local, Timelike};
 use config::Source;
 use std::time::Instant;
 use tokio::sync::mpsc::UnboundedSender;
@@ -12,7 +12,7 @@ use crate::{action::Action, mode::Mode, tui::Frame};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct WifiInfo {
-    pub time: DateTime<Utc>,
+    pub time: DateTime<Local>,
     pub ssid: String,
     pub channel: u8,
     pub signal: f32,
@@ -79,7 +79,7 @@ impl WifiScan {
     }
 
     fn make_table(&mut self) -> Table {
-        let header = Row::new(vec!["UTC", "ssid", "ch", "mac", "signal"])
+        let header = Row::new(vec!["time", "ssid", "ch", "mac", "signal"])
             .style(Style::default().fg(Color::Yellow))
             .bottom_margin(1);
         let mut rows = Vec::new();
@@ -159,7 +159,7 @@ impl WifiScan {
             match networks {
                 Ok(nets) => {
                     let mut wifi_nets: Vec<WifiInfo> = Vec::new();
-                    let now = Utc::now();
+                    let now = Local::now();
                     for w in nets {
                         if let Some(n) = wifi_nets.iter_mut().find(|item| item.ssid == w.ssid) {
                             let signal: f32 = w.signal_level.parse().unwrap_or(-100.00);

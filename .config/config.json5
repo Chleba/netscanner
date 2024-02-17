@@ -10,7 +10,9 @@
       "<p>": "Packets",
       "<f>": "Interface",
       "<up>": "Up",
-      "<down>": "Down"
+      "<down>": "Down",
+      "<left>": "Left",
+      "<right>": "Right"
     },
     "Input": {
       "<Esc>": "NormalMode"

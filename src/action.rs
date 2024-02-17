@@ -1,4 +1,5 @@
 use std::{fmt, net::Ipv4Addr};
+use chrono::{Local, DateTime};
 use pnet::util::MacAddr;
 use pnet::datalink::NetworkInterface;
 use ratatui::text::Line;
@@ -30,6 +31,8 @@ pub enum Action {
     // -- custom actions
     Up,
     Down,
+    Left,
+    Right,
     GraphToggle,
     PacketToggle,
     InterfaceSwitch,
@@ -40,7 +43,7 @@ pub enum Action {
     PingIp(String),
     CountIp,
     CidrError,
-    PacketDump(String, PacketTypeEnum),
+    PacketDump(DateTime<Local>, String, PacketTypeEnum),
 }
 
 impl<'de> Deserialize<'de> for Action {
@@ -52,7 +55,7 @@ impl<'de> Deserialize<'de> for Action {
 
         impl<'de> Visitor<'de> for ActionVisitor {
             type Value = Action;
-
+ 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("a valid string representation of Action")
             }
@@ -70,6 +73,8 @@ impl<'de> Deserialize<'de> for Action {
                     "Interface" => Ok(Action::InterfaceSwitch),
                     "Up" => Ok(Action::Up),
                     "Down" => Ok(Action::Down),
+                    "Left" => Ok(Action::Left),
+                    "Right" => Ok(Action::Right),
 
                     // -- default actions
                     "Tick" => Ok(Action::Tick),

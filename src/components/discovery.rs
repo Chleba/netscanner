@@ -313,6 +313,7 @@ impl Discovery {
     fn make_table(scanned_ips: Vec<ScannedIp>, ip_num: i32) -> Table<'static> {
         let header = Row::new(vec!["ip", "hostname", "mac", "vendor"])
             .style(Style::default().fg(Color::Yellow))
+            .top_margin(1)
             .bottom_margin(1);
         let mut rows = Vec::new();
 

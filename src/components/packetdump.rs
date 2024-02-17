@@ -1,10 +1,4 @@
-use std::{
-    collections::HashMap,
-    net::{IpAddr, Ipv4Addr},
-    thread::{self, JoinHandle},
-    time::Duration,
-};
-
+use chrono::{DateTime, Local};
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent};
 use ipnetwork::Ipv4Network;
@@ -21,6 +15,12 @@ use pnet::packet::{
 };
 use pnet::util::MacAddr;
 use ratatui::{prelude::*, widgets::*};
+use std::{
+    collections::HashMap,
+    net::{IpAddr, Ipv4Addr},
+    thread::{self, JoinHandle},
+    time::Duration,
+};
 use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     task,
@@ -32,13 +32,35 @@ use crate::{
     config::{Config, KeyBindings},
     utils::MaxSizeVec,
 };
+use strum::{Display, EnumIter, FromRepr, IntoEnumIterator};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Default, Clone, Copy, Display, FromRepr, EnumIter, PartialEq, Debug)]
 pub enum PacketTypeEnum {
+    #[default]
+    #[strum(to_string = "All")]
+    All,
+    #[strum(to_string = "ARP")]
     Arp,
+    #[strum(to_string = "TCP")]
     Tcp,
+    #[strum(to_string = "UDP")]
     Udp,
+    #[strum(to_string = "ICMP")]
     Icmp,
+}
+
+impl PacketTypeEnum {
+    fn previous(&self) -> Self {
+        let current_index: usize = *self as usize;
+        let previous_index = current_index.saturating_sub(1);
+        Self::from_repr(previous_index).unwrap_or(*self)
+    }
+
+    fn next(&self) -> Self {
+        let current_index = *self as usize;
+        let next_index = current_index.saturating_add(1);
+        Self::from_repr(next_index).unwrap_or(*self)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -49,7 +71,7 @@ pub struct ArpPacketData {
     pub target_ip: Ipv4Addr,
 }
 
-// struct
+// static p_types = []
 
 pub struct PacketDump {
     action_tx: Option<UnboundedSender<Action>>,
@@ -57,11 +79,14 @@ pub struct PacketDump {
     should_quit: bool,
     active_interface: Option<NetworkInterface>,
     show_packets: bool,
-    arp_packets: MaxSizeVec<String>,
-    udp_packets: MaxSizeVec<String>,
-    tcp_packets: MaxSizeVec<String>,
-    icmp_packets: MaxSizeVec<String>,
-    all_packets: MaxSizeVec<String>,
+    table_state: TableState,
+    scrollbar_state: ScrollbarState,
+    packet_type: PacketTypeEnum,
+    arp_packets: MaxSizeVec<(DateTime<Local>, String)>,
+    udp_packets: MaxSizeVec<(DateTime<Local>, String)>,
+    tcp_packets: MaxSizeVec<(DateTime<Local>, String)>,
+    icmp_packets: MaxSizeVec<(DateTime<Local>, String)>,
+    all_packets: MaxSizeVec<(DateTime<Local>, String)>,
 }
 
 impl Default for PacketDump {
@@ -78,6 +103,9 @@ impl PacketDump {
             should_quit: false,
             active_interface: None,
             show_packets: false,
+            table_state: TableState::default().with_selected(0),
+            scrollbar_state: ScrollbarState::new(0),
+            packet_type: PacketTypeEnum::All,
             arp_packets: MaxSizeVec::new(1000),
             udp_packets: MaxSizeVec::new(1000),
             tcp_packets: MaxSizeVec::new(1000),
@@ -96,6 +124,7 @@ impl PacketDump {
         let udp = UdpPacket::new(packet);
         if let Some(udp) = udp {
             tx.send(Action::PacketDump(
+                Local::now(),
                 format!(
                     "[{}]: UDP Packet: {}:{} > {}:{}; length: {}",
                     interface_name,
@@ -124,6 +153,7 @@ impl PacketDump {
                 IcmpTypes::EchoReply => {
                     let echo_reply_packet = echo_reply::EchoReplyPacket::new(packet).unwrap();
                     tx.send(Action::PacketDump(
+                        Local::now(),
                         format!(
                             "[{}]: ICMP echo reply {} -> {} (seq={:?}, id={:?})",
                             interface_name,
@@ -139,6 +169,7 @@ impl PacketDump {
                 IcmpTypes::EchoRequest => {
                     let echo_request_packet = echo_request::EchoRequestPacket::new(packet).unwrap();
                     tx.send(Action::PacketDump(
+                        Local::now(),
                         format!(
                             "[{}]: ICMP echo request {} -> {} (seq={:?}, id={:?})",
                             interface_name,
@@ -153,6 +184,7 @@ impl PacketDump {
                 }
                 _ => {
                     tx.send(Action::PacketDump(
+                        Local::now(),
                         format!(
                             "[{}]: ICMP packet {} -> {} (type={:?})",
                             interface_name,
@@ -178,6 +210,7 @@ impl PacketDump {
         let tcp = TcpPacket::new(packet);
         if let Some(tcp) = tcp {
             tx.send(Action::PacketDump(
+                Local::now(),
                 format!(
                     "[{}]: TCP Packet: {}:{} > {}:{}; length: {}",
                     interface_name,
@@ -211,19 +244,18 @@ impl PacketDump {
             IpNextHeaderProtocols::Icmp => {
                 Self::handle_icmp_packet(interface_name, source, destination, packet, tx)
             }
-            _ => {}
-            // _ => println!(
-            //     "[{}]: Unknown {} packet: {} > {}; protocol: {:?} length: {}",
-            //     interface_name,
-            //     match source {
-            //         IpAddr::V4(..) => "IPv4",
-            //         _ => "IPv6",
-            //     },
-            //     source,
-            //     destination,
-            //     protocol,
-            //     packet.len()
-            // ),
+            _ => {} // _ => println!(
+                    //     "[{}]: Unknown {} packet: {} > {}; protocol: {:?} length: {}",
+                    //     interface_name,
+                    //     match source {
+                    //         IpAddr::V4(..) => "IPv4",
+                    //         _ => "IPv6",
+                    //     },
+                    //     source,
+                    //     destination,
+                    //     protocol,
+                    //     packet.len()
+                    // ),
         }
     }
 
@@ -261,6 +293,7 @@ impl PacketDump {
             .unwrap();
 
             tx.send(Action::PacketDump(
+                Local::now(),
                 format!(
                     "[{}]: ARP packet: {}({}) > {}({}); operation: {:?}",
                     interface_name,
@@ -355,39 +388,210 @@ impl PacketDump {
         }
     }
 
-    fn make_list(&self, packet_type: PacketTypeEnum) -> List<'static> {
-        let items: Vec<ListItem> = Vec::new();
-        let list = List::new(items).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("|Packets|")
-                .title(
-                    ratatui::widgets::block::Title::from(Line::from(vec![
-                        Span::styled("|", Style::default().fg(Color::Yellow)),
-                        String::from(char::from_u32(0x25b2).unwrap_or('^')).red(),
-                        String::from(char::from_u32(0x25bc).unwrap_or('&')).red(),
-                        String::from(char::from_u32(0x25c0).unwrap_or('<')).red(),
-                        String::from(char::from_u32(0x25b6).unwrap_or('>')).red(),
-                        Span::styled("select|", Style::default().fg(Color::Yellow)),
-                    ]))
-                    .position(ratatui::widgets::block::Position::Bottom)
-                    .alignment(Alignment::Left),
-                )
-                .title(
-                    ratatui::widgets::block::Title::from(Line::from(vec![
-                        Span::styled("|hide ", Style::default().fg(Color::Yellow)),
-                        Span::styled("p", Style::default().fg(Color::Red)),
-                        Span::styled("ackets|", Style::default().fg(Color::Yellow)),
-                    ]))
-                    .position(ratatui::widgets::block::Position::Bottom)
-                    .alignment(Alignment::Right),
-                )
-                .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                .title_style(Style::default().fg(Color::Yellow))
-                .title_alignment(Alignment::Right),
-        );
-        list
+    fn get_array_by_packet_type(
+        &mut self,
+        packet_type: PacketTypeEnum,
+    ) -> &Vec<(DateTime<Local>, String)> {
+        match packet_type {
+            PacketTypeEnum::Arp => &mut self.arp_packets.get_vec(),
+            PacketTypeEnum::Tcp => &mut self.tcp_packets.get_vec(),
+            PacketTypeEnum::Udp => &mut self.udp_packets.get_vec(),
+            PacketTypeEnum::Icmp => &mut self.icmp_packets.get_vec(),
+            PacketTypeEnum::All => &mut self.all_packets.get_vec(),
+        }
     }
+
+    fn set_scrollbar_height(&mut self) {
+        let logs_len = self.get_array_by_packet_type(self.packet_type).len();
+        self.scrollbar_state = self
+            .scrollbar_state
+            .content_length(logs_len - 1);
+    }
+
+    fn previous_in_table(&mut self) {
+        let index = match self.table_state.selected() {
+            Some(index) => {
+                let logs = self.get_array_by_packet_type(self.packet_type);
+                if index == 0 {
+                    logs.len() - 1
+                } else {
+                    index - 1
+                }
+            }
+            None => 0,
+        };
+        self.table_state.select(Some(index));
+        self.scrollbar_state = self.scrollbar_state.position(index);
+    }
+
+    fn next_in_table(&mut self) {
+        let index = match self.table_state.selected() {
+            Some(index) => {
+                let logs = self.get_array_by_packet_type(self.packet_type);
+                if index >= logs.len() - 1 {
+                    0
+                } else {
+                    index + 1
+                }
+            }
+            None => 0,
+        };
+        self.table_state.select(Some(index));
+        self.scrollbar_state = self.scrollbar_state.position(index);
+    }
+
+    // fn get_table_rows_by_packet_type<'a>(&mut self, packet_type: PacketTypeEnum) -> Vec<ListItem<'a>> {
+    //     let logs = match packet_type {
+    //         PacketTypeEnum::Arp => &mut self.arp_packets,
+    //         PacketTypeEnum::Tcp => &mut self.tcp_packets,
+    //         PacketTypeEnum::Udp => &mut self.udp_packets,
+    //         PacketTypeEnum::Icmp => &mut self.icmp_packets,
+    //         PacketTypeEnum::All => &mut self.all_packets,
+    //     };
+    //     let logs_vec: &Vec<(DateTime<Local>, String)> = &logs.get_vec();
+    //     let rows: Vec<Row> = logs_vec
+    //         .iter()
+    //         .map(|(time, log)| {
+    //             let t = time.format("%H:%M:%S").to_string();
+    //             let l = <String as Clone>::clone(&log);
+    //             Row::new(vec![
+    //                 // Cell::from(String::from("time")),
+    //                 Cell::from(t.red()),
+    //                 Cell::from(l.green()),
+    //             ])
+    //         })
+    //         .collect();
+    //     rows
+    // }
+
+    fn get_table_rows_by_packet_type<'a>(&mut self, packet_type: PacketTypeEnum) -> Vec<Row<'a>> {
+        let logs = self.get_array_by_packet_type(packet_type);
+        let rows: Vec<Row> = logs
+            .iter()
+            .map(|(time, log)| {
+                let t = time.format("%H:%M:%S").to_string();
+                let l = <String as Clone>::clone(&log);
+                Row::new(vec![
+                    // Cell::from(String::from("time")),
+                    Cell::from(t.red()),
+                    Cell::from(l.green()),
+                ])
+            })
+            .collect();
+        rows
+    }
+
+    fn make_table<'a>(rows: Vec<Row<'a>>, packet_type: PacketTypeEnum) -> Table<'a> {
+        let header = Row::new(vec!["time", "packet log"])
+            .style(Style::default().fg(Color::Yellow))
+            .bottom_margin(1);
+
+        let table = Table::new(rows, [Constraint::Min(10), Constraint::Percentage(100)])
+            .header(header)
+            .block(
+                Block::new()
+                    .title(
+                        ratatui::widgets::block::Title::from("|Packets|".yellow())
+                            .position(ratatui::widgets::block::Position::Top)
+                            .alignment(Alignment::Right),
+                    )
+                    .title(
+                        ratatui::widgets::block::Title::from(Line::from(vec![
+                            Span::styled("|", Style::default().fg(Color::Yellow)),
+                            String::from(char::from_u32(0x25c0).unwrap_or('<')).red(),
+                            Span::styled(packet_type.to_string(), Style::default().fg(Color::Yellow)),
+                            String::from(char::from_u32(0x25b6).unwrap_or('>')).red(),
+                            Span::styled("|", Style::default().fg(Color::Yellow)),
+                        ]))
+                        .position(ratatui::widgets::block::Position::Top)
+                        .alignment(Alignment::Left),
+                    )
+                    .title(
+                        ratatui::widgets::block::Title::from(Line::from(vec![
+                            Span::styled("|", Style::default().fg(Color::Yellow)),
+                            String::from(char::from_u32(0x25b2).unwrap_or('>')).red(),
+                            String::from(char::from_u32(0x25bc).unwrap_or('>')).red(),
+                            Span::styled("select|", Style::default().fg(Color::Yellow)),
+                        ]))
+                        .position(ratatui::widgets::block::Position::Bottom)
+                        .alignment(Alignment::Left),
+                    )
+                    .title(
+                        ratatui::widgets::block::Title::from(Line::from(vec![
+                            Span::styled("|hide ", Style::default().fg(Color::Yellow)),
+                            Span::styled("p", Style::default().fg(Color::Red)),
+                            Span::styled("ackets|", Style::default().fg(Color::Yellow)),
+                        ]))
+                        .position(ratatui::widgets::block::Position::Bottom)
+                        .alignment(Alignment::Right),
+                    )
+                    .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
+                    .borders(Borders::ALL), // .padding(Padding::new(1, 0, 2, 0)),
+            )
+            .highlight_symbol(String::from(char::from_u32(0x25b6).unwrap_or('>')).red())
+            .column_spacing(1);
+        table
+    }
+
+    pub fn make_scrollbar<'a>() -> Scrollbar<'a> {
+        // let s_start = String::from(char::from_u32(0x25b2).unwrap_or('#'));
+        // let s_end = String::from(char::from_u32(0x25bc).unwrap_or('#'));
+        let scrollbar = Scrollbar::default()
+            .orientation(ScrollbarOrientation::VerticalRight)
+            .style(Style::default().fg(Color::Rgb(100, 100, 100)))
+            .begin_symbol(None)
+            .end_symbol(None);
+        // .begin_symbol(Some(s_start))
+        // .end_symbol(Some(s_end));
+        scrollbar
+    }
+
+    // fn make_list<'a>(items: Vec<ListItems<'a>>, packet_type: PacketTypeEnum) -> List<'a> {
+    // // fn make_list(&self, packet_type: PacketTypeEnum) -> List<'static> {
+    //     // let items: Vec<ListItem> = Vec::new();
+    //     let list = List::new(items).block(
+    //         Block::default()
+    //             .borders(Borders::ALL)
+    //             .title(
+    //                 ratatui::widgets::block::Title::from("|Discovery|".yellow())
+    //                     .position(ratatui::widgets::block::Position::Top)
+    //                     .alignment(Alignment::Right),
+    //             )
+    //             .title(
+    //                 ratatui::widgets::block::Title::from(Line::from(vec![
+    //                     Span::styled("|", Style::default().fg(Color::Yellow)),
+    //                     String::from(char::from_u32(0x25c0).unwrap_or('<')).red(),
+    //                     Span::styled("ip scanned", Style::default().fg(Color::Yellow)),
+    //                     String::from(char::from_u32(0x25b6).unwrap_or('>')).red(),
+    //                     Span::styled("|", Style::default().fg(Color::Yellow)),
+    //                 ]))
+    //                 .position(ratatui::widgets::block::Position::Top)
+    //                 .alignment(Alignment::Left),
+    //             )
+    //             .title(
+    //                 ratatui::widgets::block::Title::from(Line::from(vec![
+    //                     Span::styled("|", Style::default().fg(Color::Yellow)),
+    //                     String::from(char::from_u32(0x25b2).unwrap_or('>')).red(),
+    //                     String::from(char::from_u32(0x25bc).unwrap_or('>')).red(),
+    //                     Span::styled("select|", Style::default().fg(Color::Yellow)),
+    //                 ]))
+    //                 .position(ratatui::widgets::block::Position::Bottom)
+    //                 .alignment(Alignment::Left),
+    //             )
+    //             .title(
+    //                 ratatui::widgets::block::Title::from(Line::from(vec![
+    //                     Span::styled("|hide ", Style::default().fg(Color::Yellow)),
+    //                     Span::styled("p", Style::default().fg(Color::Red)),
+    //                     Span::styled("ackets|", Style::default().fg(Color::Yellow)),
+    //                 ]))
+    //                 .position(ratatui::widgets::block::Position::Bottom)
+    //                 .alignment(Alignment::Right),
+    //             )
+    //             .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
+    //             .borders(Borders::ALL), // .padding(Padding::new(1, 0, 2, 0)),
+    //     );
+    //     list
+    // }
 }
 
 impl Component for PacketDump {
@@ -408,18 +612,35 @@ impl Component for PacketDump {
                 self.start_loop();
             }
         }
+        // -- prev & next select item in table
+        if let Action::Down = action {
+            self.next_in_table();
+        }
+        if let Action::Up = action {
+            self.previous_in_table();
+        }
+        if let Action::Left = action {
+            self.packet_type = self.packet_type.previous();
+            self.set_scrollbar_height();
+        }
+        if let Action::Right = action {
+            self.packet_type = self.packet_type.next();
+            self.set_scrollbar_height();
+        }
         // -- packets toggle
         if let Action::PacketToggle = action {
             self.show_packets = !self.show_packets;
         }
         // -- packet recieved
-        if let Action::PacketDump(packet_str, packet_type) = action {
+        if let Action::PacketDump(time, packet_str, packet_type) = action {
             match packet_type {
-                PacketTypeEnum::Tcp => self.tcp_packets.push(packet_str),
-                PacketTypeEnum::Arp => self.arp_packets.push(packet_str),
-                PacketTypeEnum::Udp => self.udp_packets.push(packet_str),
-                PacketTypeEnum::Icmp => self.icmp_packets.push(packet_str),
+                PacketTypeEnum::Tcp => self.tcp_packets.push((time, packet_str.clone())),
+                PacketTypeEnum::Arp => self.arp_packets.push((time, packet_str.clone())),
+                PacketTypeEnum::Udp => self.udp_packets.push((time, packet_str.clone())),
+                PacketTypeEnum::Icmp => self.icmp_packets.push((time, packet_str.clone())),
+                _ => {}
             }
+            self.all_packets.push((time, packet_str));
         }
 
         Ok(None)
@@ -431,13 +652,28 @@ impl Component for PacketDump {
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
                 .split(area);
-            let mut list_rect = layout[1];
-            list_rect.y += 1;
-            list_rect.height -= 1;
+            let mut table_rect = layout[1];
+            table_rect.y += 1;
+            table_rect.height -= 1;
 
-            // -- LIST
-            let list = self.make_list(PacketTypeEnum::Arp);
-            f.render_widget(list, list_rect);
+            // -- TABLE
+            let rows = self.get_table_rows_by_packet_type(self.packet_type.clone());
+            let table = Self::make_table(rows, self.packet_type.clone());
+            f.render_stateful_widget(table, table_rect, &mut self.table_state.clone());
+
+            // -- SCROLLBAR
+            let scrollbar = Self::make_scrollbar();
+            let mut scroll_rect = table_rect;
+            scroll_rect.y += 1;
+            scroll_rect.height -= 1;
+            f.render_stateful_widget(
+                scrollbar,
+                scroll_rect.inner(&Margin {
+                    vertical: 1,
+                    horizontal: 1,
+                }),
+                &mut self.scrollbar_state,
+            );
         }
         Ok(())
     }
