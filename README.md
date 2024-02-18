@@ -11,7 +11,12 @@ Network scanning tool with features like:
 
 must be run with sudo priviliges
 
-## Install
+## Install `Arch AUR`
+```
+yay -S netscanner-bin
+```
+
+## Install via Cargo
 ```
 cargo install netscanner
 ```
