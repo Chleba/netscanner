@@ -2,19 +2,13 @@ use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
 use ratatui::prelude::Rect;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::{self, UnboundedSender, UnboundedReceiver};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 use crate::{
     action::Action,
     components::{
-        home::Home, 
-        interfaces::Interfaces, 
-        wifi_scan::WifiScan, 
-        wifi_interface::WifiInterface,
-        wifi_chart::WifiChart,
-        discovery::Discovery,
-        packetdump::PacketDump,
-        Component
+        discovery::Discovery, home::Home, interfaces::Interfaces, packetdump::PacketDump,
+        wifi_chart::WifiChart, wifi_interface::WifiInterface, wifi_scan::WifiScan, Component,
     },
     config::Config,
     mode::Mode,
@@ -32,29 +26,29 @@ pub struct App {
     pub last_tick_key_events: Vec<KeyEvent>,
     pub action_tx: UnboundedSender<Action>,
     pub action_rx: UnboundedReceiver<Action>,
+    pub post_exist_msg: Option<String>,
 }
 
 impl App {
     pub fn new(tick_rate: f64, frame_rate: f64) -> Result<Self> {
-        
         let home = Home::new();
         let interfaces = Interfaces::default();
         let wifiscan = WifiScan::default();
-        let wifi_interface = WifiInterface::default(); 
-        let wifi_chart = WifiChart::default(); 
+        let wifi_interface = WifiInterface::default();
+        let wifi_chart = WifiChart::default();
         let discovery = Discovery::default();
         let packetdump = PacketDump::default();
         let config = Config::new()?;
 
         let mode = Mode::Normal;
         let (action_tx, action_rx) = mpsc::unbounded_channel();
-        
+
         Ok(Self {
             tick_rate: 1.0,
             frame_rate,
             components: vec![
-                Box::new(home), 
-                Box::new(interfaces), 
+                Box::new(home),
+                Box::new(interfaces),
                 Box::new(wifiscan),
                 Box::new(wifi_interface),
                 Box::new(wifi_chart),
@@ -68,6 +62,7 @@ impl App {
             last_tick_key_events: Vec::new(),
             action_tx,
             action_rx,
+            post_exist_msg: None,
         })
     }
 
@@ -85,10 +80,6 @@ impl App {
         for component in self.components.iter_mut() {
             component.register_action_handler(action_tx.clone())?;
         }
-
-        // for component in self.components.iter_mut() {
-        //     component.register_action_reciever(action_rx)?;
-        // }
 
         for component in self.components.iter_mut() {
             component.register_config_handler(self.config.clone())?;
@@ -139,7 +130,14 @@ impl App {
                 match action {
                     Action::ModeChange(mode) => {
                         self.mode = mode;
-                    },
+                    }
+
+                    Action::Error(ref err_msg) => {
+                        // println!("--------------------------------");
+                        // println!("ERROR: {}", err_msg);
+                        self.post_exist_msg = Some(err_msg.to_string());
+                        self.should_quit = true;
+                    }
 
                     Action::Tick => {
                         self.last_tick_key_events.drain(..);
@@ -194,6 +192,12 @@ impl App {
             }
         }
         tui.exit()?;
+
+        println!("`netscanner` failed with Error:");
+        if let Some(ref s) = self.post_exist_msg {
+            println!("{}", s);
+        }
+
         Ok(())
     }
 }

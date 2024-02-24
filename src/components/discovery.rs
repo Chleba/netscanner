@@ -112,8 +112,20 @@ impl Discovery {
 
         let (mut sender, _) = match pnet::datalink::channel(&active_interface, Default::default()) {
             Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
-            Ok(_) => panic!("Unknown channel type"),
-            Err(e) => panic!("Error happened {}", e),
+            Ok(_) => {
+                let tx_action = self.action_tx.clone().unwrap();
+                tx_action
+                    .send(Action::Error("Unknown or unsopported channel type".into()))
+                    .unwrap();
+                return;
+            }
+            Err(e) => {
+                let tx_action = self.action_tx.clone().unwrap();
+                tx_action
+                    .send(Action::Error(format!("Unable to create datalink channel: {e}")))
+                    .unwrap();
+                return;
+            }
         };
 
         let mut ethernet_buffer = [0u8; 42];

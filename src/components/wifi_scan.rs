@@ -55,15 +55,21 @@ const COLORS_SIGNAL: [Color; 7] = [
     Color::Green,
 ];
 
-const COLORS_NAMES: [Color; 8] = [
-    Color::Yellow,
-    Color::Red,
-    Color::Green,
-    Color::Blue,
-    Color::Gray,
-    Color::Cyan,
+const COLORS_NAMES: [Color; 14] = [
+    Color::Rgb(244, 67, 54),
+    Color::Rgb(233, 30, 99),
+    Color::Rgb(156, 39, 176),
+    Color::Rgb(103, 58, 183),
+    Color::Rgb(63, 81, 184),
+    Color::Rgb(3, 169, 244),
+    Color::Rgb(0, 150, 136),
+    Color::Rgb(255, 235, 59),
+    Color::Rgb(255, 152, 0),
+    Color::Rgb(255, 87, 34),
+    Color::Rgb(121, 85, 72),
+    Color::Rgb(158, 158, 158),
+    Color::Rgb(96, 125, 139),
     Color::White,
-    Color::Magenta,
 ];
 
 impl WifiScan {
@@ -74,7 +80,6 @@ impl WifiScan {
             wifis: Vec::new(),
             action_tx: None,
             signal_tick: [0.0, 40.0],
-            // mode: Mode::Networks,
         }
     }
 
