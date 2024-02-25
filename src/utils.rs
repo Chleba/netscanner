@@ -39,6 +39,7 @@ pub fn get_ips4_from_cidr(cidr: Ipv4Cidr) -> Vec<Ipv4Addr> {
     ips
 }
 
+#[derive(Clone, Debug)]
 pub struct MaxSizeVec<T> {
     p_vec: Vec<T>,
     max_len: usize,
@@ -59,7 +60,7 @@ impl<T> MaxSizeVec<T> {
         self.p_vec.push(item);
     }
 
-    pub fn get_vec(&mut self) -> &Vec<T> {
+    pub fn get_vec<'a>(&'a self) -> &'a Vec<T> {
         &self.p_vec
     }
 }

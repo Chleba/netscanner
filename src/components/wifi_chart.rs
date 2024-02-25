@@ -1,4 +1,5 @@
 use crate::components::wifi_scan::WifiInfo;
+use crate::utils::MaxSizeVec;
 use chrono::Timelike;
 use color_eyre::eyre::Result;
 use pnet::datalink::{self, NetworkInterface};
@@ -14,7 +15,7 @@ use crate::{action::Action, tui::Frame};
 #[derive(Debug)]
 pub struct WifiDataset {
     ssid: String,
-    data: Vec<(f64, f64)>,
+    data: MaxSizeVec<(f64, f64)>,
     color: Color,
 }
 
@@ -58,14 +59,12 @@ impl WifiChart {
                 let n = &mut self.wifi_datasets[p];
                 let signal: f64 = w.signal as f64;
                 n.data.push((self.signal_tick[1], signal * -1.0));
-                if n.data.len() > 50 {
-                    n.data.remove(0);
-                }
             } else {
                 self.wifi_datasets.push(WifiDataset {
                     ssid: w.ssid.clone(),
-                    data: vec![(0.0, 0.0)],
-                    color: w.color.clone(),
+                    // data: vec![(0.0, 0.0)],
+                    data: MaxSizeVec::new(100),
+                    color: w.color,
                 });
             }
         }
@@ -73,19 +72,17 @@ impl WifiChart {
         self.signal_tick[1] += 1.0;
     }
 
-    pub fn make_chart(&mut self) -> Chart {
+    pub fn make_chart(&self) -> Chart {
         let mut datasets = Vec::new();
-        let mut index = 0;
-
         for d in &self.wifi_datasets {
+            let d_data = &d.data.get_vec();
             let dataset = Dataset::default()
                 .name(d.ssid.clone())
                 .marker(symbols::Marker::Dot)
-                .style(Style::default().fg(d.color.clone()))
+                .style(Style::default().fg(d.color))
                 .graph_type(GraphType::Line)
-                .data(&d.data);
+                .data(d_data);
             datasets.push(dataset);
-            index += 1;
         }
 
         let x_labels = [
