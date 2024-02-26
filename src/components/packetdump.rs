@@ -33,9 +33,9 @@ use crate::{
     utils::MaxSizeVec,
 };
 use regex::Regex;
-use strum::{Display, EnumIter, FromRepr, IntoEnumIterator};
+use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
-#[derive(Default, Clone, Copy, Display, FromRepr, EnumIter, PartialEq, Debug)]
+#[derive(Default, Clone, Copy, Display, FromRepr, EnumIter, EnumCount, PartialEq, Debug)]
 pub enum PacketTypeEnum {
     #[default]
     #[strum(to_string = "All")]
@@ -507,6 +507,30 @@ impl PacketDump {
             .style(Style::default().fg(Color::Yellow))
             .bottom_margin(1);
 
+        // let title_labels = Vec::new();
+        let mut type_titles = vec![
+            Span::styled("|", Style::default().fg(Color::Yellow)),
+            String::from(char::from_u32(0x25c0).unwrap_or('<')).red(),
+        ];
+        let mut enum_titles = PacketTypeEnum::iter()
+            .enumerate()
+            .map(|(idx, p)| {
+                let mut span_str = format!("{} ", p);
+                if idx == PacketTypeEnum::COUNT - 1 {
+                    span_str = format!("{}", p);
+                }
+                if p == packet_type {
+                    Span::styled(span_str, Style::default().fg(Color::Red))
+                        // .underlined()
+                } else {
+                    Span::styled(span_str, Style::default().fg(Color::Yellow))
+                }
+            })
+            .collect::<Vec<Span>>();
+        type_titles.append(&mut enum_titles);
+        type_titles.push(String::from(char::from_u32(0x25b6).unwrap_or('>')).red());
+        type_titles.push(Span::styled("|", Style::default().fg(Color::Yellow)));
+
         let table = Table::new(rows, [Constraint::Min(10), Constraint::Percentage(100)])
             .header(header)
             .block(
@@ -517,25 +541,9 @@ impl PacketDump {
                             .alignment(Alignment::Right),
                     )
                     .title(
-                        ratatui::widgets::block::Title::from(Line::from(vec![
-                            Span::styled("|", Style::default().fg(Color::Yellow)),
-                            String::from(char::from_u32(0x25c0).unwrap_or('<')).red(),
-                            // PacketTypeEnum::iter().map(|p| {
-                            //     if p == packet_type {
-                            //         p.to_string().red()
-                            //     } else {
-                            //         p.to_string().green()
-                            //     }
-                            // }).collect(Vec<Span>),
-                            Span::styled(
-                                packet_type.to_string(),
-                                Style::default().fg(Color::Yellow),
-                            ),
-                            String::from(char::from_u32(0x25b6).unwrap_or('>')).red(),
-                            Span::styled("|", Style::default().fg(Color::Yellow)),
-                        ]))
-                        .position(ratatui::widgets::block::Position::Top)
-                        .alignment(Alignment::Left),
+                        ratatui::widgets::block::Title::from(Line::from(type_titles))
+                            .position(ratatui::widgets::block::Position::Top)
+                            .alignment(Alignment::Left),
                     )
                     .title(
                         ratatui::widgets::block::Title::from(Line::from(vec![
