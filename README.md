@@ -13,7 +13,7 @@ must be run with sudo priviliges
 
 ## Install `Arch AUR`
 ```
-yay -S netscanner-bin
+paru -S netscanner
 ```
 
 ## Install via Cargo
