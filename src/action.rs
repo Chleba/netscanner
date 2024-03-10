@@ -1,21 +1,19 @@
-use std::{fmt, net::Ipv4Addr};
-use chrono::{Local, DateTime};
-use pnet::util::MacAddr;
+use chrono::{DateTime, Local};
 use pnet::datalink::NetworkInterface;
+use pnet::util::MacAddr;
 use ratatui::text::Line;
 use serde::{
     de::{self, Deserializer, Visitor},
     Deserialize, Serialize,
 };
+use std::{fmt, net::Ipv4Addr};
 
-use crate::components::{
-    packetdump::ArpPacketData,
-    wifi_scan::WifiInfo,
-    packetdump::PacketTypeEnum,
+use crate::{
+    components::{packetdump::ArpPacketData, wifi_scan::WifiInfo},
+    enums::PacketTypeEnum,
+    mode::Mode,
 };
-use crate::mode::Mode;
 
-// #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
     Tick,
@@ -56,7 +54,7 @@ impl<'de> Deserialize<'de> for Action {
 
         impl<'de> Visitor<'de> for ActionVisitor {
             type Value = Action;
- 
+
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("a valid string representation of Action")
             }

@@ -30,41 +30,27 @@ use super::{Component, Frame};
 use crate::{
     action::Action,
     config::{Config, KeyBindings},
+    enums::{
+        ARPPacketInfo, ICMPPacketInfo, PacketTypeEnum, PacketsInfoTypesEnum, TCPPacketInfo,
+        UDPPacketInfo,
+    },
     utils::MaxSizeVec,
 };
-use regex::Regex;
-use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
+use strum::{EnumCount, IntoEnumIterator};
 
-// enum 
+// impl PacketTypeEnum {
+//     pub fn previous(&self) -> Self {
+//         let current_index: usize = *self as usize;
+//         let previous_index = current_index.saturating_sub(1);
+//         Self::from_repr(previous_index).unwrap_or(*self)
+//     }
 
-#[derive(Default, Clone, Copy, Display, FromRepr, EnumIter, EnumCount, PartialEq, Debug)]
-pub enum PacketTypeEnum {
-    #[default]
-    #[strum(to_string = "All")]
-    All,
-    #[strum(to_string = "ARP")]
-    Arp,
-    #[strum(to_string = "TCP")]
-    Tcp,
-    #[strum(to_string = "UDP")]
-    Udp,
-    #[strum(to_string = "ICMP")]
-    Icmp,
-}
-
-impl PacketTypeEnum {
-    fn previous(&self) -> Self {
-        let current_index: usize = *self as usize;
-        let previous_index = current_index.saturating_sub(1);
-        Self::from_repr(previous_index).unwrap_or(*self)
-    }
-
-    fn next(&self) -> Self {
-        let current_index = *self as usize;
-        let next_index = current_index.saturating_add(1);
-        Self::from_repr(next_index).unwrap_or(*self)
-    }
-}
+//     pub fn next(&self) -> Self {
+//         let current_index = *self as usize;
+//         let next_index = current_index.saturating_add(1);
+//         Self::from_repr(next_index).unwrap_or(*self)
+//     }
+// }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArpPacketData {
@@ -412,15 +398,22 @@ impl PacketDump {
 
     fn set_scrollbar_height(&mut self) {
         let logs_len = self.get_array_by_packet_type(self.packet_type).len();
-        self.scrollbar_state = self.scrollbar_state.content_length(logs_len - 1);
+        if logs_len > 0 {
+            self.scrollbar_state = self.scrollbar_state.content_length(logs_len - 1);
+        }
     }
 
     fn previous_in_table(&mut self) {
         let index = match self.table_state.selected() {
             Some(index) => {
                 let logs = self.get_array_by_packet_type(self.packet_type);
+                let logs_len = logs.len();
                 if index == 0 {
-                    logs.len() - 1
+                    if logs_len > 0 {
+                        logs.len() - 1
+                    } else {
+                        0
+                    }
                 } else {
                     index - 1
                 }

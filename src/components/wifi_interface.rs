@@ -87,20 +87,20 @@ impl WifiInterface {
                 .get("Interface")
                 .unwrap_or(&"")
                 .parse::<String>()
-                .unwrap(),
-            ssid: hash.get("ssid").unwrap_or(&"").parse::<String>().unwrap(),
-            ifindex: hash.get("ifindex").unwrap_or(&"").parse::<u8>().unwrap(),
-            mac: hash.get("addr").unwrap_or(&"").parse::<String>().unwrap(),
+                .unwrap_or(String::from("")),
+            ssid: hash.get("ssid").unwrap_or(&"").parse::<String>().unwrap_or(String::from("")),
+            ifindex: hash.get("ifindex").unwrap_or(&"").parse::<u8>().unwrap_or(0),
+            mac: hash.get("addr").unwrap_or(&"").parse::<String>().unwrap_or(String::from("")),
             channel: hash
                 .get("channel")
                 .unwrap_or(&"")
                 .parse::<String>()
-                .unwrap(),
+                .unwrap_or(String::from("")),
             txpower: hash
                 .get("txpower")
                 .unwrap_or(&"")
                 .parse::<String>()
-                .unwrap(),
+                .unwrap_or(String::from("")),
         }
     }
 
