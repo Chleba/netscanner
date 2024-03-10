@@ -44,7 +44,7 @@ impl App {
         let (action_tx, action_rx) = mpsc::unbounded_channel();
 
         Ok(Self {
-            tick_rate: 1.0,
+            tick_rate: 10.0,
             frame_rate,
             components: vec![
                 Box::new(home),
@@ -133,8 +133,6 @@ impl App {
                     }
 
                     Action::Error(ref err_msg) => {
-                        // println!("--------------------------------");
-                        // println!("ERROR: {}", err_msg);
                         self.post_exist_msg = Some(err_msg.to_string());
                         self.should_quit = true;
                     }
@@ -193,8 +191,8 @@ impl App {
         }
         tui.exit()?;
 
-        println!("`netscanner` failed with Error:");
         if let Some(ref s) = self.post_exist_msg {
+            println!("`netscanner` failed with Error:");
             println!("{}", s);
         }
 

@@ -992,6 +992,7 @@ dependencies = [
  "strip-ansi-escapes",
  "strum",
  "surge-ping",
+ "throbber-widgets-tui",
  "tokio",
  "tokio-util",
  "tokio-wifiscanner",
@@ -1803,6 +1804,16 @@ checksum = "8b9ef9bad013ada3808854ceac7b46812a6465ba368859a37e2100283d2d719c"
 dependencies = [
  "cfg-if",
  "once_cell",
+]
+
+[[package]]
+name = "throbber-widgets-tui"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a99cd25e625314594c7eef24bfad0e7948cb37f697ca54c6a97f7987c92d4a49"
+dependencies = [
+ "rand",
+ "ratatui",
 ]
 
 [[package]]

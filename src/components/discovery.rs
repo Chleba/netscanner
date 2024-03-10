@@ -16,6 +16,7 @@ use ratatui::{prelude::*, widgets::*};
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::{Duration, Instant};
 use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence, ICMP};
+use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::{
     sync::mpsc::{self, UnboundedSender},
     task::{self, JoinHandle},
@@ -23,8 +24,11 @@ use tokio::{
 
 use super::Component;
 use crate::{
-    action::Action, components::packetdump::ArpPacketData, mode::Mode, tui::Frame,
-    utils::get_ips4_from_cidr,
+    action::Action,
+    components::packetdump::ArpPacketData,
+    mode::Mode,
+    tui::Frame,
+    utils::{count_ipv4_net_length, get_ips4_from_cidr},
 };
 use crossterm::event::{KeyCode, KeyEvent};
 use mac_oui::Oui;
@@ -51,12 +55,14 @@ pub struct Discovery {
     input: Input,
     cidr: Option<Ipv4Cidr>,
     cidr_error: bool,
+    is_scanning: bool,
     mode: Mode,
     task: JoinHandle<()>,
     oui: Option<Oui>,
     table_state: TableState,
     scrollbar_state: ScrollbarState,
     show_packets: bool,
+    throbber_state: ThrobberState,
 }
 
 impl Default for Discovery {
@@ -76,11 +82,13 @@ impl Discovery {
             input: Input::default().with_value(String::from("192.168.1.0/24")),
             cidr: None,
             cidr_error: false,
+            is_scanning: false,
             mode: Mode::Normal,
             oui: None,
             table_state: TableState::default().with_selected(0),
             scrollbar_state: ScrollbarState::new(0),
             show_packets: false,
+            throbber_state: ThrobberState::default(),
         }
     }
 
@@ -122,7 +130,9 @@ impl Discovery {
             Err(e) => {
                 let tx_action = self.action_tx.clone().unwrap();
                 tx_action
-                    .send(Action::Error(format!("Unable to create datalink channel: {e}")))
+                    .send(Action::Error(format!(
+                        "Unable to create datalink channel: {e}"
+                    )))
                     .unwrap();
                 return;
             }
@@ -154,45 +164,13 @@ impl Discovery {
             .send_to(ethernet_packet.packet(), None)
             .unwrap()
             .unwrap();
-
-        // let tx = self.action_tx.clone().unwrap();
-        // let (abort_handle, abort_reg) = AbortHandle::new_pair();
-        // self.abortables.push(abort_handle.clone());
-        // let task = tokio::spawn(
-        //     Abortable::new(
-        //         async move {
-        //             loop {
-        //                 let buf = receiver.next().unwrap_or_default();
-        //                 if buf.len() >= MutableEthernetPacket::minimum_packet_size() {
-        //                     let arp = ArpPacket::new(
-        //                         &buf[MutableEthernetPacket::minimum_packet_size()..],
-        //                     )
-        //                     .unwrap();
-        //                     if arp.get_sender_proto_addr() == target_ip
-        //                         && arp.get_target_hw_addr() == active_interface.mac.unwrap()
-        //                     {
-        //                     }
-        //                 }
-        //                 // tokio::task::yield_now().await;
-        //             }
-        //         },
-        //         abort_reg,
-        //     )
-        //     .boxed(),
-        // );
-        // // self.arp_tasks.push(task);
-        // // let abort_handle = abort_handle.clone();
-        // // let abort_handle = abort_handle.clone();
-        // let timeout_task = tokio::spawn(async move {
-        //     tokio::time::sleep(Duration::from_secs(2)).await;
-        //     abort_handle.abort();
-        // });
     }
 
     fn scan(&mut self) {
         self.reset_scan();
 
         if let Some(cidr) = self.cidr {
+            self.is_scanning = true;
             let tx = self.action_tx.clone().unwrap();
             self.task = tokio::spawn(async move {
                 let ips = get_ips4_from_cidr(cidr);
@@ -216,6 +194,7 @@ impl Discovery {
                                     Ok((IcmpPacket::V4(packet), dur)) => {
                                         tx.send(Action::PingIp(packet.get_real_dest().to_string()))
                                             .unwrap_or_default();
+                                        tx.send(Action::CountIp).unwrap_or_default();
                                     }
                                     Ok(_) => {
                                         tx.send(Action::CountIp).unwrap_or_default();
@@ -245,10 +224,6 @@ impl Discovery {
 
             if let Some(oui) = &self.oui {
                 let oui_res = oui.lookup_by_mac(&n.mac);
-                // if let Some(oui_res) = oui_res {
-                //     let cn = oui_res.company_name.clone();
-                //     n.vendor = cn;
-                // }
                 match oui_res {
                     Ok(e) => {
                         if let Some(oui_res) = e {
@@ -322,12 +297,20 @@ impl Discovery {
         self.scrollbar_state = self.scrollbar_state.position(index);
     }
 
-    fn make_table(scanned_ips: Vec<ScannedIp>, ip_num: i32) -> Table<'static> {
-        let header = Row::new(vec!["ip", "hostname", "mac", "vendor"])
+    fn make_table(
+        scanned_ips: Vec<ScannedIp>,
+        cidr: Option<Ipv4Cidr>,
+        ip_num: i32,
+    ) -> Table<'static> {
+        let header = Row::new(vec!["ip", "mac", "hostname", "vendor"])
             .style(Style::default().fg(Color::Yellow))
             .top_margin(1)
             .bottom_margin(1);
         let mut rows = Vec::new();
+        let cidr_length = match cidr {
+            Some(c) => count_ipv4_net_length(c.network_length() as u32),
+            None => 0,
+        };
 
         for sip in scanned_ips {
             let ip = &sip.ip;
@@ -336,20 +319,19 @@ impl Discovery {
                     format!("{ip:<2}"),
                     Style::default().fg(Color::Blue),
                 )),
-                Cell::from(sip.hostname.clone()),
                 Cell::from(sip.mac.clone().green()),
+                Cell::from(sip.hostname.clone()),
                 Cell::from(sip.vendor.clone().yellow()),
             ]));
         }
 
         let table = Table::new(
             rows,
-            // vec![],
             [
                 Constraint::Length(16),
-                Constraint::Length(25),
-                Constraint::Length(20),
-                Constraint::Length(25),
+                Constraint::Length(19),
+                Constraint::Fill(1),
+                Constraint::Fill(1),
             ],
         )
         .header(header)
@@ -364,7 +346,11 @@ impl Discovery {
                     ratatui::widgets::block::Title::from(Line::from(vec![
                         Span::styled("|", Style::default().fg(Color::Yellow)),
                         Span::styled(format!("{}", ip_num), Style::default().fg(Color::Green)),
-                        Span::styled(" ip scanned|", Style::default().fg(Color::Yellow)),
+                        Span::styled(
+                            format!("/{}", cidr_length),
+                            Style::default().fg(Color::Green),
+                        ),
+                        Span::styled(" ip|", Style::default().fg(Color::Yellow)),
                     ]))
                     .position(ratatui::widgets::block::Position::Top)
                     .alignment(Alignment::Left),
@@ -404,15 +390,13 @@ impl Discovery {
             .style(Style::default().fg(Color::Rgb(100, 100, 100)))
             .begin_symbol(None)
             .end_symbol(None);
-        // .begin_symbol(Some(s_start))
-        // .end_symbol(Some(s_end));
         scrollbar
     }
 
-    fn make_input(&mut self, scroll: usize) -> Paragraph {
+    fn make_input(&self, scroll: usize) -> Paragraph {
         // let scroll = self.input.visual_scroll(40);
         let input = Paragraph::new(self.input.value())
-            .style(Style::default().fg(Color::Yellow))
+            .style(Style::default().fg(Color::Green))
             .scroll((0, scroll as u16))
             .block(
                 Block::default()
@@ -421,22 +405,37 @@ impl Discovery {
                         Mode::Input => Style::default().fg(Color::Green),
                         Mode::Normal => Style::default().fg(Color::Rgb(100, 100, 100)),
                     })
-                    .title(Line::from(vec![
-                        Span::raw("|"),
-                        Span::styled(
-                            "i",
-                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                        ),
-                        Span::styled("nput", Style::default().fg(Color::Gray)),
-                        Span::raw("/"),
-                        Span::styled(
-                            "ESC",
-                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                        ),
-                        Span::raw("|"),
-                    ]))
-                    .title_alignment(Alignment::Right)
-                    .title_position(ratatui::widgets::block::Position::Bottom),
+                    .title(
+                        ratatui::widgets::block::Title::from(Line::from(vec![
+                            Span::raw("|"),
+                            Span::styled(
+                                "i",
+                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                            ),
+                            Span::styled("nput", Style::default().fg(Color::Yellow)),
+                            Span::raw("/"),
+                            Span::styled(
+                                "ESC",
+                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                            ),
+                            Span::raw("|"),
+                        ]))
+                        .alignment(Alignment::Right)
+                        .position(ratatui::widgets::block::Position::Bottom),
+                    )
+                    .title(
+                        ratatui::widgets::block::Title::from(Line::from(vec![
+                            Span::raw("|"),
+                            Span::styled(
+                                "s",
+                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                            ),
+                            Span::styled("can", Style::default().fg(Color::Yellow)),
+                            Span::raw("|"),
+                        ]))
+                        .alignment(Alignment::Left)
+                        .position(ratatui::widgets::block::Position::Bottom),
+                    ),
             );
         input
     }
@@ -451,6 +450,13 @@ impl Discovery {
                     .border_style(Style::default().fg(Color::Red)),
             );
         error
+    }
+
+    fn make_throbber() -> Throbber<'static> {
+        Throbber::default()
+            .label("scanning..")
+            .style(Style::default().fg(Color::Green))
+            .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
     }
 }
 
@@ -493,14 +499,28 @@ impl Component for Discovery {
     }
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
+        if self.is_scanning {
+            if let Action::Tick = action {
+                self.throbber_state.calc_next();
+            }
+        }
+
         // -- custom actions
         if let Action::PingIp(ref ip) = action {
             self.process_ip(ip);
-            self.ip_num += 1;
         }
         // -- count IPs
         if let Action::CountIp = action {
             self.ip_num += 1;
+
+            let ip_count = match self.cidr {
+                Some(cidr) => count_ipv4_net_length(cidr.network_length() as u32) as i32,
+                None => 0,
+            };
+
+            if self.ip_num == ip_count {
+                self.is_scanning = false;
+            }
         }
         // -- CIDR error
         if let Action::CidrError = action {
@@ -508,8 +528,13 @@ impl Component for Discovery {
         }
         // -- ARP packet recieved
         if let Action::ArpRecieve(ref arp_data) = action {
-            // if let Action::ArpRecieve(target_ip, mac) = action {
             self.process_mac(arp_data.clone());
+        }
+        // -- Scan CIDR
+        if let Action::ScanCidr = action {
+            if self.active_interface.is_some() && !self.is_scanning {
+                self.scan();
+            }
         }
         // -- active interface
         if let Action::ActiveInterface(ref interface) = action {
@@ -522,6 +547,16 @@ impl Component for Discovery {
         }
         // -- MODE CHANGE
         if let Action::ModeChange(mode) = action {
+            // -- when scanning don't switch to input mode
+            if self.is_scanning && mode == Mode::Input {
+                self.action_tx
+                    .clone()
+                    .unwrap()
+                    .send(Action::ModeChange(Mode::Normal))
+                    .unwrap();
+                return Ok(None);
+            }
+
             if mode == Mode::Input {
                 // self.input.reset();
                 self.cidr_error = false;
@@ -556,7 +591,8 @@ impl Component for Discovery {
             let mut table_rect = layout[1];
             table_rect.y += 1;
             table_rect.height -= 1;
-            let table = Self::make_table(self.scanned_ips.clone(), self.ip_num);
+
+            let table = Self::make_table(self.scanned_ips.clone(), self.cidr, self.ip_num);
             f.render_stateful_widget(table, table_rect, &mut self.table_state.clone());
 
             // -- SCROLLBAR
@@ -589,7 +625,10 @@ impl Component for Discovery {
                 3,
             );
             let scroll = self.input.visual_scroll(INPUT_SIZE);
-            let block = self.make_input(scroll);
+            let mut block = self.make_input(scroll);
+            if self.is_scanning {
+                block = block.clone().add_modifier(Modifier::DIM);
+            }
             f.render_widget(block, input_rect);
             // -- cursor
             match self.mode {
@@ -602,6 +641,14 @@ impl Component for Discovery {
                     );
                 }
                 Mode::Normal => {}
+            }
+
+            // -- THROBBER
+            if self.is_scanning {
+                let throbber = Self::make_throbber();
+                let throbber_rect = Rect::new(input_rect.x + 1, input_rect.y, 12, 1);
+                // let throbber_rect = Rect::new(table_rect.x + table_rect.width - 30, table_rect.y, 12, 1);
+                f.render_stateful_widget(throbber, throbber_rect, &mut self.throbber_state);
             }
         }
 

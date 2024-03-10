@@ -39,6 +39,10 @@ pub fn get_ips4_from_cidr(cidr: Ipv4Cidr) -> Vec<Ipv4Addr> {
     ips
 }
 
+pub fn count_ipv4_net_length(net_length: u32) -> u32 {
+    2u32.pow(32 - net_length)
+}
+
 #[derive(Clone, Debug)]
 pub struct MaxSizeVec<T> {
     p_vec: Vec<T>,

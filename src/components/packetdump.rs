@@ -35,6 +35,8 @@ use crate::{
 use regex::Regex;
 use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
+// enum 
+
 #[derive(Default, Clone, Copy, Display, FromRepr, EnumIter, EnumCount, PartialEq, Debug)]
 pub enum PacketTypeEnum {
     #[default]
@@ -507,7 +509,6 @@ impl PacketDump {
             .style(Style::default().fg(Color::Yellow))
             .bottom_margin(1);
 
-        // let title_labels = Vec::new();
         let mut type_titles = vec![
             Span::styled("|", Style::default().fg(Color::Yellow)),
             String::from(char::from_u32(0x25c0).unwrap_or('<')).red(),
@@ -521,7 +522,6 @@ impl PacketDump {
                 }
                 if p == packet_type {
                     Span::styled(span_str, Style::default().fg(Color::Red))
-                        // .underlined()
                 } else {
                     Span::styled(span_str, Style::default().fg(Color::Yellow))
                 }
