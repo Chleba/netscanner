@@ -9,8 +9,6 @@ Network scanning tool with features like:
 - Ping CIDR with hostname, oui & mac address
 - packetdump (TCP, UDP, ICMP, ARP)
 
-must be run with sudo priviliges
-
 ## Install `Arch AUR`
 ```
 paru -S netscanner
@@ -28,3 +26,8 @@ sudo chmod u+s /home/user/.cargo/bin/netscanner
 
 ![netscanner screenshot](./netscanner.png?raw=true)
 ![netscanner screenshot](./netscanner1.png?raw=true)
+
+## TODO
+- [] scanning open ports
+- [] modal window with packet data
+- [] ipv6 scanning & dumping
