@@ -10,7 +10,7 @@ use std::{fmt, net::Ipv4Addr};
 
 use crate::{
     components::{packetdump::ArpPacketData, wifi_scan::WifiInfo},
-    enums::PacketTypeEnum,
+    enums::{PacketTypeEnum, PacketsInfoTypesEnum},
     mode::Mode,
 };
 
@@ -42,7 +42,7 @@ pub enum Action {
     PingIp(String),
     CountIp,
     CidrError,
-    PacketDump(DateTime<Local>, String, PacketTypeEnum),
+    PacketDump(DateTime<Local>, PacketsInfoTypesEnum, PacketTypeEnum),
 }
 
 impl<'de> Deserialize<'de> for Action {

@@ -1,41 +1,55 @@
-use pnet::packet::icmp::IcmpType;
+use std::net::{IpAddr, Ipv4Addr};
+
+use pnet::{
+    packet::{
+        arp::{ArpOperation, ArpOperations},
+        icmp::IcmpType,
+    },
+    util::MacAddr,
+};
 use strum::{Display, EnumCount, EnumIter, FromRepr};
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct UDPPacketInfo {
-    interface_name: String,
-    source: String,
-    source_port: String,
-    destination: String,
-    destination_port: String,
-    length: String,
+    pub interface_name: String,
+    pub source: IpAddr,
+    pub source_port: u16,
+    pub destination: IpAddr,
+    pub destination_port: u16,
+    pub length: u16,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct TCPPacketInfo {
-    interface_name: String,
-    source: String,
-    source_port: String,
-    destination: String,
-    destination_port: String,
-    length: String,
+    pub interface_name: String,
+    pub source: IpAddr,
+    pub source_port: u16,
+    pub destination: IpAddr,
+    pub destination_port: u16,
+    pub length: usize,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct ARPPacketInfo {
-    interface_name: String,
-    source_mac: String,
-    source_ip: String,
-    destination_mac: String,
-    destination_ip: String,
-    operation: String,
+    pub interface_name: String,
+    pub source_mac: MacAddr,
+    pub source_ip: Ipv4Addr,
+    pub destination_mac: MacAddr,
+    pub destination_ip: Ipv4Addr,
+    pub operation: ArpOperation,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct ICMPPacketInfo {
-    interface_name: String,
-    source: String,
-    destination: String,
-    operation: String,
-    icmp_type: IcmpType,
+    pub interface_name: String,
+    pub source: IpAddr,
+    pub destination: IpAddr,
+    pub seq: u16,
+    pub id: u16,
+    pub icmp_type: IcmpType,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum PacketsInfoTypesEnum {
     Arp(ARPPacketInfo),
     Tcp(TCPPacketInfo),
@@ -71,4 +85,3 @@ impl PacketTypeEnum {
         Self::from_repr(next_index).unwrap_or(*self)
     }
 }
-

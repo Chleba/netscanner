@@ -1,8 +1,10 @@
 use chrono::{DateTime, Local};
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::style::Stylize;
 use ipnetwork::Ipv4Network;
 use pnet::datalink::{Channel, NetworkInterface};
+use pnet::packet::PrimitiveValues;
 use pnet::packet::{
     arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
     ethernet::{EtherTypes, EthernetPacket, MutableEthernetPacket},
@@ -38,20 +40,6 @@ use crate::{
 };
 use strum::{EnumCount, IntoEnumIterator};
 
-// impl PacketTypeEnum {
-//     pub fn previous(&self) -> Self {
-//         let current_index: usize = *self as usize;
-//         let previous_index = current_index.saturating_sub(1);
-//         Self::from_repr(previous_index).unwrap_or(*self)
-//     }
-
-//     pub fn next(&self) -> Self {
-//         let current_index = *self as usize;
-//         let next_index = current_index.saturating_add(1);
-//         Self::from_repr(next_index).unwrap_or(*self)
-//     }
-// }
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArpPacketData {
     pub sender_mac: MacAddr,
@@ -69,11 +57,11 @@ pub struct PacketDump {
     table_state: TableState,
     scrollbar_state: ScrollbarState,
     packet_type: PacketTypeEnum,
-    arp_packets: MaxSizeVec<(DateTime<Local>, String)>,
-    udp_packets: MaxSizeVec<(DateTime<Local>, String)>,
-    tcp_packets: MaxSizeVec<(DateTime<Local>, String)>,
-    icmp_packets: MaxSizeVec<(DateTime<Local>, String)>,
-    all_packets: MaxSizeVec<(DateTime<Local>, String)>,
+    arp_packets: MaxSizeVec<(DateTime<Local>, PacketsInfoTypesEnum)>,
+    udp_packets: MaxSizeVec<(DateTime<Local>, PacketsInfoTypesEnum)>,
+    tcp_packets: MaxSizeVec<(DateTime<Local>, PacketsInfoTypesEnum)>,
+    icmp_packets: MaxSizeVec<(DateTime<Local>, PacketsInfoTypesEnum)>,
+    all_packets: MaxSizeVec<(DateTime<Local>, PacketsInfoTypesEnum)>,
 }
 
 impl Default for PacketDump {
@@ -112,15 +100,14 @@ impl PacketDump {
         if let Some(udp) = udp {
             tx.send(Action::PacketDump(
                 Local::now(),
-                format!(
-                    "[{}]: UDP Packet: {}:{} > {}:{}; length: {}",
-                    interface_name,
+                PacketsInfoTypesEnum::Udp(UDPPacketInfo {
+                    interface_name: interface_name.to_string(),
                     source,
-                    udp.get_source(),
+                    source_port: udp.get_source(),
                     destination,
-                    udp.get_destination(),
-                    udp.get_length()
-                ),
+                    destination_port: udp.get_destination(),
+                    length: udp.get_length(),
+                }),
                 PacketTypeEnum::Udp,
             ))
             .unwrap();
@@ -141,14 +128,14 @@ impl PacketDump {
                     let echo_reply_packet = echo_reply::EchoReplyPacket::new(packet).unwrap();
                     tx.send(Action::PacketDump(
                         Local::now(),
-                        format!(
-                            "[{}]: ICMP echo reply {} -> {} (seq={:?}, id={:?})",
-                            interface_name,
+                        PacketsInfoTypesEnum::Icmp(ICMPPacketInfo {
+                            interface_name: interface_name.to_string(),
                             source,
                             destination,
-                            echo_reply_packet.get_sequence_number(),
-                            echo_reply_packet.get_identifier()
-                        ),
+                            seq: echo_reply_packet.get_sequence_number(),
+                            id: echo_reply_packet.get_identifier(),
+                            icmp_type: IcmpTypes::EchoReply,
+                        }),
                         PacketTypeEnum::Icmp,
                     ))
                     .unwrap();
@@ -157,31 +144,31 @@ impl PacketDump {
                     let echo_request_packet = echo_request::EchoRequestPacket::new(packet).unwrap();
                     tx.send(Action::PacketDump(
                         Local::now(),
-                        format!(
-                            "[{}]: ICMP echo request {} -> {} (seq={:?}, id={:?})",
-                            interface_name,
+                        PacketsInfoTypesEnum::Icmp(ICMPPacketInfo {
+                            interface_name: interface_name.to_string(),
                             source,
                             destination,
-                            echo_request_packet.get_sequence_number(),
-                            echo_request_packet.get_identifier()
-                        ),
+                            seq: echo_request_packet.get_sequence_number(),
+                            id: echo_request_packet.get_identifier(),
+                            icmp_type: IcmpTypes::EchoRequest,
+                        }),
                         PacketTypeEnum::Icmp,
                     ))
                     .unwrap();
                 }
                 _ => {
-                    tx.send(Action::PacketDump(
-                        Local::now(),
-                        format!(
-                            "[{}]: ICMP packet {} -> {} (type={:?})",
-                            interface_name,
-                            source,
-                            destination,
-                            icmp_packet.get_icmp_type()
-                        ),
-                        PacketTypeEnum::Icmp,
-                    ))
-                    .unwrap();
+                    // tx.send(Action::PacketDump(
+                    //     Local::now(),
+                    //     // format!(
+                    //     //     "[{}]: ICMP packet {} -> {} (type={:?})",
+                    //     //     interface_name,
+                    //     //     source,
+                    //     //     destination,
+                    //     //     icmp_packet.get_icmp_type()
+                    //     // ),
+                    //     PacketTypeEnum::Icmp,
+                    // ))
+                    // .unwrap();
                 }
             }
         }
@@ -198,15 +185,14 @@ impl PacketDump {
         if let Some(tcp) = tcp {
             tx.send(Action::PacketDump(
                 Local::now(),
-                format!(
-                    "[{}]: TCP Packet: {}:{} > {}:{}; length: {}",
-                    interface_name,
+                PacketsInfoTypesEnum::Tcp(TCPPacketInfo {
+                    interface_name: interface_name.to_string(),
                     source,
-                    tcp.get_source(),
+                    source_port: tcp.get_source(),
                     destination,
-                    tcp.get_destination(),
-                    packet.len()
-                ),
+                    destination_port: tcp.get_destination(),
+                    length: packet.len(),
+                }),
                 PacketTypeEnum::Tcp,
             ))
             .unwrap();
@@ -281,15 +267,14 @@ impl PacketDump {
 
             tx.send(Action::PacketDump(
                 Local::now(),
-                format!(
-                    "[{}]: ARP packet: {}({}) > {}({}); operation: {:?}",
-                    interface_name,
-                    ethernet.get_source(),
-                    header.get_sender_proto_addr(),
-                    ethernet.get_destination(),
-                    header.get_target_proto_addr(),
-                    header.get_operation()
-                ),
+                PacketsInfoTypesEnum::Arp(ARPPacketInfo {
+                    interface_name: interface_name.to_string(),
+                    source_mac: ethernet.get_source(),
+                    source_ip: header.get_sender_proto_addr(),
+                    destination_mac: ethernet.get_destination(),
+                    destination_ip: header.get_target_proto_addr(),
+                    operation: header.get_operation(),
+                }),
                 PacketTypeEnum::Arp,
             ))
             .unwrap();
@@ -386,7 +371,7 @@ impl PacketDump {
     fn get_array_by_packet_type(
         &mut self,
         packet_type: PacketTypeEnum,
-    ) -> &Vec<(DateTime<Local>, String)> {
+    ) -> &Vec<(DateTime<Local>, PacketsInfoTypesEnum)> {
         match packet_type {
             PacketTypeEnum::Arp => self.arp_packets.get_vec(),
             PacketTypeEnum::Tcp => self.tcp_packets.get_vec(),
@@ -440,58 +425,191 @@ impl PacketDump {
         self.scrollbar_state = self.scrollbar_state.position(index);
     }
 
-    // fn parse_log(l: String) -> Vec<Span<'static>> {
-    //     let mut text = vec![];
-    //     let re = Regex::new(r"\[(?P<interface>\w+)\]: (?P<packet_type>Packet): (?P<source_ip>[\d\.]+:\d+) > (?P<destination_ip>[\d\.]+:\d+); length: (?P<length>\d+)").unwrap();
-    //     if let Some(caps) = re.captures(l.as_str()) {
-    //         let interface = String::from(caps.name("interface").map_or("", |m| m.as_str()));
-    //         // let p_type = caps.name("packet_type").map_or("", |m| m.as_str());
-    //         // let source_ip = caps.name("source_ip").map_or("", |m| m.as_str());
-    //         // let desctination_ip = caps.name("destination_ip").map_or("", |m| m.as_str());
-    //         // let length = caps.name("length").map_or("", |m| m.as_str());
-
-    //         text.push(interface.clone().green());
-    //         // text.push(p_type.clone().blue());
-    //         // text.push(source_ip.clone().yellow());
-    //         // text.push(desctination_ip.clone().white());
-    //         // text.push(length.clone().green());
-    //     } else {
-    //         text.push(l.clone().green());
-    //     }
-    //     text
-    // }
-
     fn get_table_rows_by_packet_type<'a>(&mut self, packet_type: PacketTypeEnum) -> Vec<Row<'a>> {
         let logs = self.get_array_by_packet_type(packet_type);
         let rows: Vec<Row> = logs
             .iter()
             .map(|(time, log)| {
                 let t = time.format("%H:%M:%S").to_string();
-                let l = <String as Clone>::clone(log);
-                // let text = Self::parse_log(l);
-
-                let text = vec![l.green()];
-                // -- TODO: doing something wrong here, when using regexp theres total clog of CPU
-                // let re = Regex::new(r"\[(?P<interface>\w+)\]: (?P<packet_type>Packet): (?P<source_ip>[\d\.]+:\d+) > (?P<destination_ip>[\d\.]+:\d+); length: (?P<length>\d+)").unwrap();
-                // if let Some(caps) = re.captures(l.as_str()) {
-                //     let interface = String::from(caps.name("interface").map_or("", |m| m.as_str()));
-                //     let p_type = String::from(caps.name("packet_type").map_or("", |m| m.as_str()));
-                //     let source_ip = String::from(caps.name("source_ip").map_or("", |m| m.as_str()));
-                //     let desctination_ip = String::from(caps.name("destination_ip").map_or("", |m| m.as_str()));
-                //     let length = String::from(caps.name("length").map_or("", |m| m.as_str()));
-
-                //     text.push(interface.clone().green());
-                //     text.push(p_type.clone().blue());
-                //     text.push(source_ip.clone().yellow());
-                //     text.push(desctination_ip.clone().white());
-                //     text.push(length.clone().green());
-                // } else {
-                //     text.push(l.clone().green());
-                // }
-                // text.push(l.clone().green());
-                let line = Line::from(text);
-
-                Row::new(vec![Cell::from(t.red()), Cell::from(line)])
+                let mut spans = vec![];
+                match log {
+                    // -----------------------------
+                    // -- ICMP
+                    PacketsInfoTypesEnum::Icmp(icmp) => {
+                        spans.push(Span::styled(
+                            format!("[{}] ", icmp.interface_name.clone()),
+                            Style::default().fg(Color::Green),
+                        ));
+                        spans.push(Span::styled(
+                            "ICMP",
+                            Style::default().fg(Color::Black).bg(Color::White),
+                        ));
+                        match icmp.icmp_type {
+                            IcmpTypes::EchoRequest => {
+                                spans.push(Span::styled(
+                                    " echo request ",
+                                    Style::default().fg(Color::Yellow),
+                                ));
+                            }
+                            IcmpTypes::EchoReply => {
+                                spans.push(Span::styled(
+                                    " echo reply ",
+                                    Style::default().fg(Color::Yellow),
+                                ));
+                            }
+                            _ => {}
+                        }
+                        spans.push(Span::styled(
+                            format!("{}", icmp.source.to_string()),
+                            Style::default().fg(Color::Blue),
+                        ));
+                        spans.push(Span::styled(" -> ", Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            format!("{}", icmp.destination.to_string()),
+                            Style::default().fg(Color::Blue),
+                        ));
+                        spans.push(Span::styled("(seq=", Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            format!("{:?}", icmp.seq.to_string()),
+                            Style::default().fg(Color::Green),
+                        ));
+                        spans.push(Span::styled(", ", Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled("id=", Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            format!("{:?}", icmp.id.to_string()),
+                            Style::default().fg(Color::Green),
+                        ));
+                        spans.push(Span::styled(")", Style::default().fg(Color::Yellow)));
+                    }
+                    // -----------------------------
+                    // -- UDP
+                    PacketsInfoTypesEnum::Udp(udp) => {
+                        spans.push(Span::styled(
+                            format!("[{}] ", udp.interface_name.clone()),
+                            Style::default().fg(Color::Green),
+                        ));
+                        spans.push(Span::styled(
+                            "UDP",
+                            Style::default().fg(Color::Yellow).bg(Color::Blue),
+                        ));
+                        spans.push(Span::styled(
+                            " Packet: ",
+                            Style::default().fg(Color::Yellow),
+                        ));
+                        spans.push(Span::styled(
+                            format!("{}", udp.source.to_string()),
+                            Style::default().fg(Color::Blue),
+                        ));
+                        spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            format!("{}", udp.source_port.to_string()),
+                            Style::default().fg(Color::Green),
+                        ));
+                        spans.push(Span::styled(" > ", Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            format!("{}", udp.destination.to_string()),
+                            Style::default().fg(Color::Blue),
+                        ));
+                        spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            format!("{}", udp.destination_port.to_string()),
+                            Style::default().fg(Color::Green),
+                        ));
+                        spans.push(Span::styled(";", Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            " length: ",
+                            Style::default().fg(Color::Yellow),
+                        ));
+                        spans.push(Span::styled(
+                            format!("{}", udp.length),
+                            Style::default().fg(Color::Red),
+                        ));
+                    }
+                    // -----------------------------
+                    // -- TCP
+                    PacketsInfoTypesEnum::Tcp(tcp) => {
+                        spans.push(Span::styled(
+                            format!("[{}] ", tcp.interface_name.clone()),
+                            Style::default().fg(Color::Green),
+                        ));
+                        spans.push(Span::styled(
+                            "TCP",
+                            Style::default().fg(Color::Black).bg(Color::Green),
+                        ));
+                        spans.push(Span::styled(
+                            " Packet: ",
+                            Style::default().fg(Color::Yellow),
+                        ));
+                        spans.push(Span::styled(
+                            format!("{}", tcp.source.to_string()),
+                            Style::default().fg(Color::Blue),
+                        ));
+                        spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            format!("{}", tcp.source_port.to_string()),
+                            Style::default().fg(Color::Green),
+                        ));
+                        spans.push(Span::styled(" > ", Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            format!("{}", tcp.destination.to_string()),
+                            Style::default().fg(Color::Blue),
+                        ));
+                        spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            format!("{}", tcp.destination_port.to_string()),
+                            Style::default().fg(Color::Green),
+                        ));
+                        spans.push(Span::styled(";", Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            " length: ",
+                            Style::default().fg(Color::Yellow),
+                        ));
+                        spans.push(Span::styled(
+                            format!("{}", tcp.length),
+                            Style::default().fg(Color::Red),
+                        ));
+                    }
+                    // -----------------------------
+                    // -- ARP
+                    PacketsInfoTypesEnum::Arp(arp) => {
+                        spans.push(Span::styled(
+                            format!("[{}] ", arp.interface_name.clone()),
+                            Style::default().fg(Color::Green),
+                        ));
+                        spans.push(Span::styled(
+                            "ARP",
+                            Style::default().fg(Color::Yellow).bg(Color::Red),
+                        ));
+                        spans.push(Span::styled(
+                            " Packet: ",
+                            Style::default().fg(Color::Yellow),
+                        ));
+                        spans.push(Span::styled(
+                            format!("{}", arp.source_mac.to_string()),
+                            Style::default().fg(Color::Green),
+                        ));
+                        spans.push(Span::styled(
+                            format!("({})", arp.source_ip.to_string()),
+                            Style::default().fg(Color::Blue),
+                        ));
+                        spans.push(Span::styled(" > ", Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            format!("{}", arp.destination_mac.to_string()),
+                            Style::default().fg(Color::Green),
+                        ));
+                        spans.push(Span::styled(
+                            format!("({})", arp.destination_ip.to_string()),
+                            Style::default().fg(Color::Blue),
+                        ));
+                        spans.push(Span::styled(";", Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            format!(" {:?}", arp.operation),
+                            Style::default().fg(Color::Red),
+                        ));
+                    }
+                }
+                let line = Line::from(spans);
+                Row::new(vec![Cell::from(t), Cell::from(line)])
             })
             .collect();
         rows
@@ -504,7 +622,7 @@ impl PacketDump {
 
         let mut type_titles = vec![
             Span::styled("|", Style::default().fg(Color::Yellow)),
-            String::from(char::from_u32(0x25c0).unwrap_or('<')).red(),
+            String::from(char::from_u32(0x25c0).unwrap_or('<')).into(),
         ];
         let mut enum_titles = PacketTypeEnum::iter()
             .enumerate()
@@ -521,7 +639,7 @@ impl PacketDump {
             })
             .collect::<Vec<Span>>();
         type_titles.append(&mut enum_titles);
-        type_titles.push(String::from(char::from_u32(0x25b6).unwrap_or('>')).red());
+        type_titles.push(String::from(char::from_u32(0x25b6).unwrap_or('>')).into());
         type_titles.push(Span::styled("|", Style::default().fg(Color::Yellow)));
 
         let table = Table::new(rows, [Constraint::Min(10), Constraint::Percentage(100)])
@@ -529,7 +647,7 @@ impl PacketDump {
             .block(
                 Block::new()
                     .title(
-                        ratatui::widgets::block::Title::from("|Packets|".yellow())
+                        ratatui::widgets::block::Title::from("|Packets|")
                             .position(ratatui::widgets::block::Position::Top)
                             .alignment(Alignment::Right),
                     )
@@ -541,8 +659,8 @@ impl PacketDump {
                     .title(
                         ratatui::widgets::block::Title::from(Line::from(vec![
                             Span::styled("|", Style::default().fg(Color::Yellow)),
-                            String::from(char::from_u32(0x25b2).unwrap_or('>')).red(),
-                            String::from(char::from_u32(0x25bc).unwrap_or('>')).red(),
+                            String::from(char::from_u32(0x25b2).unwrap_or('>')).into(),
+                            String::from(char::from_u32(0x25bc).unwrap_or('>')).into(),
                             Span::styled("select|", Style::default().fg(Color::Yellow)),
                         ]))
                         .position(ratatui::widgets::block::Position::Bottom)
@@ -560,7 +678,7 @@ impl PacketDump {
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                     .borders(Borders::ALL), // .padding(Padding::new(1, 0, 2, 0)),
             )
-            .highlight_symbol(String::from(char::from_u32(0x25b6).unwrap_or('>')).red())
+            .highlight_symbol(String::from(char::from_u32(0x25b6).unwrap_or('>')))
             .column_spacing(1);
         table
     }
@@ -619,15 +737,15 @@ impl Component for PacketDump {
             self.show_packets = !self.show_packets;
         }
         // -- packet recieved
-        if let Action::PacketDump(time, packet_str, packet_type) = action {
+        if let Action::PacketDump(time, packet, packet_type) = action {
             match packet_type {
-                PacketTypeEnum::Tcp => self.tcp_packets.push((time, packet_str.clone())),
-                PacketTypeEnum::Arp => self.arp_packets.push((time, packet_str.clone())),
-                PacketTypeEnum::Udp => self.udp_packets.push((time, packet_str.clone())),
-                PacketTypeEnum::Icmp => self.icmp_packets.push((time, packet_str.clone())),
+                PacketTypeEnum::Tcp => self.tcp_packets.push((time, packet.clone())),
+                PacketTypeEnum::Arp => self.arp_packets.push((time, packet.clone())),
+                PacketTypeEnum::Udp => self.udp_packets.push((time, packet.clone())),
+                PacketTypeEnum::Icmp => self.icmp_packets.push((time, packet.clone())),
                 _ => {}
             }
-            self.all_packets.push((time, packet_str));
+            self.all_packets.push((time, packet.clone()));
         }
 
         Ok(None)
