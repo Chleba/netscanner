@@ -9,6 +9,8 @@ Network scanning tool with features like:
 - Ping CIDR with hostname, oui & mac address
 - packetdump (TCP, UDP, ICMP, ARP)
 
+Must be run with root privileges. 
+
 ## Install `Arch AUR`
 ```
 paru -S netscanner
