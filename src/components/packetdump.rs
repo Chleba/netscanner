@@ -610,7 +610,10 @@ impl PacketDump {
                     }
                 }
                 let line = Line::from(spans);
-                Row::new(vec![Cell::from(Span::styled(t, Style::default().fg(Color::Cyan))), Cell::from(line)])
+                Row::new(vec![
+                    Cell::from(Span::styled(t, Style::default().fg(Color::Cyan))),
+                    Cell::from(line),
+                ])
             })
             .collect();
         rows
@@ -663,8 +666,14 @@ impl PacketDump {
                     .title(
                         ratatui::widgets::block::Title::from(Line::from(vec![
                             Span::styled("|", Style::default().fg(Color::Yellow)),
-                            Span::styled(String::from(char::from_u32(0x25b2).unwrap_or('>')), Style::default().fg(Color::Red)),
-                            Span::styled(String::from(char::from_u32(0x25bc).unwrap_or('>')), Style::default().fg(Color::Red)),
+                            Span::styled(
+                                String::from(char::from_u32(0x25b2).unwrap_or('>')),
+                                Style::default().fg(Color::Red),
+                            ),
+                            Span::styled(
+                                String::from(char::from_u32(0x25bc).unwrap_or('>')),
+                                Style::default().fg(Color::Red),
+                            ),
                             Span::styled("select|", Style::default().fg(Color::Yellow)),
                         ]))
                         .position(ratatui::widgets::block::Position::Bottom)
@@ -682,8 +691,10 @@ impl PacketDump {
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                     .borders(Borders::ALL), // .padding(Padding::new(1, 0, 2, 0)),
             )
-            .highlight_symbol(Span::styled(String::from(char::from_u32(0x25b6).unwrap_or('>')), Style::default().fg(Color::Red)))
-            // .highlight_style(Style::default().fg(Color::Red))
+            .highlight_symbol(Span::styled(
+                String::from(char::from_u32(0x25b6).unwrap_or('>')),
+                Style::default().fg(Color::Red),
+            ))
             .column_spacing(1);
         table
     }

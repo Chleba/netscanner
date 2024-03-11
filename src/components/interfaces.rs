@@ -1,5 +1,5 @@
 use ipnetwork::IpNetwork;
-use pnet::datalink::{self, NetworkInterface};
+use pnet::{datalink::{self, NetworkInterface}, util::MacAddr};
 use std::net::IpAddr;
 use std::time::Instant;
 
@@ -100,7 +100,7 @@ impl Interfaces {
                 active = String::from("*");
             }
             let name = w.name.clone();
-            let mac = w.mac.unwrap().to_string();
+            let mac = w.mac.unwrap_or(MacAddr::default()).to_string();
             let ipv4: Vec<Line> = w
                 .ips
                 .iter()
