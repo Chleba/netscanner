@@ -13,6 +13,10 @@ Network scanning tool with features like:
 ```
 paru -S netscanner
 ```
+or
+```
+yay -S netscanner-bin
+```
 
 ## Install via Cargo
 ```
