@@ -1,5 +1,6 @@
 use chrono::{DateTime, Local};
 use color_eyre::eyre::Result;
+use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::{KeyCode, KeyEvent};
 use crossterm::style::Stylize;
 use ipnetwork::Ipv4Network;
@@ -609,7 +610,7 @@ impl PacketDump {
                     }
                 }
                 let line = Line::from(spans);
-                Row::new(vec![Cell::from(t), Cell::from(line)])
+                Row::new(vec![Cell::from(Span::styled(t, Style::default().fg(Color::Cyan))), Cell::from(line)])
             })
             .collect();
         rows
@@ -647,9 +648,12 @@ impl PacketDump {
             .block(
                 Block::new()
                     .title(
-                        ratatui::widgets::block::Title::from("|Packets|")
-                            .position(ratatui::widgets::block::Position::Top)
-                            .alignment(Alignment::Right),
+                        ratatui::widgets::block::Title::from(Span::styled(
+                            "|Packets|",
+                            Style::default().fg(Color::Yellow),
+                        ))
+                        .position(ratatui::widgets::block::Position::Top)
+                        .alignment(Alignment::Right),
                     )
                     .title(
                         ratatui::widgets::block::Title::from(Line::from(type_titles))
@@ -659,8 +663,8 @@ impl PacketDump {
                     .title(
                         ratatui::widgets::block::Title::from(Line::from(vec![
                             Span::styled("|", Style::default().fg(Color::Yellow)),
-                            String::from(char::from_u32(0x25b2).unwrap_or('>')).into(),
-                            String::from(char::from_u32(0x25bc).unwrap_or('>')).into(),
+                            Span::styled(String::from(char::from_u32(0x25b2).unwrap_or('>')), Style::default().fg(Color::Red)),
+                            Span::styled(String::from(char::from_u32(0x25bc).unwrap_or('>')), Style::default().fg(Color::Red)),
                             Span::styled("select|", Style::default().fg(Color::Yellow)),
                         ]))
                         .position(ratatui::widgets::block::Position::Bottom)
@@ -678,7 +682,8 @@ impl PacketDump {
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                     .borders(Borders::ALL), // .padding(Padding::new(1, 0, 2, 0)),
             )
-            .highlight_symbol(String::from(char::from_u32(0x25b6).unwrap_or('>')))
+            .highlight_symbol(Span::styled(String::from(char::from_u32(0x25b6).unwrap_or('>')), Style::default().fg(Color::Red)))
+            // .highlight_style(Style::default().fg(Color::Red))
             .column_spacing(1);
         table
     }
