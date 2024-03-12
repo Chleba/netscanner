@@ -210,6 +210,8 @@ impl WifiScan {
                 self.wifis.push(w.clone());
             }
         }
+        // -- sort wifi networks by it's signal strength
+        self.wifis.sort_by(|a, b| b.signal.partial_cmp(&a.signal).unwrap());
     }
 
     fn app_tick(&mut self) -> Result<()> {
