@@ -34,6 +34,6 @@ sudo chmod u+s /home/user/.cargo/bin/netscanner
 ![netscanner screenshot](./netscanner1.png?raw=true)
 
 ## TODO
-- [] scanning open ports
-- [] modal window with packet data
-- [] ipv6 scanning & dumping
+- [ ] scanning open ports
+- [ ] modal window with packet data
+- [ ] ipv6 scanning & dumping
