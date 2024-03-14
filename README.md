@@ -14,6 +14,7 @@ Network scanning tool with features like:
 - [ ] scanning open ports
 - [ ] modal window with packet data
 - [ ] ipv6 scanning & dumping
+- [ ] start/pause packetdump
 
 ## *Notes*:
 - Must be run with root privileges. 
