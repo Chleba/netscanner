@@ -299,15 +299,18 @@ impl PacketDump {
         let (_, mut receiver) = match pnet::datalink::channel(&interface, Default::default()) {
             Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
             Ok(_) => {
-                tx.send(Action::Error("Unknown or unsopported channel type".into())).unwrap();
+                tx.send(Action::Error("Unknown or unsopported channel type".into()))
+                    .unwrap();
                 return;
             }
             Err(e) => {
-                tx.send(Action::Error(format!("Unable to create datalink channel: {e}"))).unwrap();
+                tx.send(Action::Error(format!(
+                    "Unable to create datalink channel: {e}"
+                )))
+                .unwrap();
                 return;
-            }
-            // Ok(_) => panic!("Unknown channel type"),
-            // Err(e) => panic!("Error happened {}", e),
+            } // Ok(_) => panic!("Unknown channel type"),
+              // Err(e) => panic!("Error happened {}", e),
         };
         loop {
             let mut buf: [u8; 1600] = [0u8; 1600];

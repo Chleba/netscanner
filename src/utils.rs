@@ -59,9 +59,9 @@ impl<T> MaxSizeVec<T> {
 
     pub fn push(&mut self, item: T) {
         if self.p_vec.len() >= self.max_len {
-            self.p_vec.remove(0);
+            self.p_vec.pop();
         }
-        self.p_vec.push(item);
+        self.p_vec.insert(0, item);
     }
 
     pub fn get_vec(&self) -> &Vec<T> {
