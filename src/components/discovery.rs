@@ -255,7 +255,13 @@ impl Discovery {
                 mac: String::from(""),
                 hostname: host,
                 vendor: String::from(""),
-            })
+            });
+
+            self.scanned_ips.sort_by(|a, b| {
+                let a_ip: Ipv4Addr = a.ip.parse::<Ipv4Addr>().unwrap();
+                let b_ip: Ipv4Addr = b.ip.parse::<Ipv4Addr>().unwrap();
+                return a_ip.partial_cmp(&b_ip).unwrap();
+            });
         }
 
         self.set_scrollbar_height();
