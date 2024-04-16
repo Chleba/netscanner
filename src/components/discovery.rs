@@ -14,6 +14,7 @@ use pnet::util::MacAddr;
 
 use ratatui::{prelude::*, widgets::*};
 use std::net::{IpAddr, Ipv4Addr};
+use std::string;
 use std::time::{Duration, Instant};
 use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence, ICMP};
 use throbber_widgets_tui::{Throbber, ThrobberState};
@@ -38,6 +39,7 @@ use tui_input::Input;
 
 static POOL_SIZE: usize = 32;
 static INPUT_SIZE: usize = 30;
+static DEFAULT_IP: &str = "192.168.1.0/24";
 
 #[derive(Clone)]
 pub struct ScannedIp {
@@ -79,7 +81,7 @@ impl Discovery {
             action_tx: None,
             scanned_ips: Vec::new(),
             ip_num: 0,
-            input: Input::default().with_value(String::from("192.168.1.0/24")),
+            input: Input::default().with_value(String::from(DEFAULT_IP)),
             cidr: None,
             cidr_error: false,
             is_scanning: false,
@@ -469,8 +471,7 @@ impl Discovery {
 impl Component for Discovery {
     fn init(&mut self, area: Rect) -> Result<()> {
         if self.cidr.is_none() {
-            let cidr_range = "192.168.1.0/24";
-            self.set_cidr(String::from(cidr_range), false);
+            self.set_cidr(String::from(DEFAULT_IP), false);
         }
         // -- init oui
         match Oui::default() {
@@ -547,7 +548,12 @@ impl Component for Discovery {
             let intf = interface.clone();
             // -- first time scan after setting of interface
             if self.active_interface.is_none() {
-                self.scan();
+
+                let a_ip = intf.ips[0].ip().to_string();
+                let ip: Vec<&str> = a_ip.split('.').collect();
+                let new_a_ip = format!("{}.{}.{}.0/24", ip[0], ip[1], ip[2]);
+                self.input = Input::default().with_value(new_a_ip);
+                self.set_cidr(self.input.value().to_string(), true);
             }
             self.active_interface = Some(intf);
         }
