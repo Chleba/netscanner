@@ -269,6 +269,17 @@ impl Discovery {
         self.set_scrollbar_height();
     }
 
+    fn set_active_subnet(&mut self, intf: &NetworkInterface) {
+        let a_ip = intf.ips[0].ip().to_string();
+        let ip: Vec<&str> = a_ip.split('.').collect();
+        if ip.len() > 1 {
+            let new_a_ip = format!("{}.{}.{}.0/24", ip[0], ip[1], ip[2]);
+            self.input = Input::default().with_value(new_a_ip);
+
+            self.set_cidr(self.input.value().to_string(), false);
+        }
+    }
+
     fn set_scrollbar_height(&mut self) {
         self.scrollbar_state = self
             .scrollbar_state
@@ -548,12 +559,8 @@ impl Component for Discovery {
             let intf = interface.clone();
             // -- first time scan after setting of interface
             if self.active_interface.is_none() {
-                let a_ip = intf.ips[0].ip().to_string();
-                let ip: Vec<&str> = a_ip.split('.').collect();
-                let new_a_ip = format!("{}.{}.{}.0/24", ip[0], ip[1], ip[2]);
-                self.input = Input::default().with_value(new_a_ip);
+                self.set_active_subnet(&intf);
 
-                self.set_cidr(self.input.value().to_string(), true);
             }
             self.active_interface = Some(intf);
         }
