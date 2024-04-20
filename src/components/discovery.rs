@@ -281,9 +281,11 @@ impl Discovery {
     }
 
     fn set_scrollbar_height(&mut self) {
-        self.scrollbar_state = self
-            .scrollbar_state
-            .content_length(self.scanned_ips.len() - 1);
+        let mut ip_len = 0;
+        if self.scanned_ips.len() > 0 {
+            ip_len = self.scanned_ips.len() - 1;
+        }
+        self.scrollbar_state = self.scrollbar_state.content_length(ip_len);
     }
 
     fn previous_in_table(&mut self) {
@@ -560,7 +562,6 @@ impl Component for Discovery {
             // -- first time scan after setting of interface
             if self.active_interface.is_none() {
                 self.set_active_subnet(&intf);
-
             }
             self.active_interface = Some(intf);
         }
@@ -643,7 +644,8 @@ impl Component for Discovery {
                 input_size,
                 3,
             );
-            let scroll = self.input.visual_scroll(INPUT_SIZE);
+            // -- INPUT_SIZE - 3 is offset for border + 1char for cursor
+            let scroll = self.input.visual_scroll(INPUT_SIZE - 3);
             let mut block = self.make_input(scroll);
             if self.is_scanning {
                 block = block.clone().add_modifier(Modifier::DIM);
