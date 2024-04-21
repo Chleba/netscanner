@@ -8,6 +8,7 @@
       "<i>": "InputMode",
       "<g>": "Graph",
       "<p>": "Packets",
+      "<d>": "Dump",
       "<f>": "Interface",
       "<s>": "Scan",
       "<up>": "Up",

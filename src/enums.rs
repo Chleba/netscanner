@@ -3,7 +3,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use pnet::{
     packet::{
         arp::{ArpOperation, ArpOperations},
-        icmp::IcmpType,
+        icmp::IcmpType, icmpv6::Icmpv6Type,
     },
     util::MacAddr,
 };
@@ -50,11 +50,20 @@ pub struct ICMPPacketInfo {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ICMP6PacketInfo {
+    pub interface_name: String,
+    pub source: IpAddr,
+    pub destination: IpAddr,
+    pub icmp_type: Icmpv6Type,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum PacketsInfoTypesEnum {
     Arp(ARPPacketInfo),
     Tcp(TCPPacketInfo),
     Udp(UDPPacketInfo),
     Icmp(ICMPPacketInfo),
+    Icmp6(ICMP6PacketInfo),
 }
 
 #[derive(Default, Clone, Copy, Display, FromRepr, EnumIter, EnumCount, PartialEq, Debug)]
@@ -70,6 +79,8 @@ pub enum PacketTypeEnum {
     Udp,
     #[strum(to_string = "ICMP")]
     Icmp,
+    #[strum(to_string = "ICMP6")]
+    Icmp6,
 }
 
 impl PacketTypeEnum {

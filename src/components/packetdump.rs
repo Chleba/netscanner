@@ -5,11 +5,13 @@ use crossterm::event::{KeyCode, KeyEvent};
 use crossterm::style::Stylize;
 use ipnetwork::Ipv4Network;
 use pnet::datalink::{Channel, NetworkInterface};
+use pnet::packet::icmpv6::{Icmpv6Type, Icmpv6Types};
 use pnet::packet::PrimitiveValues;
 use pnet::packet::{
     arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
     ethernet::{EtherTypes, EthernetPacket, MutableEthernetPacket},
     icmp::{echo_reply, echo_request, IcmpPacket, IcmpTypes},
+    icmpv6::Icmpv6Packet,
     ip::{IpNextHeaderProtocol, IpNextHeaderProtocols},
     ipv4::Ipv4Packet,
     tcp::TcpPacket,
@@ -34,8 +36,8 @@ use crate::{
     action::Action,
     config::{Config, KeyBindings},
     enums::{
-        ARPPacketInfo, ICMPPacketInfo, PacketTypeEnum, PacketsInfoTypesEnum, TCPPacketInfo,
-        UDPPacketInfo,
+        ARPPacketInfo, ICMP6PacketInfo, ICMPPacketInfo, PacketTypeEnum, PacketsInfoTypesEnum,
+        TCPPacketInfo, UDPPacketInfo,
     },
     utils::MaxSizeVec,
 };
@@ -58,10 +60,12 @@ pub struct PacketDump {
     table_state: TableState,
     scrollbar_state: ScrollbarState,
     packet_type: PacketTypeEnum,
+
     arp_packets: MaxSizeVec<(DateTime<Local>, PacketsInfoTypesEnum)>,
     udp_packets: MaxSizeVec<(DateTime<Local>, PacketsInfoTypesEnum)>,
     tcp_packets: MaxSizeVec<(DateTime<Local>, PacketsInfoTypesEnum)>,
     icmp_packets: MaxSizeVec<(DateTime<Local>, PacketsInfoTypesEnum)>,
+    icmp6_packets: MaxSizeVec<(DateTime<Local>, PacketsInfoTypesEnum)>,
     all_packets: MaxSizeVec<(DateTime<Local>, PacketsInfoTypesEnum)>,
 }
 
@@ -86,6 +90,7 @@ impl PacketDump {
             udp_packets: MaxSizeVec::new(1000),
             tcp_packets: MaxSizeVec::new(1000),
             icmp_packets: MaxSizeVec::new(1000),
+            icmp6_packets: MaxSizeVec::new(1000),
             all_packets: MaxSizeVec::new(1000),
         }
     }
@@ -175,6 +180,36 @@ impl PacketDump {
         }
     }
 
+    fn handle_icmpv6_packet(
+        interface_name: &str,
+        source: IpAddr,
+        destination: IpAddr,
+        packet: &[u8],
+        tx: UnboundedSender<Action>,
+    ) {
+        let icmpv6_packet = Icmpv6Packet::new(packet);
+        if let Some(icmpv6_packet) = icmpv6_packet {
+            tx.send(Action::PacketDump(
+                Local::now(),
+                PacketsInfoTypesEnum::Icmp6(ICMP6PacketInfo {
+                    interface_name: interface_name.to_string(),
+                    source,
+                    destination,
+                    icmp_type: icmpv6_packet.get_icmpv6_type(),
+                }),
+                PacketTypeEnum::Icmp6,
+            ))
+            .unwrap();
+            // println!(
+            //     "[{}]: ICMPv6 packet {} -> {} (type={:?})",
+            //     interface_name,
+            //     source,
+            //     destination,
+            //     icmpv6_packet.get_icmpv6_type()
+            // )
+        }
+    }
+
     fn handle_tcp_packet(
         interface_name: &str,
         source: IpAddr,
@@ -217,6 +252,9 @@ impl PacketDump {
             }
             IpNextHeaderProtocols::Icmp => {
                 Self::handle_icmp_packet(interface_name, source, destination, packet, tx)
+            }
+            IpNextHeaderProtocols::Icmpv6 => {
+                Self::handle_icmpv6_packet(interface_name, source, destination, packet, tx)
             }
             _ => {} // _ => println!(
                     //     "[{}]: Unknown {} packet: {} > {}; protocol: {:?} length: {}",
@@ -347,6 +385,17 @@ impl PacketDump {
                                     tx.clone(),
                                 );
                                 continue;
+                            } else if version == 6 {
+                                fake_ethernet_frame.set_destination(MacAddr(0, 0, 0, 0, 0, 0));
+                                fake_ethernet_frame.set_source(MacAddr(0, 0, 0, 0, 0, 0));
+                                fake_ethernet_frame.set_ethertype(EtherTypes::Ipv6);
+                                fake_ethernet_frame.set_payload(&packet[payload_offset..]);
+                                Self::handle_ethernet_frame(
+                                    &interface,
+                                    &fake_ethernet_frame.to_immutable(),
+                                    tx.clone(),
+                                );
+                                continue;
                             }
                         }
                     }
@@ -381,6 +430,7 @@ impl PacketDump {
             PacketTypeEnum::Tcp => self.tcp_packets.get_vec(),
             PacketTypeEnum::Udp => self.udp_packets.get_vec(),
             PacketTypeEnum::Icmp => self.icmp_packets.get_vec(),
+            PacketTypeEnum::Icmp6 => self.icmp6_packets.get_vec(),
             PacketTypeEnum::All => self.all_packets.get_vec(),
         }
     }
@@ -483,6 +533,54 @@ impl PacketDump {
                             format!("{:?}", icmp.id.to_string()),
                             Style::default().fg(Color::Green),
                         ));
+                        spans.push(Span::styled(")", Style::default().fg(Color::Yellow)));
+                    }
+                    // -----------------------------
+                    // -- ICMP6
+                    PacketsInfoTypesEnum::Icmp6(icmp) => {
+                        spans.push(Span::styled(
+                            format!("[{}] ", icmp.interface_name.clone()),
+                            Style::default().fg(Color::Green),
+                        ));
+                        spans.push(Span::styled(
+                            "ICMP6",
+                            Style::default().fg(Color::Red).bg(Color::Black),
+                        ));
+
+                        let mut icmp_type_str = "unknown";
+                        match icmp.icmp_type {
+                            Icmpv6Types::EchoRequest => {
+                                icmp_type_str = " echo request";
+                            }
+                            Icmpv6Types::EchoReply => {
+                                icmp_type_str = " echo reply";
+                            }
+                            Icmpv6Types::NeighborAdvert => {
+                                icmp_type_str = " neighbor advert";
+                            }
+                            Icmpv6Types::NeighborSolicit => {
+                                icmp_type_str = " neighbor solicit";
+                            }
+                            Icmpv6Types::Redirect => {
+                                icmp_type_str = " redirect";
+                            }
+                            _ => {}
+                        }
+                        spans.push(Span::styled(
+                            icmp_type_str,
+                            Style::default().fg(Color::Yellow),
+                        ));
+
+                        spans.push(Span::styled(
+                            format!("{}", icmp.source.to_string()),
+                            Style::default().fg(Color::Blue),
+                        ));
+                        spans.push(Span::styled(" -> ", Style::default().fg(Color::Yellow)));
+                        spans.push(Span::styled(
+                            format!("{}", icmp.destination.to_string()),
+                            Style::default().fg(Color::Blue),
+                        ));
+                        spans.push(Span::styled(", ", Style::default().fg(Color::Yellow)));
                         spans.push(Span::styled(")", Style::default().fg(Color::Yellow)));
                     }
                     // -----------------------------

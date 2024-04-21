@@ -45,7 +45,8 @@ impl Interfaces {
             if intf.is_up() && !intf.ips.is_empty() {
                 for ip in &intf.ips {
                     // -- set active interface that's not localhost
-                    if ip.is_ipv4() && ip.ip().to_string() != "127.0.0.1" {
+                    // if ip.is_ipv4() && ip.ip().to_string() != "127.0.0.1" {
+                    if ip.ip().to_string() != "127.0.0.1" {
                         self.active_interfaces.push(intf.clone());
                         break;
                     }
