@@ -24,6 +24,10 @@ use ratatui::{prelude::*, widgets::*};
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     thread::{self, JoinHandle},
     time::Duration,
 };
@@ -56,7 +60,7 @@ pub struct PacketDump {
     action_tx: Option<UnboundedSender<Action>>,
     loop_thread: Option<JoinHandle<()>>,
     should_quit: bool,
-    dump_paused: bool,
+    dump_paused: Arc<AtomicBool>,
     active_interface: Option<NetworkInterface>,
     show_packets: bool,
     table_state: TableState,
@@ -83,12 +87,13 @@ impl PacketDump {
             action_tx: None,
             loop_thread: None,
             should_quit: false,
-            dump_paused: false,
+            dump_paused: Arc::new(AtomicBool::new(false)),
             active_interface: None,
             show_packets: false,
             table_state: TableState::default().with_selected(0),
             scrollbar_state: ScrollbarState::new(0),
             packet_type: PacketTypeEnum::All,
+
             arp_packets: MaxSizeVec::new(1000),
             udp_packets: MaxSizeVec::new(1000),
             tcp_packets: MaxSizeVec::new(1000),
@@ -292,7 +297,11 @@ impl PacketDump {
         }
     }
 
-    fn handle_ipv6_packet(interface_name: &str, ethernet: &EthernetPacket, tx: UnboundedSender<Action>) {
+    fn handle_ipv6_packet(
+        interface_name: &str,
+        ethernet: &EthernetPacket,
+        tx: UnboundedSender<Action>,
+    ) {
         let header = Ipv6Packet::new(ethernet.payload());
         if let Some(header) = header {
             Self::handle_transport_protocol(
@@ -353,7 +362,7 @@ impl PacketDump {
         }
     }
 
-    fn t_logic(tx: UnboundedSender<Action>, interface: NetworkInterface) {
+    fn t_logic(tx: UnboundedSender<Action>, interface: NetworkInterface, paused: Arc<AtomicBool>) {
         let (_, mut receiver) = match pnet::datalink::channel(&interface, Default::default()) {
             Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
             Ok(_) => {
@@ -371,6 +380,10 @@ impl PacketDump {
               // Err(e) => panic!("Error happened {}", e),
         };
         loop {
+            if paused.load(Ordering::Relaxed) {
+                break;
+            }
+
             let mut buf: [u8; 1600] = [0u8; 1600];
             let mut fake_ethernet_frame = MutableEthernetPacket::new(&mut buf[..]).unwrap();
 
@@ -434,12 +447,11 @@ impl PacketDump {
         if self.loop_thread.is_none() {
             let tx = self.action_tx.clone().unwrap();
             let interface = self.active_interface.clone().unwrap();
+            let paused = self.dump_paused.clone();
             let t_handle = thread::spawn(move || {
-                Self::t_logic(tx, interface);
+                Self::t_logic(tx, interface, paused);
             });
             self.loop_thread = Some(t_handle);
-        } else {
-            // self.loop_thread.ki
         }
     }
 
@@ -742,6 +754,22 @@ impl PacketDump {
         rows
     }
 
+    fn make_state_toast(&mut self) -> Paragraph<'static> {
+        let mut text = Span::styled("..running..", Style::default().bg(Color::Green).fg(Color::Black));
+        if self.dump_paused.load(Ordering::Relaxed) {
+            text = Span::styled("..stopped..", Style::default().bg(Color::Red).fg(Color::White));
+        }
+        Paragraph::new(text).block(
+            Block::default()
+                .borders(Borders::ALL)
+                // .title("|WiFi Interface|")
+                .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
+                // .border_type(BorderType::Rounded)
+                // .title_style(Style::default().fg(Color::Yellow))
+                // .title_alignment(Alignment::Right),
+        )
+    }
+
     fn make_table<'a>(rows: Vec<Row<'a>>, packet_type: PacketTypeEnum) -> Table<'a> {
         let header = Row::new(vec!["time", "packet log"])
             .style(Style::default().fg(Color::Yellow))
@@ -875,6 +903,16 @@ impl Component for PacketDump {
         if let Action::PacketToggle = action {
             self.show_packets = !self.show_packets;
         }
+        // -- dumping toggle
+        if let Action::DumpToggle = action {
+            if self.dump_paused.load(Ordering::Relaxed) {
+                self.dump_paused.store(false, Ordering::Relaxed);
+                self.start_loop();
+            } else {
+                self.dump_paused.store(true, Ordering::Relaxed);
+                self.loop_thread = None;
+            }
+        }
         // -- packet recieved
         if let Action::PacketDump(time, packet, packet_type) = action {
             match packet_type {
@@ -904,6 +942,16 @@ impl Component for PacketDump {
             let rows = self.get_table_rows_by_packet_type(self.packet_type);
             let table = Self::make_table(rows, self.packet_type);
             f.render_stateful_widget(table, table_rect, &mut self.table_state.clone());
+
+            // -- STATE TOAST
+            let toast = self.make_state_toast();
+            let toast_react = Rect::new(
+                table_rect.width - 13,
+                table_rect.y + 1,
+                12,
+                3,
+            );
+            f.render_widget(toast, toast_react);
 
             // -- SCROLLBAR
             let scrollbar = Self::make_scrollbar();
