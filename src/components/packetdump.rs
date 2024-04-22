@@ -762,11 +762,20 @@ impl PacketDump {
         Paragraph::new(text).block(
             Block::default()
                 .borders(Borders::ALL)
-                // .title("|WiFi Interface|")
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                // .border_type(BorderType::Rounded)
-                // .title_style(Style::default().fg(Color::Yellow))
-                // .title_alignment(Alignment::Right),
+                .title(
+                        ratatui::widgets::block::Title::from(Line::from(vec![
+                            Span::raw("|"),
+                            Span::styled(
+                                "d",
+                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                            ),
+                            Span::styled("ump", Style::default().fg(Color::Yellow)),
+                            Span::raw("|"),
+                        ]))
+                        .alignment(Alignment::Right)
+                        .position(ratatui::widgets::block::Position::Bottom),
+                    )
         )
     }
 
@@ -946,9 +955,9 @@ impl Component for PacketDump {
             // -- STATE TOAST
             let toast = self.make_state_toast();
             let toast_react = Rect::new(
-                table_rect.width - 13,
+                table_rect.width - 14,
                 table_rect.y + 1,
-                12,
+                13,
                 3,
             );
             f.render_widget(toast, toast_react);
