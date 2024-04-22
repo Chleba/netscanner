@@ -1,6 +1,5 @@
 # netscanner
 
-
 Network scanning tool with features like:
 
 - [x] List HW Interfaces
