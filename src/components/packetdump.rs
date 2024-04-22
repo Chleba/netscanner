@@ -208,13 +208,6 @@ impl PacketDump {
                 PacketTypeEnum::Icmp6,
             ))
             .unwrap();
-            // println!(
-            //     "[{}]: ICMPv6 packet {} -> {} (type={:?})",
-            //     interface_name,
-            //     source,
-            //     destination,
-            //     icmpv6_packet.get_icmpv6_type()
-            // )
         }
     }
 
@@ -581,22 +574,22 @@ impl PacketDump {
                             Style::default().fg(Color::Red).bg(Color::Black),
                         ));
 
-                        let mut icmp_type_str = "unknown";
+                        let mut icmp_type_str = " unknown ";
                         match icmp.icmp_type {
                             Icmpv6Types::EchoRequest => {
-                                icmp_type_str = " echo request";
+                                icmp_type_str = " echo request ";
                             }
                             Icmpv6Types::EchoReply => {
-                                icmp_type_str = " echo reply";
+                                icmp_type_str = " echo reply ";
                             }
                             Icmpv6Types::NeighborAdvert => {
-                                icmp_type_str = " neighbor advert";
+                                icmp_type_str = " neighbor advert ";
                             }
                             Icmpv6Types::NeighborSolicit => {
-                                icmp_type_str = " neighbor solicit";
+                                icmp_type_str = " neighbor solicit ";
                             }
                             Icmpv6Types::Redirect => {
-                                icmp_type_str = " redirect";
+                                icmp_type_str = " redirect ";
                             }
                             _ => {}
                         }
@@ -929,6 +922,7 @@ impl Component for PacketDump {
                 PacketTypeEnum::Arp => self.arp_packets.push((time, packet.clone())),
                 PacketTypeEnum::Udp => self.udp_packets.push((time, packet.clone())),
                 PacketTypeEnum::Icmp => self.icmp_packets.push((time, packet.clone())),
+                PacketTypeEnum::Icmp6 => self.icmp6_packets.push((time, packet.clone())),
                 _ => {}
             }
             self.all_packets.push((time, packet.clone()));
