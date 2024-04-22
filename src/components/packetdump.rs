@@ -14,6 +14,7 @@ use pnet::packet::{
     icmpv6::Icmpv6Packet,
     ip::{IpNextHeaderProtocol, IpNextHeaderProtocols},
     ipv4::Ipv4Packet,
+    ipv6::Ipv6Packet,
     tcp::TcpPacket,
     udp::UdpPacket,
     MutablePacket, Packet,
@@ -55,6 +56,7 @@ pub struct PacketDump {
     action_tx: Option<UnboundedSender<Action>>,
     loop_thread: Option<JoinHandle<()>>,
     should_quit: bool,
+    dump_paused: bool,
     active_interface: Option<NetworkInterface>,
     show_packets: bool,
     table_state: TableState,
@@ -81,6 +83,7 @@ impl PacketDump {
             action_tx: None,
             loop_thread: None,
             should_quit: false,
+            dump_paused: false,
             active_interface: None,
             show_packets: false,
             table_state: TableState::default().with_selected(0),
@@ -289,6 +292,22 @@ impl PacketDump {
         }
     }
 
+    fn handle_ipv6_packet(interface_name: &str, ethernet: &EthernetPacket, tx: UnboundedSender<Action>) {
+        let header = Ipv6Packet::new(ethernet.payload());
+        if let Some(header) = header {
+            Self::handle_transport_protocol(
+                interface_name,
+                IpAddr::V6(header.get_source()),
+                IpAddr::V6(header.get_destination()),
+                header.get_next_header(),
+                header.payload(),
+                tx,
+            );
+        } else {
+            println!("[{}]: Malformed IPv6 Packet", interface_name);
+        }
+    }
+
     fn handle_arp_packet(
         interface_name: &str,
         ethernet: &EthernetPacket,
@@ -328,6 +347,7 @@ impl PacketDump {
         let interface_name = &interface.name[..];
         match ethernet.get_ethertype() {
             EtherTypes::Ipv4 => Self::handle_ipv4_packet(interface_name, ethernet, tx),
+            EtherTypes::Ipv6 => Self::handle_ipv6_packet(interface_name, ethernet, tx),
             EtherTypes::Arp => Self::handle_arp_packet(interface_name, ethernet, tx),
             _ => {}
         }
@@ -418,6 +438,8 @@ impl PacketDump {
                 Self::t_logic(tx, interface);
             });
             self.loop_thread = Some(t_handle);
+        } else {
+            // self.loop_thread.ki
         }
     }
 
