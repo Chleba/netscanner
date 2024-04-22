@@ -292,7 +292,11 @@ impl Discovery {
         let index = match self.table_state.selected() {
             Some(index) => {
                 if index == 0 {
-                    self.scanned_ips.len() - 1
+                    if self.scanned_ips.len() > 0 {
+                        self.scanned_ips.len() - 1
+                    } else {
+                        0
+                    }
                 } else {
                     index - 1
                 }
@@ -306,7 +310,11 @@ impl Discovery {
     fn next_in_table(&mut self) {
         let index = match self.table_state.selected() {
             Some(index) => {
-                if index >= self.scanned_ips.len() - 1 {
+                let mut s_ip_len = 0;
+                if self.scanned_ips.len() > 0 {
+                    s_ip_len = self.scanned_ips.len() - 1;
+                }
+                if index >= s_ip_len {
                     0
                 } else {
                     index + 1
