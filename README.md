@@ -24,9 +24,9 @@ sudo chown root:user /home/user/.cargo/bin/netscanner
 sudo chmod u+s /home/user/.cargo/bin/netscanner
 ```
 
-## Install `Arch AUR`
+## Install on Arch Linux
 ```
-paru -S netscanner
+pacman -S netscanner
 ```
 
 ## Install `Cargo`
