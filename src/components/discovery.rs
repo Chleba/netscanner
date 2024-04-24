@@ -560,7 +560,7 @@ impl Component for Discovery {
         }
         // -- Scan CIDR
         if let Action::ScanCidr = action {
-            if self.active_interface.is_some() && !self.is_scanning {
+            if self.active_interface.is_some() && !self.is_scanning && !self.show_packets {
                 self.scan();
             }
         }
