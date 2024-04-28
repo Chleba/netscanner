@@ -372,11 +372,8 @@ impl PacketDump {
             } // Ok(_) => panic!("Unknown channel type"),
               // Err(e) => panic!("Error happened {}", e),
         };
+        // while !paused.load(Ordering::Relaxed) {
         loop {
-            if paused.load(Ordering::Relaxed) {
-                break;
-            }
-
             let mut buf: [u8; 1600] = [0u8; 1600];
             let mut fake_ethernet_frame = MutableEthernetPacket::new(&mut buf[..]).unwrap();
 
@@ -748,27 +745,33 @@ impl PacketDump {
     }
 
     fn make_state_toast(&mut self) -> Paragraph<'static> {
-        let mut text = Span::styled("..running..", Style::default().bg(Color::Green).fg(Color::Black));
+        let mut text = Span::styled(
+            "..running..",
+            Style::default().bg(Color::Green).fg(Color::Black),
+        );
         if self.dump_paused.load(Ordering::Relaxed) {
-            text = Span::styled("..stopped..", Style::default().bg(Color::Red).fg(Color::White));
+            text = Span::styled(
+                "..stopped..",
+                Style::default().bg(Color::Red).fg(Color::White),
+            );
         }
         Paragraph::new(text).block(
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                 .title(
-                        ratatui::widgets::block::Title::from(Line::from(vec![
-                            Span::raw("|"),
-                            Span::styled(
-                                "d",
-                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                            ),
-                            Span::styled("ump", Style::default().fg(Color::Yellow)),
-                            Span::raw("|"),
-                        ]))
-                        .alignment(Alignment::Right)
-                        .position(ratatui::widgets::block::Position::Bottom),
-                    )
+                    ratatui::widgets::block::Title::from(Line::from(vec![
+                        Span::raw("|"),
+                        Span::styled(
+                            "d",
+                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                        ),
+                        Span::styled("ump", Style::default().fg(Color::Yellow)),
+                        Span::raw("|"),
+                    ]))
+                    .alignment(Alignment::Right)
+                    .position(ratatui::widgets::block::Position::Bottom),
+                ),
         )
     }
 
@@ -916,16 +919,18 @@ impl Component for PacketDump {
             }
         }
         // -- packet recieved
-        if let Action::PacketDump(time, packet, packet_type) = action {
-            match packet_type {
-                PacketTypeEnum::Tcp => self.tcp_packets.push((time, packet.clone())),
-                PacketTypeEnum::Arp => self.arp_packets.push((time, packet.clone())),
-                PacketTypeEnum::Udp => self.udp_packets.push((time, packet.clone())),
-                PacketTypeEnum::Icmp => self.icmp_packets.push((time, packet.clone())),
-                PacketTypeEnum::Icmp6 => self.icmp6_packets.push((time, packet.clone())),
-                _ => {}
+        if !self.dump_paused.load(Ordering::Relaxed) {
+            if let Action::PacketDump(time, packet, packet_type) = action {
+                match packet_type {
+                    PacketTypeEnum::Tcp => self.tcp_packets.push((time, packet.clone())),
+                    PacketTypeEnum::Arp => self.arp_packets.push((time, packet.clone())),
+                    PacketTypeEnum::Udp => self.udp_packets.push((time, packet.clone())),
+                    PacketTypeEnum::Icmp => self.icmp_packets.push((time, packet.clone())),
+                    PacketTypeEnum::Icmp6 => self.icmp6_packets.push((time, packet.clone())),
+                    _ => {}
+                }
+                self.all_packets.push((time, packet.clone()));
             }
-            self.all_packets.push((time, packet.clone()));
         }
 
         Ok(None)
@@ -948,12 +953,7 @@ impl Component for PacketDump {
 
             // -- STATE TOAST
             let toast = self.make_state_toast();
-            let toast_react = Rect::new(
-                table_rect.width - 14,
-                table_rect.y + 1,
-                13,
-                3,
-            );
+            let toast_react = Rect::new(table_rect.width - 14, table_rect.y + 1, 13, 3);
             f.render_widget(toast, toast_react);
 
             // -- SCROLLBAR

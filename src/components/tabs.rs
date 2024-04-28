@@ -13,12 +13,12 @@ use crate::{
 };
 
 #[derive(Default)]
-pub struct Home {
+pub struct Tabs {
     command_tx: Option<UnboundedSender<Action>>,
     config: Config,
 }
 
-impl Home {
+impl Tabs {
     pub fn new() -> Self {
         Self {
             command_tx: None,
@@ -27,7 +27,7 @@ impl Home {
     }
 }
 
-impl Component for Home {
+impl Component for Tabs {
     fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
         self.command_tx = Some(tx);
         Ok(())

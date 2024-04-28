@@ -7,7 +7,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use crate::{
     action::Action,
     components::{
-        discovery::Discovery, home::Home, interfaces::Interfaces, packetdump::PacketDump,
+        discovery::Discovery, title::Title, interfaces::Interfaces, packetdump::PacketDump,
         wifi_chart::WifiChart, wifi_interface::WifiInterface, wifi_scan::WifiScan, Component,
     },
     config::Config,
@@ -31,7 +31,7 @@ pub struct App {
 
 impl App {
     pub fn new(tick_rate: f64, frame_rate: f64) -> Result<Self> {
-        let home = Home::new();
+        let title = Title::new();
         let interfaces = Interfaces::default();
         let wifiscan = WifiScan::default();
         let wifi_interface = WifiInterface::default();
@@ -47,7 +47,7 @@ impl App {
             tick_rate: 10.0,
             frame_rate,
             components: vec![
-                Box::new(home),
+                Box::new(title),
                 Box::new(interfaces),
                 Box::new(wifiscan),
                 Box::new(wifi_interface),

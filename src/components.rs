@@ -10,7 +10,7 @@ use crate::{
 };
 
 pub mod discovery;
-pub mod home;
+pub mod title;
 pub mod interfaces;
 pub mod packetdump;
 pub mod wifi_chart;
