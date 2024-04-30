@@ -72,6 +72,9 @@ const COLORS_NAMES: [Color; 14] = [
     Color::White,
 ];
 
+static MIN_DBM: f32 = -100.0;
+static MAX_DBM: f32 = -1.0;
+
 impl WifiScan {
     pub fn new() -> Self {
         Self {
@@ -89,10 +92,8 @@ impl WifiScan {
             .bottom_margin(1);
         let mut rows = Vec::new();
         for w in &self.wifis {
-            let max_dbm: f32 = -30.0;
-            let min_dbm: f32 = -90.0;
-            let s_clamp = w.signal.max(min_dbm).min(max_dbm);
-            let percent = ((s_clamp - min_dbm) / (max_dbm - min_dbm)).clamp(0.0, 1.0);
+            let s_clamp = w.signal.max(MIN_DBM).min(MAX_DBM);
+            let percent = ((s_clamp - MIN_DBM) / (MAX_DBM - MIN_DBM)).clamp(0.0, 1.0);
 
             let p = (percent * 10.0) as usize;
             let gauge: String = std::iter::repeat(char::from_u32(0x25a8).unwrap_or('#'))
