@@ -88,8 +88,8 @@ impl WifiScan {
 
     fn make_table(&mut self) -> Table {
         let header = Row::new(vec!["time", "ssid", "ch", "mac", "signal"])
-            .style(Style::default().fg(Color::Yellow))
-            .bottom_margin(1);
+            .style(Style::default().fg(Color::Yellow));
+            // .bottom_margin(1);
         let mut rows = Vec::new();
         for w in &self.wifis {
             let s_clamp = w.signal.max(MIN_DBM).min(MAX_DBM);
@@ -152,7 +152,7 @@ impl WifiScan {
                 )
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                 .borders(Borders::ALL)
-                .padding(Padding::new(1, 0, 1, 0)),
+                .padding(Padding::new(0, 0, 1, 0)),
         )
         .column_spacing(1);
         table

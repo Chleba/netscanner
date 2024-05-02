@@ -93,7 +93,8 @@ impl Interfaces {
         let active_interface = &self.active_interfaces[self.active_interface_index];
         let header = Row::new(vec!["", "name", "mac", "ipv4", "ipv6"])
             .style(Style::default().fg(Color::Yellow))
-            .bottom_margin(1);
+            .height(1);
+            // .bottom_margin(1);
         let mut rows = Vec::new();
         for w in &self.interfaces {
             let mut active = String::from("");
@@ -158,7 +159,6 @@ impl Interfaces {
         .header(header)
         .block(
             Block::default()
-                // .title("|Interfaces|")
                 .title(Line::from(vec![
                     Span::styled("|Inter", Style::default().fg(Color::Yellow)),
                     Span::styled("f", Style::default().fg(Color::Red)),
@@ -168,7 +168,7 @@ impl Interfaces {
                 .title_style(Style::default().fg(Color::Yellow))
                 .title_alignment(Alignment::Right)
                 .borders(Borders::ALL)
-                .padding(Padding::new(1, 0, 1, 0)),
+                .padding(Padding::new(0, 0, 1, 0)),
         )
         .column_spacing(1);
         table

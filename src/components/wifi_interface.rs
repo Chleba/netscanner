@@ -88,9 +88,21 @@ impl WifiInterface {
                 .unwrap_or(&"")
                 .parse::<String>()
                 .unwrap_or(String::from("")),
-            ssid: hash.get("ssid").unwrap_or(&"").parse::<String>().unwrap_or(String::from("")),
-            ifindex: hash.get("ifindex").unwrap_or(&"").parse::<u8>().unwrap_or(0),
-            mac: hash.get("addr").unwrap_or(&"").parse::<String>().unwrap_or(String::from("")),
+            ssid: hash
+                .get("ssid")
+                .unwrap_or(&"")
+                .parse::<String>()
+                .unwrap_or(String::from("")),
+            ifindex: hash
+                .get("ifindex")
+                .unwrap_or(&"")
+                .parse::<u8>()
+                .unwrap_or(0),
+            mac: hash
+                .get("addr")
+                .unwrap_or(&"")
+                .parse::<String>()
+                .unwrap_or(String::from("")),
             channel: hash
                 .get("channel")
                 .unwrap_or(&"")
@@ -155,11 +167,11 @@ impl WifiInterface {
 
             let list = List::new(items).block(
                 Block::default()
-                    .borders(Borders::ALL)
+                    .borders(Borders::TOP)
                     .title("|WiFi Interface|")
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                    // .border_type(BorderType::Rounded)
                     .title_style(Style::default().fg(Color::Yellow))
+                    .padding(Padding::new(2, 0, 0, 0))
                     .title_alignment(Alignment::Right),
             );
 
@@ -258,7 +270,7 @@ impl Component for WifiInterface {
             .split(area);
         let rect = Rect::new(
             (area.width / 2) + 1,
-            (layout[0].y + layout[0].height) - 4,
+            (layout[0].y + layout[0].height) - 3,
             (area.width / 2) - 2,
             4,
         );

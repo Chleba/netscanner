@@ -778,11 +778,15 @@ impl PacketDump {
     fn make_table<'a>(rows: Vec<Row<'a>>, packet_type: PacketTypeEnum) -> Table<'a> {
         let header = Row::new(vec!["time", "packet log"])
             .style(Style::default().fg(Color::Yellow))
+            .top_margin(1)
             .bottom_margin(1);
 
         let mut type_titles = vec![
             Span::styled("|", Style::default().fg(Color::Yellow)),
-            String::from(char::from_u32(0x25c0).unwrap_or('<')).into(),
+            Span::styled(
+                String::from(char::from_u32(0x25c0).unwrap_or('<')),
+                Style::default().fg(Color::Red),
+            ),
         ];
         let mut enum_titles = PacketTypeEnum::iter()
             .enumerate()
@@ -799,7 +803,10 @@ impl PacketDump {
             })
             .collect::<Vec<Span>>();
         type_titles.append(&mut enum_titles);
-        type_titles.push(String::from(char::from_u32(0x25b6).unwrap_or('>')).into());
+        type_titles.push(Span::styled(
+            String::from(char::from_u32(0x25b6).unwrap_or('>')),
+            Style::default().fg(Color::Red),
+        ));
         type_titles.push(Span::styled("|", Style::default().fg(Color::Yellow)));
 
         let table = Table::new(rows, [Constraint::Min(10), Constraint::Percentage(100)])

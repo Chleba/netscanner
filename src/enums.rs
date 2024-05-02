@@ -67,6 +67,17 @@ pub enum PacketsInfoTypesEnum {
 }
 
 #[derive(Default, Clone, Copy, Display, FromRepr, EnumIter, EnumCount, PartialEq, Debug)]
+pub enum TabsEnum {
+    #[default]
+    #[strum(to_string = "Discovery")]
+    Discovery,
+    #[strum(to_string = "Packets")]
+    Packets,
+    #[strum(to_string = "Ports")]
+    Ports,
+}
+
+#[derive(Default, Clone, Copy, Display, FromRepr, EnumIter, EnumCount, PartialEq, Debug)]
 pub enum PacketTypeEnum {
     #[default]
     #[strum(to_string = "All")]
