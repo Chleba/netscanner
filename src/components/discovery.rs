@@ -12,12 +12,12 @@ use pnet::packet::{
 };
 use pnet::util::MacAddr;
 
+use core::str;
 use ratatui::{prelude::*, widgets::*};
 use std::net::{IpAddr, Ipv4Addr};
 use std::string;
 use std::time::{Duration, Instant};
 use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence, ICMP};
-use throbber_widgets_tui::{Throbber, ThrobberState};
 use tokio::{
     sync::mpsc::{self, UnboundedSender},
     task::{self, JoinHandle},
@@ -40,6 +40,7 @@ use tui_input::Input;
 static POOL_SIZE: usize = 32;
 static INPUT_SIZE: usize = 30;
 static DEFAULT_IP: &str = "192.168.1.0/24";
+const SPINNER_SYMBOLS: [&str; 6] = ["⠷", "⠯", "⠟", "⠻", "⠽", "⠾"];
 
 #[derive(Clone)]
 pub struct ScannedIp {
@@ -64,7 +65,7 @@ pub struct Discovery {
     table_state: TableState,
     scrollbar_state: ScrollbarState,
     show_packets: bool,
-    throbber_state: ThrobberState,
+    spinner_index: usize,
 }
 
 impl Default for Discovery {
@@ -90,7 +91,7 @@ impl Discovery {
             table_state: TableState::default().with_selected(0),
             scrollbar_state: ScrollbarState::new(0),
             show_packets: false,
-            throbber_state: ThrobberState::default(),
+            spinner_index: 0,
         }
     }
 
@@ -481,11 +482,12 @@ impl Discovery {
         error
     }
 
-    fn make_throbber() -> Throbber<'static> {
-        Throbber::default()
-            .label("scanning..")
-            .style(Style::default().fg(Color::Green))
-            .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
+    fn make_spinner(&self) -> Span {
+        let spinner = SPINNER_SYMBOLS[self.spinner_index];
+        Span::styled(
+            format!("{spinner}scanning.."),
+            Style::default().fg(Color::Yellow),
+        )
     }
 }
 
@@ -529,7 +531,9 @@ impl Component for Discovery {
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         if self.is_scanning {
             if let Action::Tick = action {
-                self.throbber_state.calc_next();
+                let mut s_index = self.spinner_index + 1;
+                s_index %= SPINNER_SYMBOLS.len() - 1;
+                self.spinner_index = s_index;
             }
         }
 
@@ -674,10 +678,9 @@ impl Component for Discovery {
 
             // -- THROBBER
             if self.is_scanning {
-                let throbber = Self::make_throbber();
+                let throbber = self.make_spinner();
                 let throbber_rect = Rect::new(input_rect.x + 1, input_rect.y, 12, 1);
-                // let throbber_rect = Rect::new(table_rect.x + table_rect.width - 30, table_rect.y, 12, 1);
-                f.render_stateful_widget(throbber, throbber_rect, &mut self.throbber_state);
+                f.render_widget(throbber, throbber_rect);
             }
         }
 
