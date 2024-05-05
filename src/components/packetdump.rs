@@ -44,6 +44,7 @@ use crate::{
         ARPPacketInfo, ICMP6PacketInfo, ICMPPacketInfo, PacketTypeEnum, PacketsInfoTypesEnum,
         TCPPacketInfo, UDPPacketInfo,
     },
+    layout::get_vertical_layout,
     utils::MaxSizeVec,
 };
 use strum::{EnumCount, IntoEnumIterator};
@@ -945,11 +946,8 @@ impl Component for PacketDump {
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         if self.show_packets {
-            let layout = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-                .split(area);
-            let mut table_rect = layout[1];
+            let layout = get_vertical_layout(area);
+            let mut table_rect = layout.bottom;
             table_rect.y += 1;
             table_rect.height -= 1;
 

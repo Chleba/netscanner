@@ -14,7 +14,8 @@
       "<up>": "Up",
       "<down>": "Down",
       "<left>": "Left",
-      "<right>": "Right"
+      "<right>": "Right",
+      "<Tab>": "Tab",
     },
     "Input": {
       "<Esc>": "NormalMode"

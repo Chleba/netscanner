@@ -11,6 +11,7 @@ pub mod mode;
 pub mod tui;
 pub mod utils;
 pub mod enums;
+pub mod layout;
 
 use clap::Parser;
 use cli::Cli;

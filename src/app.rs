@@ -8,7 +8,8 @@ use crate::{
     action::Action,
     components::{
         discovery::Discovery, title::Title, interfaces::Interfaces, packetdump::PacketDump,
-        wifi_chart::WifiChart, wifi_interface::WifiInterface, wifi_scan::WifiScan, Component,
+        tabs::Tabs, wifi_chart::WifiChart, wifi_interface::WifiInterface, wifi_scan::WifiScan, 
+        Component,
     },
     config::Config,
     mode::Mode,
@@ -36,6 +37,7 @@ impl App {
         let wifiscan = WifiScan::default();
         let wifi_interface = WifiInterface::default();
         let wifi_chart = WifiChart::default();
+        let tabs = Tabs::default(); 
         let discovery = Discovery::default();
         let packetdump = PacketDump::default();
         let config = Config::new()?;
@@ -52,6 +54,7 @@ impl App {
                 Box::new(wifiscan),
                 Box::new(wifi_interface),
                 Box::new(wifi_chart),
+                Box::new(tabs),
                 Box::new(discovery),
                 Box::new(packetdump),
             ],

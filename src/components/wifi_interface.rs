@@ -7,7 +7,7 @@ use std::time::Instant;
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::Component;
-use crate::{action::Action, mode::Mode, tui::Frame};
+use crate::{action::Action, layout::get_vertical_layout, mode::Mode, tui::Frame};
 
 #[derive(Debug, PartialEq)]
 struct WifiConn {
@@ -264,13 +264,21 @@ impl Component for WifiInterface {
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-            .split(area);
+        // let layout = Layout::default()
+        //     .direction(Direction::Vertical)
+        //     .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        //     .split(area);
+        // let rect = Rect::new(
+        //     (area.width / 2) + 1,
+        //     (layout[0].y + layout[0].height) - 3,
+        //     (area.width / 2) - 2,
+        //     4,
+        // );
+
+        let layout = get_vertical_layout(area);
         let rect = Rect::new(
             (area.width / 2) + 1,
-            (layout[0].y + layout[0].height) - 3,
+            (layout.top.y + layout.top.height) - 3,
             (area.width / 2) - 2,
             4,
         );

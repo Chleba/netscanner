@@ -1,5 +1,8 @@
 use ipnetwork::IpNetwork;
-use pnet::{datalink::{self, NetworkInterface}, util::MacAddr};
+use pnet::{
+    datalink::{self, NetworkInterface},
+    util::MacAddr,
+};
 use std::net::IpAddr;
 use std::time::Instant;
 
@@ -8,7 +11,12 @@ use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::Component;
-use crate::{action::Action, mode::Mode, tui::Frame};
+use crate::{
+    action::Action,
+    layout::{get_horizontal_layout, get_vertical_layout},
+    mode::Mode,
+    tui::Frame,
+};
 
 pub struct Interfaces {
     action_tx: Option<UnboundedSender<Action>>,
@@ -71,7 +79,7 @@ impl Interfaces {
     }
 
     fn send_active_interface(&mut self) {
-        if self.active_interfaces.len() > 0 {
+        if !self.active_interfaces.is_empty() {
             let tx = self.action_tx.clone().unwrap();
             let active_interface = &self.active_interfaces[self.active_interface_index];
             tx.send(Action::ActiveInterface(active_interface.clone()))
@@ -94,7 +102,6 @@ impl Interfaces {
         let header = Row::new(vec!["", "name", "mac", "ipv4", "ipv6"])
             .style(Style::default().fg(Color::Yellow))
             .height(1);
-            // .bottom_margin(1);
         let mut rows = Vec::new();
         for w in &self.interfaces {
             let mut active = String::from("");
@@ -162,7 +169,7 @@ impl Interfaces {
                 .title(Line::from(vec![
                     Span::styled("|Inter", Style::default().fg(Color::Yellow)),
                     Span::styled("f", Style::default().fg(Color::Red)),
-                    Span::styled("ace|", Style::default().fg(Color::Yellow)),
+                    Span::styled("aces|", Style::default().fg(Color::Yellow)),
                 ]))
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                 .title_style(Style::default().fg(Color::Yellow))
@@ -193,21 +200,24 @@ impl Component for Interfaces {
         }
         if let Action::InterfaceSwitch = action {
             self.next_active_interface();
-            // self.interface_index += 1;
         }
 
         Ok(None)
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-            .split(area);
-        let rect = Rect::new(area.width / 2, 1, area.width / 2, layout[0].height);
+        let v_layout = get_vertical_layout(area);
+        let h_layout = get_horizontal_layout(area);
+
+        let table_rect = Rect::new(
+            h_layout.right.x,
+            1,
+            h_layout.right.width,
+            v_layout.top.height,
+        );
 
         let block = self.make_table();
-        f.render_widget(block, rect);
+        f.render_widget(block, table_rect);
 
         Ok(())
     }

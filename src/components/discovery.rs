@@ -30,6 +30,7 @@ use crate::{
     mode::Mode,
     tui::Frame,
     utils::{count_ipv4_net_length, get_ips4_from_cidr},
+    layout::get_vertical_layout,
 };
 use crossterm::event::{KeyCode, KeyEvent};
 use mac_oui::Oui;
@@ -614,13 +615,15 @@ impl Component for Discovery {
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         if !self.show_packets {
-            let layout = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-                .split(area);
+            // let layout = Layout::default()
+            //     .direction(Direction::Vertical)
+            //     .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+            //     .split(area);
+            let layout = get_vertical_layout(area);
 
             // -- TABLE
-            let mut table_rect = layout[1];
+            // let mut table_rect = layout[1];
+            let mut table_rect = layout.bottom;
             table_rect.y += 1;
             table_rect.height -= 1;
 

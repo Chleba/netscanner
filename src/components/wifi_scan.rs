@@ -8,7 +8,7 @@ use color_eyre::eyre::Result;
 use ratatui::{prelude::*, widgets::*};
 
 use super::Component;
-use crate::{action::Action, mode::Mode, tui::Frame};
+use crate::{action::Action, layout::get_vertical_layout, mode::Mode, tui::Frame};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct WifiInfo {
@@ -89,7 +89,7 @@ impl WifiScan {
     fn make_table(&mut self) -> Table {
         let header = Row::new(vec!["time", "ssid", "ch", "mac", "signal"])
             .style(Style::default().fg(Color::Yellow));
-            // .bottom_margin(1);
+        // .bottom_margin(1);
         let mut rows = Vec::new();
         for w in &self.wifis {
             let s_clamp = w.signal.max(MIN_DBM).min(MAX_DBM);
@@ -152,7 +152,7 @@ impl WifiScan {
                 )
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                 .borders(Borders::ALL)
-                .padding(Padding::new(0, 0, 1, 0)),
+                .padding(Padding::new(1, 0, 1, 0)),
         )
         .column_spacing(1);
         table
@@ -212,7 +212,8 @@ impl WifiScan {
             }
         }
         // -- sort wifi networks by it's signal strength
-        self.wifis.sort_by(|a, b| b.signal.partial_cmp(&a.signal).unwrap());
+        self.wifis
+            .sort_by(|a, b| b.signal.partial_cmp(&a.signal).unwrap());
     }
 
     fn app_tick(&mut self) -> Result<()> {
@@ -258,11 +259,13 @@ impl Component for WifiScan {
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         if !self.show_graph {
-            let layout = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-                .split(area);
-            let table_rect = Rect::new(0, 1, area.width / 2, layout[0].height);
+            // let layout = Layout::default()
+            //     .direction(Direction::Vertical)
+            //     .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+            //     .split(area);
+
+            let layout = get_vertical_layout(area);
+            let table_rect = Rect::new(0, 1, area.width / 2, layout.top.height);
 
             let block = self.make_table();
             f.render_widget(block, table_rect);

@@ -10,7 +10,7 @@ use std::{fmt, net::Ipv4Addr};
 
 use crate::{
     components::{packetdump::ArpPacketData, wifi_scan::WifiInfo},
-    enums::{PacketTypeEnum, PacketsInfoTypesEnum},
+    enums::{PacketTypeEnum, PacketsInfoTypesEnum, TabsEnum},
     mode::Mode,
 };
 
@@ -31,6 +31,8 @@ pub enum Action {
     Down,
     Left,
     Right,
+    Tab,
+    TabChange(TabsEnum),
     GraphToggle,
     PacketToggle,
     DumpToggle,
@@ -77,6 +79,7 @@ impl<'de> Deserialize<'de> for Action {
                     "Down" => Ok(Action::Down),
                     "Left" => Ok(Action::Left),
                     "Right" => Ok(Action::Right),
+                    "Tab" => Ok(Action::Tab),
 
                     // -- default actions
                     "Tick" => Ok(Action::Tick),
