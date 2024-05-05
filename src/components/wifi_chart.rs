@@ -10,7 +10,7 @@ use std::time::Instant;
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::Component;
-use crate::{action::Action, tui::Frame};
+use crate::{action::Action, layout::get_vertical_layout, tui::Frame};
 
 #[derive(Debug)]
 pub struct WifiDataset {
@@ -166,11 +166,12 @@ impl Component for WifiChart {
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         if self.show_graph {
-            let layout = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-                .split(area);
-            let rect = Rect::new(0, 1, area.width / 2, layout[0].height);
+            // let layout = Layout::default()
+            //     .direction(Direction::Vertical)
+            //     .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+            //     .split(area);
+            let layout = get_vertical_layout(area);
+            let rect = Rect::new(0, 1, area.width / 2, layout.top.height);
 
             let block = self.make_chart();
             f.render_widget(block, rect);
