@@ -27,10 +27,11 @@ use super::Component;
 use crate::{
     action::Action,
     components::packetdump::ArpPacketData,
+    enums::TabsEnum,
+    layout::get_vertical_layout,
     mode::Mode,
     tui::Frame,
     utils::{count_ipv4_net_length, get_ips4_from_cidr},
-    layout::get_vertical_layout,
 };
 use crossterm::event::{KeyCode, KeyEvent};
 use mac_oui::Oui;
@@ -52,6 +53,7 @@ pub struct ScannedIp {
 }
 
 pub struct Discovery {
+    active_tab: TabsEnum,
     active_interface: Option<NetworkInterface>,
     action_tx: Option<UnboundedSender<Action>>,
     scanned_ips: Vec<ScannedIp>,
@@ -65,7 +67,6 @@ pub struct Discovery {
     oui: Option<Oui>,
     table_state: TableState,
     scrollbar_state: ScrollbarState,
-    show_packets: bool,
     spinner_index: usize,
 }
 
@@ -78,6 +79,7 @@ impl Default for Discovery {
 impl Discovery {
     pub fn new() -> Self {
         Self {
+            active_tab: TabsEnum::Discovery,
             active_interface: None,
             task: tokio::spawn(async {}),
             action_tx: None,
@@ -91,7 +93,6 @@ impl Discovery {
             oui: None,
             table_state: TableState::default().with_selected(0),
             scrollbar_state: ScrollbarState::new(0),
-            show_packets: false,
             spinner_index: 0,
         }
     }
@@ -394,15 +395,6 @@ impl Discovery {
                         Span::styled("select|", Style::default().fg(Color::Yellow)),
                     ]))
                     .position(ratatui::widgets::block::Position::Bottom)
-                    .alignment(Alignment::Left),
-                )
-                .title(
-                    ratatui::widgets::block::Title::from(Line::from(vec![
-                        Span::styled("|show ", Style::default().fg(Color::Yellow)),
-                        Span::styled("p", Style::default().fg(Color::Red)),
-                        Span::styled("ackets|", Style::default().fg(Color::Yellow)),
-                    ]))
-                    .position(ratatui::widgets::block::Position::Bottom)
                     .alignment(Alignment::Right),
                 )
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
@@ -565,7 +557,10 @@ impl Component for Discovery {
         }
         // -- Scan CIDR
         if let Action::ScanCidr = action {
-            if self.active_interface.is_some() && !self.is_scanning && !self.show_packets {
+            if self.active_interface.is_some()
+                && !self.is_scanning
+                && self.active_tab == TabsEnum::Discovery
+            {
                 self.scan();
             }
         }
@@ -596,7 +591,7 @@ impl Component for Discovery {
             }
             self.mode = mode;
         }
-        if !self.show_packets {
+        if self.active_tab == TabsEnum::Discovery {
             // -- prev & next select item in table
             if let Action::Down = action {
                 self.next_in_table();
@@ -605,24 +600,25 @@ impl Component for Discovery {
                 self.previous_in_table();
             }
         }
-        // -- packets toggle
-        if let Action::PacketToggle = action {
-            self.show_packets = !self.show_packets;
+
+        // -- tab change
+        if let Action::TabChange(tab) = action {
+            self.tab_changed(tab).unwrap();
         }
 
         Ok(None)
     }
 
+    fn tab_changed(&mut self, tab: TabsEnum) -> Result<()> {
+        self.active_tab = tab;
+        Ok(())
+    }
+
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        if !self.show_packets {
-            // let layout = Layout::default()
-            //     .direction(Direction::Vertical)
-            //     .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-            //     .split(area);
+        if self.active_tab == TabsEnum::Discovery {
             let layout = get_vertical_layout(area);
 
             // -- TABLE
-            // let mut table_rect = layout[1];
             let mut table_rect = layout.bottom;
             table_rect.y += 1;
             table_rect.height -= 1;

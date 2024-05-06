@@ -7,7 +7,6 @@
       "<Ctrl-z>": "Suspend", // Suspend the application
       "<i>": "InputMode",
       "<g>": "Graph",
-      "<p>": "Packets",
       "<d>": "Dump",
       "<f>": "Interface",
       "<s>": "Scan",
