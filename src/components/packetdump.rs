@@ -2,7 +2,6 @@ use chrono::{DateTime, Local};
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::{KeyCode, KeyEvent};
-use crossterm::style::Stylize;
 use ipnetwork::Ipv4Network;
 use pnet::datalink::{Channel, NetworkInterface};
 use pnet::packet::icmpv6::{Icmpv6Type, Icmpv6Types};
@@ -20,6 +19,7 @@ use pnet::packet::{
     MutablePacket, Packet,
 };
 use pnet::util::MacAddr;
+use ratatui::style::Stylize;
 use ratatui::{prelude::*, widgets::*};
 use std::{
     collections::HashMap,
@@ -42,7 +42,7 @@ use crate::{
     config::{Config, KeyBindings},
     enums::{
         ARPPacketInfo, ICMP6PacketInfo, ICMPPacketInfo, PacketTypeEnum, PacketsInfoTypesEnum,
-        TCPPacketInfo, UDPPacketInfo,
+        TCPPacketInfo, TabsEnum, UDPPacketInfo,
     },
     layout::get_vertical_layout,
     utils::MaxSizeVec,
@@ -58,12 +58,12 @@ pub struct ArpPacketData {
 }
 
 pub struct PacketDump {
+    active_tab: TabsEnum,
     action_tx: Option<UnboundedSender<Action>>,
     loop_thread: Option<JoinHandle<()>>,
     should_quit: bool,
     dump_paused: Arc<AtomicBool>,
     active_interface: Option<NetworkInterface>,
-    show_packets: bool,
     table_state: TableState,
     scrollbar_state: ScrollbarState,
     packet_type: PacketTypeEnum,
@@ -85,12 +85,12 @@ impl Default for PacketDump {
 impl PacketDump {
     pub fn new() -> Self {
         Self {
+            active_tab: TabsEnum::Discovery,
             action_tx: None,
             loop_thread: None,
             should_quit: false,
             dump_paused: Arc::new(AtomicBool::new(false)),
             active_interface: None,
-            show_packets: false,
             table_state: TableState::default().with_selected(0),
             scrollbar_state: ScrollbarState::new(0),
             packet_type: PacketTypeEnum::All,
@@ -797,9 +797,9 @@ impl PacketDump {
                     span_str = format!("{}", p);
                 }
                 if p == packet_type {
-                    Span::styled(span_str, Style::default().fg(Color::Red))
+                    Span::styled(span_str, Style::new().green().bold())
                 } else {
-                    Span::styled(span_str, Style::default().fg(Color::Yellow))
+                    Span::styled(span_str, Style::new().dark_gray())
                 }
             })
             .collect::<Vec<Span>>();
@@ -841,15 +841,6 @@ impl PacketDump {
                             Span::styled("select|", Style::default().fg(Color::Yellow)),
                         ]))
                         .position(ratatui::widgets::block::Position::Bottom)
-                        .alignment(Alignment::Left),
-                    )
-                    .title(
-                        ratatui::widgets::block::Title::from(Line::from(vec![
-                            Span::styled("|hide ", Style::default().fg(Color::Yellow)),
-                            Span::styled("p", Style::default().fg(Color::Red)),
-                            Span::styled("ackets|", Style::default().fg(Color::Yellow)),
-                        ]))
-                        .position(ratatui::widgets::block::Position::Bottom)
                         .alignment(Alignment::Right),
                     )
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
@@ -880,6 +871,10 @@ impl Component for PacketDump {
     }
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
+        // -- tab change
+        if let Action::TabChange(tab) = action {
+            self.tab_changed(tab).unwrap();
+        }
         // -- active interface set
         if let Action::ActiveInterface(ref interface) = action {
             let mut was_none = false;
@@ -891,7 +886,7 @@ impl Component for PacketDump {
                 self.start_loop();
             }
         }
-        if self.show_packets {
+        if self.active_tab == TabsEnum::Packets {
             // -- prev & next select item in table
             if let Action::Down = action {
                 self.next_in_table();
@@ -911,10 +906,6 @@ impl Component for PacketDump {
                 self.table_state.select(Some(0));
                 self.set_scrollbar_height();
             }
-        }
-        // -- packets toggle
-        if let Action::PacketToggle = action {
-            self.show_packets = !self.show_packets;
         }
         // -- dumping toggle
         if let Action::DumpToggle = action {
@@ -944,8 +935,13 @@ impl Component for PacketDump {
         Ok(None)
     }
 
+    fn tab_changed(&mut self, tab: TabsEnum) -> Result<()> {
+        self.active_tab = tab;
+        Ok(())
+    }
+
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        if self.show_packets {
+        if self.active_tab == TabsEnum::Packets {
             let layout = get_vertical_layout(area);
             let mut table_rect = layout.bottom;
             table_rect.y += 1;

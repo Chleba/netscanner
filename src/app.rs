@@ -9,7 +9,7 @@ use crate::{
     components::{
         discovery::Discovery, title::Title, interfaces::Interfaces, packetdump::PacketDump,
         tabs::Tabs, wifi_chart::WifiChart, wifi_interface::WifiInterface, wifi_scan::WifiScan, 
-        Component,
+        ports::Ports, Component,
     },
     config::Config,
     mode::Mode,
