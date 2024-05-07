@@ -16,6 +16,7 @@ use crate::{
     config::{Config, KeyBindings},
     enums::TabsEnum,
     layout::get_vertical_layout,
+    config::DEFAULT_BORDER_STYLE,
 };
 
 #[derive(Default)]
@@ -39,9 +40,9 @@ impl Tabs {
             .enumerate()
             .map(|(idx, p)| {
                 if idx == self.tab_index {
-                    // let arrrow = String::from(char::from_u32(0x25bc).unwrap_or('>'));
+                    // let index_str = idx + 1;
                     Span::styled(
-                        // format!("{}{} ", arrrow, p),
+                        // format!("({}){} ", index_str, p),
                         format!("{} ", p),
                         Style::default().fg(Color::Green).bold(),
                     )
@@ -61,18 +62,13 @@ impl Tabs {
         let arrrow = String::from(char::from_u32(0x25bc).unwrap_or('>'));
         let b = Block::default()
             .title(title)
-            // .title(
-            //     Title::from(Line::from(vec![
-            //             "|".yellow(), 
-            //             arrrow.clone().green(), 
-            //             arrrow.clone().green(), 
-            //             arrrow.clone().green(), 
-            //             "|".yellow()
-            //         ]))
-            //         .alignment(Alignment::Center)
-            //         .position(block::Position::Bottom),
-            // )
+            .title(
+                Title::from(Line::from(vec!["|".yellow(), arrrow.green(), "|".yellow()]))
+                    .alignment(Alignment::Center)
+                    .position(block::Position::Bottom),
+            )
             .borders(Borders::ALL)
+            .border_type(DEFAULT_BORDER_STYLE)
             .padding(Padding::new(1, 0, 0, 0))
             .border_style(Style::default().fg(Color::Rgb(100, 100, 100)));
 

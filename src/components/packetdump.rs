@@ -46,6 +46,7 @@ use crate::{
     },
     layout::get_vertical_layout,
     utils::MaxSizeVec,
+    config::DEFAULT_BORDER_STYLE,
 };
 use strum::{EnumCount, IntoEnumIterator};
 
@@ -759,6 +760,7 @@ impl PacketDump {
         Paragraph::new(text).block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(DEFAULT_BORDER_STYLE)
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                 .title(
                     ratatui::widgets::block::Title::from(Line::from(vec![
@@ -844,7 +846,8 @@ impl PacketDump {
                         .alignment(Alignment::Right),
                     )
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                    .borders(Borders::ALL), // .padding(Padding::new(1, 0, 2, 0)),
+                    .borders(Borders::ALL) // .padding(Padding::new(1, 0, 2, 0)),
+                    .border_type(DEFAULT_BORDER_STYLE)
             )
             .highlight_symbol(Span::styled(
                 String::from(char::from_u32(0x25b6).unwrap_or('>')),

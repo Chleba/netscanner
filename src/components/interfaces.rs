@@ -16,6 +16,7 @@ use crate::{
     layout::{get_horizontal_layout, get_vertical_layout},
     mode::Mode,
     tui::Frame,
+    config::DEFAULT_BORDER_STYLE,
 };
 
 pub struct Interfaces {
@@ -175,6 +176,7 @@ impl Interfaces {
                 .title_style(Style::default().fg(Color::Yellow))
                 .title_alignment(Alignment::Right)
                 .borders(Borders::ALL)
+                .border_type(DEFAULT_BORDER_STYLE)
                 .padding(Padding::new(0, 0, 1, 0)),
         )
         .column_spacing(1);

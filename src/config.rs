@@ -4,7 +4,7 @@ use color_eyre::eyre::Result;
 use config::Value;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use derive_deref::{Deref, DerefMut};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::{style::{Color, Modifier, Style}, widgets::{BorderType, Borders}};
 use serde::{
   de::{self, Deserializer, MapAccess, Visitor},
   Deserialize, Serialize,
@@ -12,6 +12,8 @@ use serde::{
 use serde_json::Value as JsonValue;
 
 use crate::{action::Action, mode::Mode};
+
+pub const DEFAULT_BORDER_STYLE: BorderType = BorderType::Rounded; 
 
 const CONFIG: &str = include_str!("../.config/config.json5");
 

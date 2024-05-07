@@ -32,6 +32,7 @@ use crate::{
     mode::Mode,
     tui::Frame,
     utils::{count_ipv4_net_length, get_ips4_from_cidr},
+    config::DEFAULT_BORDER_STYLE,
 };
 use crossterm::event::{KeyCode, KeyEvent};
 use mac_oui::Oui;
@@ -398,7 +399,9 @@ impl Discovery {
                     .alignment(Alignment::Right),
                 )
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                .borders(Borders::ALL), // .padding(Padding::new(1, 0, 2, 0)),
+                .borders(Borders::ALL) 
+                .border_type(DEFAULT_BORDER_STYLE)
+                // .padding(Padding::new(1, 0, 2, 0)),
         )
         .highlight_symbol(String::from(char::from_u32(0x25b6).unwrap_or('>')).red())
         .column_spacing(1);
@@ -428,6 +431,7 @@ impl Discovery {
                         Mode::Input => Style::default().fg(Color::Green),
                         Mode::Normal => Style::default().fg(Color::Rgb(100, 100, 100)),
                     })
+                    .border_type(DEFAULT_BORDER_STYLE)
                     .title(
                         ratatui::widgets::block::Title::from(Line::from(vec![
                             Span::raw("|"),
