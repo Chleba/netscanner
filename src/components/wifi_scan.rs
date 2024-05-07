@@ -13,6 +13,7 @@ use crate::{
     layout::{get_horizontal_layout, get_vertical_layout},
     mode::Mode,
     tui::Frame,
+    config::DEFAULT_BORDER_STYLE,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -157,6 +158,7 @@ impl WifiScan {
                 )
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                 .borders(Borders::ALL)
+                .border_type(DEFAULT_BORDER_STYLE)
                 .padding(Padding::new(1, 0, 1, 0)),
         )
         .column_spacing(1);
