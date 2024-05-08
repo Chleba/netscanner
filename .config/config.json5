@@ -15,6 +15,9 @@
       "<left>": "Left",
       "<right>": "Right",
       "<Tab>": "Tab",
+      "<1>": "JumpDiscovery",
+      "<2>": "JumpPackets",
+      "<3>": "JumpPorts",
     },
     "Input": {
       "<Esc>": "NormalMode"
