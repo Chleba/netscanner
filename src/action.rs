@@ -78,6 +78,9 @@ impl<'de> Deserialize<'de> for Action {
                     "Left" => Ok(Action::Left),
                     "Right" => Ok(Action::Right),
                     "Tab" => Ok(Action::Tab),
+                    "JumpDiscovery" => Ok(Action::TabChange(TabsEnum::Discovery)),
+                    "JumpPackets" => Ok(Action::TabChange(TabsEnum::Packets)),
+                    "JumpPorts" => Ok(Action::TabChange(TabsEnum::Ports)),
 
                     // -- default actions
                     "Tick" => Ok(Action::Tick),

@@ -1,6 +1,7 @@
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::style::Stylize;
 use ratatui::{prelude::*, widgets::*};
 use ratatui::{
     text::{Line, Span},
@@ -13,10 +14,10 @@ use tokio::sync::mpsc::UnboundedSender;
 use super::{Component, Frame};
 use crate::{
     action::Action,
+    config::DEFAULT_BORDER_STYLE,
     config::{Config, KeyBindings},
     enums::TabsEnum,
     layout::get_vertical_layout,
-    config::DEFAULT_BORDER_STYLE,
 };
 
 #[derive(Default)]
@@ -36,25 +37,30 @@ impl Tabs {
     }
 
     fn make_tabs(&self) -> Paragraph {
-        let enum_titles = TabsEnum::iter()
-            .enumerate()
-            .map(|(idx, p)| {
-                if idx == self.tab_index {
-                    // let index_str = idx + 1;
-                    Span::styled(
-                        // format!("({}){} ", index_str, p),
-                        format!("{} ", p),
-                        Style::default().fg(Color::Green).bold(),
-                    )
-                } else {
-                    Span::styled(format!("{} ", p), Style::default().fg(Color::DarkGray))
-                }
-            })
-            .collect::<Vec<Span>>();
+        let enum_titles: Vec<Span> =
+            TabsEnum::iter()
+                .enumerate()
+                .fold(Vec::new(), |mut title_spans, (idx, p)| {
+                    let index_str = idx + 1;
+
+                    let s1 = "(".yellow();
+                    let s2 = format!("{}", index_str).red();
+                    let s3 = ")".yellow();
+                    let mut s4 = format!("{} ", p).dark_gray().bold();
+                    if idx == self.tab_index {
+                        s4 = format!("{} ", p).green().bold();
+                    }
+
+                    title_spans.push(s1);
+                    title_spans.push(s2);
+                    title_spans.push(s3);
+                    title_spans.push(s4);
+                    title_spans
+                });
 
         let title = Title::from(Line::from(vec![
             "|".yellow(),
-            "<Tab>".red().bold(),
+            "Tab".red().bold(),
             "s|".yellow(),
         ]))
         .alignment(Alignment::Right);
@@ -76,10 +82,10 @@ impl Tabs {
     }
 
     fn next_tab(&mut self) {
-        let new_tab_index = self.tab_index + 1;
-        self.tab_index = new_tab_index % (TabsEnum::COUNT);
+        let mut new_tab_index = self.tab_index + 1;
+        new_tab_index %= TabsEnum::COUNT;
 
-        let tab_enum: TabsEnum = TabsEnum::iter().nth(self.tab_index).unwrap();
+        let tab_enum: TabsEnum = TabsEnum::iter().nth(new_tab_index).unwrap();
         self.action_tx
             .clone()
             .unwrap()
@@ -105,6 +111,14 @@ impl Component for Tabs {
 
             Action::Tab => {
                 self.next_tab();
+            }
+
+            Action::TabChange(tab_enum) => {
+                TabsEnum::iter().enumerate().for_each(|(idx, t)| {
+                    if tab_enum == t {
+                        self.tab_index = idx;
+                    }
+                })
             }
 
             _ => {}
