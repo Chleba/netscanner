@@ -1,7 +1,19 @@
-# netscanner
+```
+             _                                       
+            | |                                      
+  _ __   ___| |_ ___  ___ __ _ _ __  _ __   ___ _ __ 
+ | '_ \ / _ \ __/ __|/ __/ _` | '_ \| '_ \ / _ \ '__|
+ | | | |  __/ |_\__ \ (_| (_| | | | | | | |  __/ |   
+ |_| |_|\___|\__|___/\___\__,_|_| |_|_| |_|\___|_|
+```                                                  
+***
+[![Arch package](https://repology.org/badge/version-for-repo/arch/netscanner.svg)](https://repology.org/project/netscanner/versions)
+[![Alpine Linux Edge package](https://repology.org/badge/version-for-repo/alpine_edge/netscanner.svg)](https://repology.org/project/netscanner/versions)
+[![nixpkgs unstable package](https://repology.org/badge/version-for-repo/nix_unstable/netscanner.svg)](https://repology.org/project/netscanner/versions)
 
-Network scanning tool with features like:
+`netscanner` - Network scanning & diagnostic tool.
 
+**FEATURES:**
 - [x] List HW Interfaces
 - [x] Switching active Interface for scanning & packet-dumping
 - [x] WiFi networks scanning
@@ -13,7 +25,7 @@ Network scanning tool with features like:
 
 **TODO:**
 - [ ] scanning open ports
-- [ ] modal window with packet data
+- [ ] packet logs filter
 - [ ] ipv6 scanning & dumping
 
 ## *Notes*:
