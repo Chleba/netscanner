@@ -26,9 +26,9 @@
 - [x] (IPv4) Packetdump (TCP, UDP, ICMP, ARP)
 - [x] (IPv6) Packetdump (ICMP6)
 - [x] start/pause packetdump
+- [x] scanning open ports (TCP)
 
 **TODO:**
-- [ ] scanning open ports
 - [ ] packet logs filter
 - [ ] ipv6 scanning & dumping
 
