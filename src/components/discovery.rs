@@ -47,10 +47,10 @@ const SPINNER_SYMBOLS: [&str; 6] = ["⠷", "⠯", "⠟", "⠻", "⠽", "⠾"];
 
 #[derive(Clone)]
 pub struct ScannedIp {
-    ip: String,
-    mac: String,
-    hostname: String,
-    vendor: String,
+    pub ip: String,
+    pub mac: String,
+    pub hostname: String,
+    pub vendor: String,
 }
 
 pub struct Discovery {
@@ -230,14 +230,12 @@ impl Discovery {
 
             if let Some(oui) = &self.oui {
                 let oui_res = oui.lookup_by_mac(&n.mac);
-                match oui_res {
-                    Ok(e) => {
-                        if let Some(oui_res) = e {
+                // match oui_res {
+                if let Ok(oui_res) = oui_res {
+                        if let Some(oui_res) = oui_res {
                             let cn = oui_res.company_name.clone();
                             n.vendor = cn;
                         }
-                    }
-                    Err(_) => {}
                 }
             }
         }
@@ -266,7 +264,7 @@ impl Discovery {
             self.scanned_ips.sort_by(|a, b| {
                 let a_ip: Ipv4Addr = a.ip.parse::<Ipv4Addr>().unwrap();
                 let b_ip: Ipv4Addr = b.ip.parse::<Ipv4Addr>().unwrap();
-                return a_ip.partial_cmp(&b_ip).unwrap();
+                a_ip.partial_cmp(&b_ip).unwrap()
             });
         }
 
@@ -286,7 +284,7 @@ impl Discovery {
 
     fn set_scrollbar_height(&mut self) {
         let mut ip_len = 0;
-        if self.scanned_ips.len() > 0 {
+        if !self.scanned_ips.is_empty() {
             ip_len = self.scanned_ips.len() - 1;
         }
         self.scrollbar_state = self.scrollbar_state.content_length(ip_len);
@@ -296,10 +294,10 @@ impl Discovery {
         let index = match self.table_state.selected() {
             Some(index) => {
                 if index == 0 {
-                    if self.scanned_ips.len() > 0 {
-                        self.scanned_ips.len() - 1
-                    } else {
+                    if self.scanned_ips.is_empty() {
                         0
+                    } else {
+                        self.scanned_ips.len() - 1
                     }
                 } else {
                     index - 1
@@ -315,7 +313,7 @@ impl Discovery {
         let index = match self.table_state.selected() {
             Some(index) => {
                 let mut s_ip_len = 0;
-                if self.scanned_ips.len() > 0 {
+                if !self.scanned_ips.is_empty() {
                     s_ip_len = self.scanned_ips.len() - 1;
                 }
                 if index >= s_ip_len {

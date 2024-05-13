@@ -39,6 +39,7 @@ use tokio::{
 use super::{Component, Frame};
 use crate::{
     action::Action,
+    config::DEFAULT_BORDER_STYLE,
     config::{Config, KeyBindings},
     enums::{
         ARPPacketInfo, ICMP6PacketInfo, ICMPPacketInfo, PacketTypeEnum, PacketsInfoTypesEnum,
@@ -46,7 +47,6 @@ use crate::{
     },
     layout::get_vertical_layout,
     utils::MaxSizeVec,
-    config::DEFAULT_BORDER_STYLE,
 };
 use strum::{EnumCount, IntoEnumIterator};
 
@@ -493,10 +493,14 @@ impl PacketDump {
         let index = match self.table_state.selected() {
             Some(index) => {
                 let logs = self.get_array_by_packet_type(self.packet_type);
-                if index >= logs.len() - 1 {
+                if logs.is_empty() {
                     0
                 } else {
-                    index + 1
+                    if index >= logs.len() - 1 {
+                        0
+                    } else {
+                        index + 1
+                    }
                 }
             }
             None => 0,
@@ -847,7 +851,7 @@ impl PacketDump {
                     )
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                     .borders(Borders::ALL) // .padding(Padding::new(1, 0, 2, 0)),
-                    .border_type(DEFAULT_BORDER_STYLE)
+                    .border_type(DEFAULT_BORDER_STYLE),
             )
             .highlight_symbol(Span::styled(
                 String::from(char::from_u32(0x25b6).unwrap_or('>')),
@@ -909,15 +913,15 @@ impl Component for PacketDump {
                 self.table_state.select(Some(0));
                 self.set_scrollbar_height();
             }
-        }
-        // -- dumping toggle
-        if let Action::DumpToggle = action {
-            if self.dump_paused.load(Ordering::Relaxed) {
-                self.dump_paused.store(false, Ordering::Relaxed);
-                self.start_loop();
-            } else {
-                self.dump_paused.store(true, Ordering::Relaxed);
-                self.loop_thread = None;
+            // -- dumping toggle
+            if let Action::DumpToggle = action {
+                if self.dump_paused.load(Ordering::Relaxed) {
+                    self.dump_paused.store(false, Ordering::Relaxed);
+                    self.start_loop();
+                } else {
+                    self.dump_paused.store(true, Ordering::Relaxed);
+                    self.loop_thread = None;
+                }
             }
         }
         // -- packet recieved
