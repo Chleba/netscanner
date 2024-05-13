@@ -40,17 +40,17 @@ sudo chown root:user /home/user/.cargo/bin/netscanner
 sudo chmod u+s /home/user/.cargo/bin/netscanner
 ```
 
-## Install on Arch Linux
+## Install on `Arch Linux`
 ```
 pacman -S netscanner
 ```
 
-## Install on Alpine(edge) Linux
+## Install on `Alpine(edge) Linux`
 ```
 apk add netscanner --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/
 ```
 
-## Install `Cargo`
+## Install with `cargo`
 ```
 cargo install netscanner
 ```
