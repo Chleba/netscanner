@@ -7,6 +7,10 @@
  |_| |_|\___|\__|___/\___\__,_|_| |_|_| |_|\___|_|
 ```                                                  
 ***
+<p>
+	<img src='./demo.gif' width='550px'/>
+</p>
+
 [![Arch package](https://repology.org/badge/version-for-repo/arch/netscanner.svg)](https://repology.org/project/netscanner/versions)
 [![Alpine Linux Edge package](https://repology.org/badge/version-for-repo/alpine_edge/netscanner.svg)](https://repology.org/project/netscanner/versions)
 [![nixpkgs unstable package](https://repology.org/badge/version-for-repo/nix_unstable/netscanner.svg)](https://repology.org/project/netscanner/versions)
@@ -41,10 +45,12 @@ sudo chmod u+s /home/user/.cargo/bin/netscanner
 pacman -S netscanner
 ```
 
+## Install on Alpine(edge) Linux
+```
+apk add netscanner --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/
+```
+
 ## Install `Cargo`
 ```
 cargo install netscanner
 ```
-
-![netscanner screenshot](./netscanner.png?raw=true)
-![netscanner screenshot](./netscanner1.png?raw=true)
