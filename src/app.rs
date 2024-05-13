@@ -40,6 +40,7 @@ impl App {
         let tabs = Tabs::default(); 
         let discovery = Discovery::default();
         let packetdump = PacketDump::default();
+        let ports = Ports::default();
         let config = Config::new()?;
 
         let mode = Mode::Normal;
@@ -57,6 +58,7 @@ impl App {
                 Box::new(tabs),
                 Box::new(discovery),
                 Box::new(packetdump),
+                Box::new(ports),
             ],
             should_quit: false,
             should_suspend: false,

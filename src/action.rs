@@ -45,6 +45,8 @@ pub enum Action {
     CountIp,
     CidrError,
     PacketDump(DateTime<Local>, PacketsInfoTypesEnum, PacketTypeEnum),
+    PortScan(usize, u16),
+    PortScanDone(usize),
 }
 
 impl<'de> Deserialize<'de> for Action {
