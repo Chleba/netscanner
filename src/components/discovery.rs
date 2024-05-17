@@ -27,12 +27,12 @@ use super::Component;
 use crate::{
     action::Action,
     components::packetdump::ArpPacketData,
+    config::DEFAULT_BORDER_STYLE,
     enums::TabsEnum,
     layout::get_vertical_layout,
     mode::Mode,
     tui::Frame,
     utils::{count_ipv4_net_length, get_ips4_from_cidr},
-    config::DEFAULT_BORDER_STYLE,
 };
 use crossterm::event::{KeyCode, KeyEvent};
 use mac_oui::Oui;
@@ -120,56 +120,61 @@ impl Discovery {
 
     fn send_arp(&mut self, target_ip: Ipv4Addr) {
         let active_interface = self.active_interface.clone().unwrap();
+        // let active_interface_mac = active_interface.mac.unwrap()
 
-        let ipv4 = active_interface.ips.iter().find(|f| f.is_ipv4()).unwrap();
-        let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
+        if let Some(active_interface_mac) = active_interface.mac {
+            let ipv4 = active_interface.ips.iter().find(|f| f.is_ipv4()).unwrap();
+            let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
 
-        let (mut sender, _) = match pnet::datalink::channel(&active_interface, Default::default()) {
-            Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
-            Ok(_) => {
-                let tx_action = self.action_tx.clone().unwrap();
-                tx_action
-                    .send(Action::Error("Unknown or unsopported channel type".into()))
-                    .unwrap();
-                return;
-            }
-            Err(e) => {
-                let tx_action = self.action_tx.clone().unwrap();
-                tx_action
-                    .send(Action::Error(format!(
-                        "Unable to create datalink channel: {e}"
-                    )))
-                    .unwrap();
-                return;
-            }
-        };
+            let (mut sender, _) =
+                match pnet::datalink::channel(&active_interface, Default::default()) {
+                    Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
+                    Ok(_) => {
+                        let tx_action = self.action_tx.clone().unwrap();
+                        tx_action
+                            .send(Action::Error("Unknown or unsopported channel type".into()))
+                            .unwrap();
+                        return;
+                    }
+                    Err(e) => {
+                        let tx_action = self.action_tx.clone().unwrap();
+                        tx_action
+                            .send(Action::Error(format!(
+                                "Unable to create datalink channel: {e}"
+                            )))
+                            .unwrap();
+                        return;
+                    }
+                };
 
-        let mut ethernet_buffer = [0u8; 42];
-        let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer).unwrap();
+            let mut ethernet_buffer = [0u8; 42];
+            let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer).unwrap();
 
-        ethernet_packet.set_destination(MacAddr::broadcast());
-        ethernet_packet.set_source(active_interface.mac.unwrap());
-        ethernet_packet.set_ethertype(EtherTypes::Arp);
+            ethernet_packet.set_destination(MacAddr::broadcast());
+            // ethernet_packet.set_source(active_interface.mac.unwrap());
+            ethernet_packet.set_source(active_interface_mac);
+            ethernet_packet.set_ethertype(EtherTypes::Arp);
 
-        let mut arp_buffer = [0u8; 28];
-        let mut arp_packet = MutableArpPacket::new(&mut arp_buffer).unwrap();
+            let mut arp_buffer = [0u8; 28];
+            let mut arp_packet = MutableArpPacket::new(&mut arp_buffer).unwrap();
 
-        arp_packet.set_hardware_type(ArpHardwareTypes::Ethernet);
-        arp_packet.set_protocol_type(EtherTypes::Ipv4);
-        arp_packet.set_hw_addr_len(6);
-        arp_packet.set_proto_addr_len(4);
-        arp_packet.set_operation(ArpOperations::Request);
-        arp_packet.set_sender_hw_addr(active_interface.mac.unwrap());
-        arp_packet.set_sender_proto_addr(source_ip);
-        arp_packet.set_target_hw_addr(MacAddr::zero());
-        arp_packet.set_target_proto_addr(target_ip);
+            arp_packet.set_hardware_type(ArpHardwareTypes::Ethernet);
+            arp_packet.set_protocol_type(EtherTypes::Ipv4);
+            arp_packet.set_hw_addr_len(6);
+            arp_packet.set_proto_addr_len(4);
+            arp_packet.set_operation(ArpOperations::Request);
+            arp_packet.set_sender_hw_addr(active_interface_mac);
+            arp_packet.set_sender_proto_addr(source_ip);
+            arp_packet.set_target_hw_addr(MacAddr::zero());
+            arp_packet.set_target_proto_addr(target_ip);
 
-        ethernet_packet.set_payload(arp_packet.packet_mut());
+            ethernet_packet.set_payload(arp_packet.packet_mut());
 
-        sender
-            .send_to(ethernet_packet.packet(), None)
-            .unwrap()
-            .unwrap();
+            sender
+                .send_to(ethernet_packet.packet(), None)
+                .unwrap()
+                .unwrap();
+        }
     }
 
     fn scan(&mut self) {
@@ -232,10 +237,10 @@ impl Discovery {
                 let oui_res = oui.lookup_by_mac(&n.mac);
                 // match oui_res {
                 if let Ok(oui_res) = oui_res {
-                        if let Some(oui_res) = oui_res {
-                            let cn = oui_res.company_name.clone();
-                            n.vendor = cn;
-                        }
+                    if let Some(oui_res) = oui_res {
+                        let cn = oui_res.company_name.clone();
+                        n.vendor = cn;
+                    }
                 }
             }
         }
@@ -397,9 +402,8 @@ impl Discovery {
                     .alignment(Alignment::Right),
                 )
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                .borders(Borders::ALL) 
-                .border_type(DEFAULT_BORDER_STYLE)
-                // .padding(Padding::new(1, 0, 2, 0)),
+                .borders(Borders::ALL)
+                .border_type(DEFAULT_BORDER_STYLE),
         )
         .highlight_symbol(String::from(char::from_u32(0x25b6).unwrap_or('>')).red())
         .column_spacing(1);

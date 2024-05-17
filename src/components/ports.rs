@@ -162,7 +162,7 @@ impl Ports {
         let h = tokio::spawn(async move {
             let ports = stream::iter(ports_box);
             ports
-                .for_each_concurrent(1002, |port| Self::scan(tx.clone(), index, ip, port, 2))
+                .for_each_concurrent(POOL_SIZE, |port| Self::scan(tx.clone(), index, ip, port, 2))
                 .await;
             tx.send(Action::PortScanDone(index)).unwrap();
         });
