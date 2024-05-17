@@ -54,3 +54,8 @@ apk add netscanner --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testin
 ```
 cargo install netscanner
 ```
+## Appreciation
+`netscanner` has been made thanks to some awesome libraries that can be found in [Cargo.toml](./Cargo.toml) file.
+But mostly I would like to link these two libraries that help me the most:
+- Ratatui: [https://github.com/ratatui-org/ratatui](https://github.com/ratatui-org/ratatui)
+- libpnet: [https://github.com/libpnet/libpnet](https://github.com/libpnet/libpnet)
