@@ -235,7 +235,6 @@ impl Discovery {
 
             if let Some(oui) = &self.oui {
                 let oui_res = oui.lookup_by_mac(&n.mac);
-                // match oui_res {
                 if let Ok(oui_res) = oui_res {
                     if let Some(oui_res) = oui_res {
                         let cn = oui_res.company_name.clone();
@@ -411,8 +410,6 @@ impl Discovery {
     }
 
     pub fn make_scrollbar<'a>() -> Scrollbar<'a> {
-        // let s_start = String::from(char::from_u32(0x25b2).unwrap_or('#'));
-        // let s_end = String::from(char::from_u32(0x25bc).unwrap_or('#'));
         let scrollbar = Scrollbar::default()
             .orientation(ScrollbarOrientation::VerticalRight)
             .style(Style::default().fg(Color::Rgb(100, 100, 100)))
@@ -422,7 +419,6 @@ impl Discovery {
     }
 
     fn make_input(&self, scroll: usize) -> Paragraph {
-        // let scroll = self.input.visual_scroll(40);
         let input = Paragraph::new(self.input.value())
             .style(Style::default().fg(Color::Green))
             .scroll((0, scroll as u16))
@@ -509,22 +505,26 @@ impl Component for Discovery {
     }
 
     fn handle_key_events(&mut self, key: KeyEvent) -> Result<Option<Action>> {
-        let action = match self.mode {
-            Mode::Normal => return Ok(None),
-            Mode::Input => match key.code {
-                KeyCode::Enter => {
-                    if let Some(sender) = &self.action_tx {
-                        self.set_cidr(self.input.value().to_string(), true);
+        if self.active_tab == TabsEnum::Discovery {
+            let action = match self.mode {
+                Mode::Normal => return Ok(None),
+                Mode::Input => match key.code {
+                    KeyCode::Enter => {
+                        if let Some(sender) = &self.action_tx {
+                            self.set_cidr(self.input.value().to_string(), true);
+                        }
+                        Action::ModeChange(Mode::Normal)
                     }
-                    Action::ModeChange(Mode::Normal)
-                }
-                _ => {
-                    self.input.handle_event(&crossterm::event::Event::Key(key));
-                    return Ok(None);
-                }
-            },
-        };
-        Ok(Some(action))
+                    _ => {
+                        self.input.handle_event(&crossterm::event::Event::Key(key));
+                        return Ok(None);
+                    }
+                },
+            };
+            Ok(Some(action))
+        } else {
+            Ok(None)
+        }
     }
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
@@ -579,24 +579,7 @@ impl Component for Discovery {
             }
             self.active_interface = Some(intf);
         }
-        // -- MODE CHANGE
-        if let Action::ModeChange(mode) = action {
-            // -- when scanning don't switch to input mode
-            if self.is_scanning && mode == Mode::Input {
-                self.action_tx
-                    .clone()
-                    .unwrap()
-                    .send(Action::ModeChange(Mode::Normal))
-                    .unwrap();
-                return Ok(None);
-            }
 
-            if mode == Mode::Input {
-                // self.input.reset();
-                self.cidr_error = false;
-            }
-            self.mode = mode;
-        }
         if self.active_tab == TabsEnum::Discovery {
             // -- prev & next select item in table
             if let Action::Down = action {
@@ -604,6 +587,26 @@ impl Component for Discovery {
             }
             if let Action::Up = action {
                 self.previous_in_table();
+            }
+
+            // -- MODE CHANGE
+            if let Action::ModeChange(mode) = action {
+                // -- when scanning don't switch to input mode
+                if self.is_scanning && mode == Mode::Input {
+                    self.action_tx
+                        .clone()
+                        .unwrap()
+                        .send(Action::ModeChange(Mode::Normal))
+                        .unwrap();
+                    return Ok(None);
+                }
+
+                if mode == Mode::Input {
+                    // self.input.reset();
+                    self.cidr_error = false;
+                }
+                self.action_tx.clone().unwrap().send(Action::AppModeChange(mode)).unwrap();
+                self.mode = mode;
             }
         }
 

@@ -133,7 +133,8 @@ impl App {
                     log::debug!("{action:?}");
                 }
                 match action {
-                    Action::ModeChange(mode) => {
+                    // Action::AppModeChange(mode) => {
+                    Action::AppModeChange(mode) => {
                         self.mode = mode;
                     }
 

@@ -40,6 +40,7 @@ pub enum Action {
     ActiveInterface(NetworkInterface),
     ArpRecieve(ArpPacketData),
     Scan(Vec<WifiInfo>),
+    AppModeChange(Mode),
     ModeChange(Mode),
     PingIp(String),
     CountIp,
@@ -47,6 +48,7 @@ pub enum Action {
     PacketDump(DateTime<Local>, PacketsInfoTypesEnum, PacketTypeEnum),
     PortScan(usize, u16),
     PortScanDone(usize),
+    Clear,
 }
 
 impl<'de> Deserialize<'de> for Action {
@@ -75,6 +77,7 @@ impl<'de> Deserialize<'de> for Action {
                     "Dump" => Ok(Action::DumpToggle),
                     "Interface" => Ok(Action::InterfaceSwitch),
                     "Scan" => Ok(Action::ScanCidr),
+                    "Clear" => Ok(Action::Clear),
                     "Up" => Ok(Action::Up),
                     "Down" => Ok(Action::Down),
                     "Left" => Ok(Action::Left),

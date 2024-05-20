@@ -174,7 +174,6 @@ impl Ports {
         match tokio::time::timeout(timeout, TcpStream::connect(&soc_addr)).await {
             Ok(Ok(_)) => {
                 tx.send(Action::PortScan(index, port)).unwrap();
-                // println!("port: {:?}", port);
             }
             _ => {}
         }
