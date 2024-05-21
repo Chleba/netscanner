@@ -27,9 +27,9 @@
 - [x] (IPv6) Packetdump (ICMP6)
 - [x] start/pause packetdump
 - [x] scanning open ports (TCP)
+- [x] packet logs filter
 
 **TODO:**
-- [ ] packet logs filter
 - [ ] ipv6 scanning & dumping
 
 ## *Notes*:
