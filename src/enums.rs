@@ -17,6 +17,7 @@ pub struct UDPPacketInfo {
     pub destination: IpAddr,
     pub destination_port: u16,
     pub length: u16,
+    pub raw_str: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -27,6 +28,7 @@ pub struct TCPPacketInfo {
     pub destination: IpAddr,
     pub destination_port: u16,
     pub length: usize,
+    pub raw_str: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -37,6 +39,7 @@ pub struct ARPPacketInfo {
     pub destination_mac: MacAddr,
     pub destination_ip: Ipv4Addr,
     pub operation: ArpOperation,
+    pub raw_str: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -47,6 +50,7 @@ pub struct ICMPPacketInfo {
     pub seq: u16,
     pub id: u16,
     pub icmp_type: IcmpType,
+    pub raw_str: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -55,6 +59,7 @@ pub struct ICMP6PacketInfo {
     pub source: IpAddr,
     pub destination: IpAddr,
     pub icmp_type: Icmpv6Type,
+    pub raw_str: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]

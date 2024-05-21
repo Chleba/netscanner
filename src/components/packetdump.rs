@@ -35,6 +35,8 @@ use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     task,
 };
+use tui_input::backend::crossterm::EventHandler;
+use tui_input::Input;
 
 use super::{Component, Frame};
 use crate::{
@@ -46,9 +48,12 @@ use crate::{
         TCPPacketInfo, TabsEnum, UDPPacketInfo,
     },
     layout::get_vertical_layout,
+    mode::Mode,
     utils::MaxSizeVec,
 };
 use strum::{EnumCount, IntoEnumIterator};
+
+static INPUT_SIZE: usize = 30;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArpPacketData {
@@ -68,6 +73,9 @@ pub struct PacketDump {
     table_state: TableState,
     scrollbar_state: ScrollbarState,
     packet_type: PacketTypeEnum,
+    input: Input,
+    mode: Mode,
+    filter_str: String,
 
     arp_packets: MaxSizeVec<(DateTime<Local>, PacketsInfoTypesEnum)>,
     udp_packets: MaxSizeVec<(DateTime<Local>, PacketsInfoTypesEnum)>,
@@ -95,6 +103,9 @@ impl PacketDump {
             table_state: TableState::default().with_selected(0),
             scrollbar_state: ScrollbarState::new(0),
             packet_type: PacketTypeEnum::All,
+            input: Input::default().with_value(String::from("")),
+            mode: Mode::Normal,
+            filter_str: String::from(""),
 
             arp_packets: MaxSizeVec::new(1000),
             udp_packets: MaxSizeVec::new(1000),
@@ -114,6 +125,16 @@ impl PacketDump {
     ) {
         let udp = UdpPacket::new(packet);
         if let Some(udp) = udp {
+            let raw_str = format!(
+                "[{}]: UDP Packet: {}:{} > {}:{}; length: {}",
+                interface_name,
+                source,
+                udp.get_source(),
+                destination,
+                udp.get_destination(),
+                udp.get_length()
+            );
+
             tx.send(Action::PacketDump(
                 Local::now(),
                 PacketsInfoTypesEnum::Udp(UDPPacketInfo {
@@ -123,6 +144,7 @@ impl PacketDump {
                     destination,
                     destination_port: udp.get_destination(),
                     length: udp.get_length(),
+                    raw_str,
                 }),
                 PacketTypeEnum::Udp,
             ))
@@ -142,6 +164,16 @@ impl PacketDump {
             match icmp_packet.get_icmp_type() {
                 IcmpTypes::EchoReply => {
                     let echo_reply_packet = echo_reply::EchoReplyPacket::new(packet).unwrap();
+
+                    let raw_str = format!(
+                        "[{}]: ICMP echo reply {} -> {} (seq={:?}, id={:?})",
+                        interface_name,
+                        source,
+                        destination,
+                        echo_reply_packet.get_sequence_number(),
+                        echo_reply_packet.get_identifier()
+                    );
+
                     tx.send(Action::PacketDump(
                         Local::now(),
                         PacketsInfoTypesEnum::Icmp(ICMPPacketInfo {
@@ -151,6 +183,7 @@ impl PacketDump {
                             seq: echo_reply_packet.get_sequence_number(),
                             id: echo_reply_packet.get_identifier(),
                             icmp_type: IcmpTypes::EchoReply,
+                            raw_str,
                         }),
                         PacketTypeEnum::Icmp,
                     ))
@@ -158,6 +191,16 @@ impl PacketDump {
                 }
                 IcmpTypes::EchoRequest => {
                     let echo_request_packet = echo_request::EchoRequestPacket::new(packet).unwrap();
+
+                    let raw_str = format!(
+                        "[{}]: ICMP echo request {} -> {} (seq={:?}, id={:?})",
+                        interface_name,
+                        source,
+                        destination,
+                        echo_request_packet.get_sequence_number(),
+                        echo_request_packet.get_identifier()
+                    );
+
                     tx.send(Action::PacketDump(
                         Local::now(),
                         PacketsInfoTypesEnum::Icmp(ICMPPacketInfo {
@@ -167,25 +210,13 @@ impl PacketDump {
                             seq: echo_request_packet.get_sequence_number(),
                             id: echo_request_packet.get_identifier(),
                             icmp_type: IcmpTypes::EchoRequest,
+                            raw_str,
                         }),
                         PacketTypeEnum::Icmp,
                     ))
                     .unwrap();
                 }
-                _ => {
-                    // tx.send(Action::PacketDump(
-                    //     Local::now(),
-                    //     // format!(
-                    //     //     "[{}]: ICMP packet {} -> {} (type={:?})",
-                    //     //     interface_name,
-                    //     //     source,
-                    //     //     destination,
-                    //     //     icmp_packet.get_icmp_type()
-                    //     // ),
-                    //     PacketTypeEnum::Icmp,
-                    // ))
-                    // .unwrap();
-                }
+                _ => {}
             }
         }
     }
@@ -199,6 +230,14 @@ impl PacketDump {
     ) {
         let icmpv6_packet = Icmpv6Packet::new(packet);
         if let Some(icmpv6_packet) = icmpv6_packet {
+            let raw_str = format!(
+                "[{}]: ICMPv6 packet {} -> {} (type={:?})",
+                interface_name,
+                source,
+                destination,
+                icmpv6_packet.get_icmpv6_type()
+            );
+
             tx.send(Action::PacketDump(
                 Local::now(),
                 PacketsInfoTypesEnum::Icmp6(ICMP6PacketInfo {
@@ -206,6 +245,7 @@ impl PacketDump {
                     source,
                     destination,
                     icmp_type: icmpv6_packet.get_icmpv6_type(),
+                    raw_str,
                 }),
                 PacketTypeEnum::Icmp6,
             ))
@@ -222,6 +262,16 @@ impl PacketDump {
     ) {
         let tcp = TcpPacket::new(packet);
         if let Some(tcp) = tcp {
+            let raw_str = format!(
+                "[{}]: TCP Packet: {}:{} > {}:{}; length: {}",
+                interface_name,
+                source,
+                tcp.get_source(),
+                destination,
+                tcp.get_destination(),
+                packet.len()
+            );
+
             tx.send(Action::PacketDump(
                 Local::now(),
                 PacketsInfoTypesEnum::Tcp(TCPPacketInfo {
@@ -231,6 +281,7 @@ impl PacketDump {
                     destination,
                     destination_port: tcp.get_destination(),
                     length: packet.len(),
+                    raw_str,
                 }),
                 PacketTypeEnum::Tcp,
             ))
@@ -259,18 +310,7 @@ impl PacketDump {
             IpNextHeaderProtocols::Icmpv6 => {
                 Self::handle_icmpv6_packet(interface_name, source, destination, packet, tx)
             }
-            _ => {} // _ => println!(
-                    //     "[{}]: Unknown {} packet: {} > {}; protocol: {:?} length: {}",
-                    //     interface_name,
-                    //     match source {
-                    //         IpAddr::V4(..) => "IPv4",
-                    //         _ => "IPv6",
-                    //     },
-                    //     source,
-                    //     destination,
-                    //     protocol,
-                    //     packet.len()
-                    // ),
+            _ => {}
         }
     }
 
@@ -327,6 +367,16 @@ impl PacketDump {
             }))
             .unwrap();
 
+            let raw_str = format!(
+                "[{}]: ARP packet: {}({}) > {}({}); operation: {:?}",
+                interface_name,
+                ethernet.get_source(),
+                header.get_sender_proto_addr(),
+                ethernet.get_destination(),
+                header.get_target_proto_addr(),
+                header.get_operation()
+            );
+
             tx.send(Action::PacketDump(
                 Local::now(),
                 PacketsInfoTypesEnum::Arp(ARPPacketInfo {
@@ -336,6 +386,7 @@ impl PacketDump {
                     destination_mac: ethernet.get_destination(),
                     destination_ip: header.get_target_proto_addr(),
                     operation: header.get_operation(),
+                    raw_str,
                 }),
                 PacketTypeEnum::Arp,
             ))
@@ -510,7 +561,39 @@ impl PacketDump {
     }
 
     fn get_table_rows_by_packet_type<'a>(&mut self, packet_type: PacketTypeEnum) -> Vec<Row<'a>> {
-        let logs = self.get_array_by_packet_type(packet_type);
+        let f_str = self.filter_str.clone();
+        let logs_data = self.get_array_by_packet_type(packet_type);
+        let mut logs: Vec<(DateTime<Local>, PacketsInfoTypesEnum)> = vec![];
+        for (d, p) in logs_data {
+            match p {
+                PacketsInfoTypesEnum::Icmp(log) => {
+                    if log.raw_str.contains(f_str.as_str()) {
+                        logs.push((d.to_owned(), p.to_owned()));
+                    }
+                }
+                PacketsInfoTypesEnum::Arp(log) => {
+                    if log.raw_str.contains(f_str.as_str()) {
+                        logs.push((d.to_owned(), p.to_owned()));
+                    }
+                }
+                PacketsInfoTypesEnum::Icmp6(log) => {
+                    if log.raw_str.contains(f_str.as_str()) {
+                        logs.push((d.to_owned(), p.to_owned()));
+                    }
+                }
+                PacketsInfoTypesEnum::Udp(log) => {
+                    if log.raw_str.contains(f_str.as_str()) {
+                        logs.push((d.to_owned(), p.to_owned()));
+                    }
+                }
+                PacketsInfoTypesEnum::Tcp(log) => {
+                    if log.raw_str.contains(f_str.as_str()) {
+                        logs.push((d.to_owned(), p.to_owned()));
+                    }
+                }
+            }
+        }
+
         let rows: Vec<Row> = logs
             .iter()
             .map(|(time, log)| {
@@ -750,39 +833,11 @@ impl PacketDump {
         rows
     }
 
-    fn make_state_toast(&mut self) -> Paragraph<'static> {
-        let mut text = Span::styled(
-            "..running..",
-            Style::default().bg(Color::Green).fg(Color::Black),
-        );
-        if self.dump_paused.load(Ordering::Relaxed) {
-            text = Span::styled(
-                "..stopped..",
-                Style::default().bg(Color::Red).fg(Color::White),
-            );
-        }
-        Paragraph::new(text).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(DEFAULT_BORDER_STYLE)
-                .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-                .title(
-                    ratatui::widgets::block::Title::from(Line::from(vec![
-                        Span::raw("|"),
-                        Span::styled(
-                            "d",
-                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                        ),
-                        Span::styled("ump", Style::default().fg(Color::Yellow)),
-                        Span::raw("|"),
-                    ]))
-                    .alignment(Alignment::Right)
-                    .position(ratatui::widgets::block::Position::Bottom),
-                ),
-        )
-    }
-
-    fn make_table<'a>(rows: Vec<Row<'a>>, packet_type: PacketTypeEnum) -> Table<'a> {
+    fn make_table<'a>(
+        rows: Vec<Row<'a>>,
+        packet_type: PacketTypeEnum,
+        dump_paused: bool,
+    ) -> Table<'a> {
         let header = Row::new(vec!["time", "packet log"])
             .style(Style::default().fg(Color::Yellow))
             .top_margin(1)
@@ -816,10 +871,31 @@ impl PacketDump {
         ));
         type_titles.push(Span::styled("|", Style::default().fg(Color::Yellow)));
 
+        // -- dump title
+        let mut dump_spans = vec![
+            Span::styled("|", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                "d",
+                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+            ),
+            Span::styled("ump:", Style::default().fg(Color::Yellow)),
+        ];
+        if dump_paused {
+            dump_spans.push(Span::styled("paused", Style::default().fg(Color::DarkGray)))
+        } else {
+            dump_spans.push(Span::styled("running", Style::default().fg(Color::Green)))
+        }
+        dump_spans.push(Span::styled("|", Style::default().fg(Color::Yellow)));
+
         let table = Table::new(rows, [Constraint::Min(10), Constraint::Percentage(100)])
             .header(header)
             .block(
                 Block::new()
+                    .title(
+                        ratatui::widgets::block::Title::from(Line::from(dump_spans))
+                            .position(ratatui::widgets::block::Position::Top)
+                            .alignment(Alignment::Right),
+                    )
                     .title(
                         ratatui::widgets::block::Title::from(Span::styled(
                             "|Packets|",
@@ -869,12 +945,87 @@ impl PacketDump {
             .end_symbol(None);
         scrollbar
     }
+
+    fn make_input(&self, scroll: usize) -> Paragraph {
+        let input = Paragraph::new(self.input.value())
+            .style(Style::default().fg(Color::Green))
+            .scroll((0, scroll as u16))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(match self.mode {
+                        Mode::Input => Style::default().fg(Color::Green),
+                        Mode::Normal => Style::default().fg(Color::Rgb(100, 100, 100)),
+                    })
+                    .border_type(DEFAULT_BORDER_STYLE)
+                    .title(
+                        ratatui::widgets::block::Title::from(Line::from(vec![
+                            Span::raw("|"),
+                            Span::styled(
+                                "i",
+                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                            ),
+                            Span::styled("nput", Style::default().fg(Color::Yellow)),
+                            Span::raw("/"),
+                            Span::styled(
+                                "ESC",
+                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                            ),
+                            Span::raw("|"),
+                        ]))
+                        .alignment(Alignment::Right)
+                        .position(ratatui::widgets::block::Position::Bottom),
+                    )
+                    .title(
+                        ratatui::widgets::block::Title::from(Line::from(vec![
+                            Span::raw("|"),
+                            Span::styled(
+                                "c",
+                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                            ),
+                            Span::styled("lear", Style::default().fg(Color::Yellow)),
+                            Span::raw("|"),
+                        ]))
+                        .alignment(Alignment::Left)
+                        .position(ratatui::widgets::block::Position::Bottom),
+                    ),
+            );
+        input
+    }
+
+    fn set_filter_str(&mut self, value: String) {
+        self.filter_str = value;
+    }
 }
 
 impl Component for PacketDump {
     fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
+    }
+
+    fn handle_key_events(&mut self, key: KeyEvent) -> Result<Option<Action>> {
+        if self.active_tab == TabsEnum::Packets {
+            let action = match self.mode {
+                Mode::Normal => return Ok(None),
+                Mode::Input => match key.code {
+                    KeyCode::Enter => {
+                        if let Some(sender) = &self.action_tx {
+                            self.set_filter_str(self.input.value().to_string());
+                            // self.set_cidr(self.input.value().to_string(), true);
+                        }
+                        Action::ModeChange(Mode::Normal)
+                    }
+                    _ => {
+                        self.input.handle_event(&crossterm::event::Event::Key(key));
+                        return Ok(None);
+                    }
+                },
+            };
+            Ok(Some(action))
+        } else {
+            Ok(None)
+        }
     }
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
@@ -923,7 +1074,24 @@ impl Component for PacketDump {
                     self.loop_thread = None;
                 }
             }
+
+            // -- MODE CHANGE
+            if let Action::ModeChange(mode) = action {
+                self.action_tx
+                    .clone()
+                    .unwrap()
+                    .send(Action::AppModeChange(mode))
+                    .unwrap();
+                self.mode = mode;
+            }
+
+            // -- clear input
+            if let Action::Clear = action {
+                self.input.reset();
+                self.filter_str = String::from("");
+            }
         }
+
         // -- packet recieved
         if !self.dump_paused.load(Ordering::Relaxed) {
             if let Action::PacketDump(time, packet, packet_type) = action {
@@ -955,14 +1123,38 @@ impl Component for PacketDump {
             table_rect.height -= 1;
 
             // -- TABLE
+            let mut dump_paused = false;
+            if self.dump_paused.load(Ordering::Relaxed) {
+                dump_paused = true;
+            }
             let rows = self.get_table_rows_by_packet_type(self.packet_type);
-            let table = Self::make_table(rows, self.packet_type);
+            let table = Self::make_table(rows, self.packet_type, dump_paused);
             f.render_stateful_widget(table, table_rect, &mut self.table_state.clone());
 
-            // -- STATE TOAST
-            let toast = self.make_state_toast();
-            let toast_react = Rect::new(table_rect.width - 14, table_rect.y + 1, 13, 3);
-            f.render_widget(toast, toast_react);
+            // -- INPUT
+            let input_size: u16 = INPUT_SIZE as u16;
+            let input_rect = Rect::new(
+                table_rect.width - (input_size + 1),
+                table_rect.y + 1,
+                input_size,
+                3,
+            );
+            // -- INPUT_SIZE - 3 is offset for border + 1char for cursor
+            let scroll = self.input.visual_scroll(INPUT_SIZE - 3);
+            let block = self.make_input(scroll);
+            f.render_widget(block, input_rect);
+            // -- cursor
+            match self.mode {
+                Mode::Input => {
+                    f.set_cursor(
+                        input_rect.x
+                            + ((self.input.visual_cursor()).max(scroll) - scroll) as u16
+                            + 1,
+                        input_rect.y + 1,
+                    );
+                }
+                Mode::Normal => {}
+            }
 
             // -- SCROLLBAR
             let scrollbar = Self::make_scrollbar();
