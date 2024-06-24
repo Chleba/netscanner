@@ -1,22 +1,37 @@
 name: Rust
 
-on:
-  push:
-    branches: [ "main" ]
+on: 
   pull_request:
     branches: [ "main" ]
 
 env:
   CARGO_TERM_COLOR: always
+  RELEASE_TAG: 0.5.1-1 # This is the version of the package, it should be updated with every release
 
 jobs:
   build:
 
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
+
+    - name: Create Debian package
+      uses: dominicorsi/cargo-deb-ubuntu@main
+    
+    - name: Upload Netscanner Debian Package (amd64)
+      uses: actions/upload-artifact@v4
+      with:
+        name: netscanner_${{ env.RELEASE_TAG }}_amd64.deb
+        path: netscanner_${{ env.RELEASE_TAG }}_amd64.deb
+    
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+          files: netscanner_${{ env.RELEASE_TAG }}_amd64.deb

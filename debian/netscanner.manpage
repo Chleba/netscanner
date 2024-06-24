@@ -1,0 +1,15 @@
+.\" Manpage for netscanner.
+.\" Contact dominic.orsi@gmail.com to correct errors or typos.
+.TH man 1 "22 June 2024" "1.0" "netscanner man page"
+.SH NAME
+netscanner \- view and scan connected networks
+.SH SYNOPSIS
+netscanner
+.SH DESCRIPTION
+Netscanner is a terminal network scanner & diagnostic tool with modern TUI.
+.SH OPTIONS
+Netscanner does not take any options.
+.SH BUGS
+No known bugs.
+.SH AUTHOR
+Dominic Orsi <dominic.orsi@gmail.com>
