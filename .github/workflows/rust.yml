@@ -23,7 +23,7 @@ jobs:
       run: cargo test --verbose
 
     - name: Create Debian package
-      uses: dominicorsi/cargo-deb-ubuntu@main
+      uses: dominicorsi/cargo-deb-ubuntu@1.0.0
     
     - name: Upload Netscanner Debian Package (amd64)
       uses: actions/upload-artifact@v4
