@@ -1,0 +1,29 @@
+.\" Manpage for netscanner.
+.\" Contact dominic.orsi@gmail.com to correct errors or typos.
+.TH man 1 "22 June 2024" "1.0" "netscanner man page"
+.SH NAME
+netscanner \- view and scan connected networks
+.SH SYNOPSIS
+.B netscanner
+[\fIOPTION\fR]...
+.SH DESCRIPTION
+.B netscanner
+is a terminal network scanner & diagnostic tool with modern TUI.
+.SH OPTIONS
+.TP
+.BR \-t ", " \-\-tick\-rate " " \fIFLOAT\fR
+Tick rate, i.e. number of ticks per second [default: 1]
+.TP
+.BR \-f ", " \-\-frame\-rate " " \fIFLOAT\fR
+Frame rate, i.e. number of frames per second [default: 10]
+.TP
+.BR \-h ", " \-\-help
+Print help
+.TP
+.BR \-V ", " \-\-version
+Print version
+.SH BUGS
+See GitHub issues:
+https://github.com/chleba/netscanner/issues
+.SH AUTHOR
+Dominic Orsi <dominic.orsi@gmail.com>

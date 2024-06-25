@@ -8,13 +8,48 @@ authors = ["Chleba <chlebik@gmail.com>"]
 repository = "https://github.com/Chleba/netscanner"
 homepage = "https://github.com/Chleba/netscanner"
 
+[package.metadata.deb]
+maintainer = "Dominic Orsi <dominic.orsi@gmail.com>"
+depends = "iw"
+section = "utils"
+priority = "optional"
+changelog = "debian/changelog"
+license-file = ["LICENSE", "4"]
+extended-description = """\
+Terminal Network scanner & diagnostic tool with modern TUI (terminal user interface). \n
+GitHub: https://github.com/Chleba/netscanner"""
+assets = [
+    [
+        "target/release/netscanner",
+        "usr/bin/",
+        "4755",
+    ],
+    [
+        "README.md",
+        "usr/share/doc/netscanner/README",
+        "644",
+    ],
+    [
+        "debian/netscanner.manpage",
+        "usr/share/man/man1/netscanner.1",
+        "644",
+    ],
+]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 better-panic = "0.3.0"
 chrono = "0.4.31"
 cidr = "0.2.2"
-clap = { version = "4.4.5", features = ["derive", "cargo", "wrap_help", "unicode", "string", "unstable-styles"] }
+clap = { version = "4.4.5", features = [
+    "derive",
+    "cargo",
+    "wrap_help",
+    "unicode",
+    "string",
+    "unstable-styles",
+] }
 color-eyre = "0.6.2"
 config = "0.13.3"
 crossterm = { version = "0.27.0", features = ["serde", "event-stream"] }
