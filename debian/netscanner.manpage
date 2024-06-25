@@ -4,12 +4,26 @@
 .SH NAME
 netscanner \- view and scan connected networks
 .SH SYNOPSIS
-netscanner
+.B netscanner
+[\fIOPTION\fR]...
 .SH DESCRIPTION
-Netscanner is a terminal network scanner & diagnostic tool with modern TUI.
+.B netscanner
+is a terminal network scanner & diagnostic tool with modern TUI.
 .SH OPTIONS
-Netscanner does not take any options.
+.TP
+.BR \-t ", " \-\-tick\-rate " " \fIFLOAT\fR
+Tick rate, i.e. number of ticks per second [default: 1]
+.TP
+.BR \-f ", " \-\-frame\-rate " " \fIFLOAT\fR
+Frame rate, i.e. number of frames per second [default: 10]
+.TP
+.BR \-h ", " \-\-help
+Print help
+.TP
+.BR \-V ", " \-\-version
+Print version
 .SH BUGS
-No known bugs.
+See GitHub issues:
+https://github.com/chleba/netscanner/issues
 .SH AUTHOR
 Dominic Orsi <dominic.orsi@gmail.com>

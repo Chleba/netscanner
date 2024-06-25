@@ -10,7 +10,7 @@ homepage = "https://github.com/Chleba/netscanner"
 
 [package.metadata.deb]
 maintainer = "Dominic Orsi <dominic.orsi@gmail.com>"
-depends = "$auto"
+depends = "iw"
 section = "utils"
 priority = "optional"
 changelog = "debian/changelog"

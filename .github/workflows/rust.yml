@@ -1,6 +1,6 @@
 name: Rust
 
-on: 
+on:
   push:
     branches: [ "main" ]
   pull_request:
@@ -18,7 +18,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --verbose --release
     - name: Run tests
       run: cargo test --verbose
 
