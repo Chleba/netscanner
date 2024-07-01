@@ -121,7 +121,7 @@ impl WifiScan {
                 Cell::from(w.time.format("%H:%M:%S").to_string()),
                 Cell::from(Span::styled(
                     format!("{ssid:<2}"),
-                    Style::default().fg(w.color.clone()),
+                    Style::default().fg(w.color),
                 )),
                 Cell::from(w.channel.to_string()),
                 Cell::from(w.mac.clone()),
@@ -178,7 +178,7 @@ impl WifiScan {
                             let signal: f32 = w.signal_level.parse().unwrap_or(-100.00);
                             if n.signal < signal {
                                 n.signal = signal;
-                                n.mac = w.mac.clone();
+                                n.mac = w.mac;
                                 let channel = w.channel.parse::<u8>().unwrap_or(0);
                                 n.channel = channel;
                             }
@@ -254,7 +254,7 @@ impl Component for WifiScan {
         };
         // -- custom actions
         if let Action::Scan(ref nets) = action {
-            self.parse_networks_data(&nets);
+            self.parse_networks_data(nets);
         }
 
         if let Action::GraphToggle = action {

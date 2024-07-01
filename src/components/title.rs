@@ -38,14 +38,6 @@ impl Component for Title {
         Ok(())
     }
 
-    fn update(&mut self, action: Action) -> Result<Option<Action>> {
-        match action {
-            Action::Tick => {}
-            _ => {}
-        }
-        Ok(None)
-    }
-
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         let rect = Rect::new(0, 0, f.size().width, 1);
         let version: &str = env!("CARGO_PKG_VERSION");

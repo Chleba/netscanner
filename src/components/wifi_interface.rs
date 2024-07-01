@@ -53,7 +53,7 @@ impl WifiInterface {
         let now = Instant::now();
         let elapsed = (now - self.last_update).as_secs_f64();
 
-        if self.wifi_info == None || elapsed > 5.0 {
+        if self.wifi_info.is_none() || elapsed > 5.0 {
             self.last_update = now;
             self.get_connected_wifi_info();
         }
@@ -124,12 +124,9 @@ impl WifiInterface {
     fn get_connected_wifi_info(&mut self) {
         let interfaces = datalink::interfaces();
         for i in interfaces {
-            match self.iw_command(i.name) {
-                Ok(output) => {
-                    let o = String::from_utf8(output.stdout).unwrap_or(String::from(""));
-                    self.wifi_info = Some(self.parse_iw_command(o));
-                }
-                Err(_) => (),
+            if let Ok(output) = self.iw_command(i.name) {
+                let o = String::from_utf8(output.stdout).unwrap_or(String::from(""));
+                self.wifi_info = Some(self.parse_iw_command(o));
             }
         }
     }
@@ -170,7 +167,7 @@ impl WifiInterface {
                 ]),
             ]));
 
-            let list = List::new(items).block(
+            List::new(items).block(
                 Block::default()
                     .borders(Borders::TOP)
                     .title("|WiFi Interface|")
@@ -178,76 +175,7 @@ impl WifiInterface {
                     .title_style(Style::default().fg(Color::Yellow))
                     .padding(Padding::new(2, 0, 0, 0))
                     .title_alignment(Alignment::Right),
-            );
-
-            list
-
-            // List::new::<ListItem>(vec![ListItem::new(vec![
-            //     // Line::from(vec![
-            //     //     Span::styled(
-            //     //         format!("{interface_label:<12}"),
-            //     //         Style::default().fg(Color::White),
-            //     //     ),
-            //     //     Span::styled(
-            //     //         format!("{interface:<12}"),
-            //     //         Style::default().fg(Color::Green),
-            //     //     ),
-            //     // ]),
-
-            //     Line::from(vec![
-            //         Span::styled(
-            //             format!("{ssid_label:<12}"),
-            //             Style::default().fg(Color::White),
-            //         ),
-            //         Span::styled(
-            //             format!("{ssid:<12}"),
-            //             Style::default().fg(Color::Green),
-            //         ),
-            //     ]),
-
-            //     // Line::from(vec![
-            //     //     Span::styled(
-            //     //         format!("{mac_label:<12}"),
-            //     //         Style::default().fg(Color::White),
-            //     //     ),
-            //     //     Span::styled(
-            //     //         format!("{mac:<12}"),
-            //     //         Style::default().fg(Color::Green),
-            //     //     ),
-            //     // ]),
-
-            //     // Line::from(vec![
-            //     //     Span::styled(
-            //     //         format!("{txpower_label:<12}"),
-            //     //         Style::default().fg(Color::White),
-            //     //     ),
-            //     //     Span::styled(
-            //     //         format!("{txpower}dBm"),
-            //     //         Style::default().fg(Color::Green),
-            //     //     ),
-            //     // ]),
-
-            //     Line::from(vec![
-            //         Span::styled(
-            //             format!("{channel_label:<12}"),
-            //             Style::default().fg(Color::White),
-            //         ),
-            //         Span::styled(
-            //             format!("{channel:<12}"),
-            //             Style::default().fg(Color::Green),
-            //         ),
-            //     ]),
-            //     ])
-            // ])
-            //     .block(
-            //         Block::default()
-            //             .borders(Borders::ALL)
-            //             .title("|WiFi Interface|")
-            //             .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
-            //             // .border_type(BorderType::Rounded)
-            //             .title_style(Style::default().fg(Color::Yellow))
-            //             .title_alignment(Alignment::Right),
-            //     )
+            )
         } else {
             let items: Vec<ListItem> = Vec::new();
             List::new(items)

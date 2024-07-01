@@ -107,8 +107,6 @@ impl Component for Tabs {
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
-            Action::Tick => {}
-
             Action::Tab => {
                 self.next_tab();
             }

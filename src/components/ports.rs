@@ -157,12 +157,14 @@ impl Ports {
 
         let tx = self.action_tx.clone().unwrap();
         let ip: IpAddr = self.ip_ports[index].ip.parse().unwrap();
-        let ports_box = Box::new(COMMON_PORTS.to_owned().into_iter());
+        let ports_box = Box::new(COMMON_PORTS.iter());
 
         let h = tokio::spawn(async move {
             let ports = stream::iter(ports_box);
             ports
-                .for_each_concurrent(POOL_SIZE, |port| Self::scan(tx.clone(), index, ip, port, 2))
+                .for_each_concurrent(POOL_SIZE, |port| {
+                    Self::scan(tx.clone(), index, ip, port.to_owned(), 2)
+                })
                 .await;
             tx.send(Action::PortScanDone(index)).unwrap();
         });
@@ -171,21 +173,15 @@ impl Ports {
     async fn scan(tx: UnboundedSender<Action>, index: usize, ip: IpAddr, port: u16, timeout: u64) {
         let timeout = Duration::from_secs(2);
         let soc_addr = SocketAddr::new(ip, port);
-        match tokio::time::timeout(timeout, TcpStream::connect(&soc_addr)).await {
-            Ok(Ok(_)) => {
-                tx.send(Action::PortScan(index, port)).unwrap();
-            }
-            _ => {}
+        if let Ok(Ok(_)) = tokio::time::timeout(timeout, TcpStream::connect(&soc_addr)).await {
+            tx.send(Action::PortScan(index, port)).unwrap();
         }
     }
 
     fn scan_selected(&mut self) {
-        let index = match self.list_state.selected() {
-            Some(index) => {
-                self.scan_ports(index);
-            }
-            None => {}
-        };
+        if let Some(index) = self.list_state.selected() {
+            self.scan_ports(index);
+        }
     }
 
     fn store_scanned_port(&mut self, index: usize, port: u16) {

@@ -7,9 +7,7 @@
  |_| |_|\___|\__|___/\___\__,_|_| |_|_| |_|\___|_|
 ```                                                  
 ***
-<p>
-	<img src='./demo.gif' width='550px'/>
-</p>
+<img src='./demo.gif' width='550px'/>
 
 [![Arch package](https://repology.org/badge/version-for-repo/arch/netscanner.svg)](https://repology.org/project/netscanner/versions)
 [![Alpine Linux Edge package](https://repology.org/badge/version-for-repo/alpine_edge/netscanner.svg)](https://repology.org/project/netscanner/versions)
