@@ -1,3 +1,4 @@
+use std::any::Any;
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyEvent, MouseEvent};
 use ratatui::layout::Rect;
@@ -16,11 +17,12 @@ pub mod wifi_interface;
 pub mod wifi_scan;
 pub mod tabs;
 pub mod ports;
+pub mod export;
 
 /// `Component` is a trait that represents a visual and interactive element of the user interface.
 /// Implementors of this trait can be registered with the main application loop and will be able to receive events,
 /// update state, and be rendered on the screen.
-pub trait Component {
+pub trait Component: Any {
     /// Register an action handler that can send actions for processing if necessary.
     /// # Arguments
     /// * `tx` - An unbounded sender that can send actions.
@@ -30,6 +32,9 @@ pub trait Component {
     fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
         Ok(())
     }
+
+    #[allow(unused_variables)]
+    fn as_any(&self) -> &dyn Any;
 
     #[allow(unused_variables)]
     fn tab_changed(&mut self, tab: TabsEnum) -> Result<()> {

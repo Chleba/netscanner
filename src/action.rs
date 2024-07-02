@@ -10,7 +10,7 @@ use std::{fmt, net::Ipv4Addr};
 
 use crate::{
     components::{packetdump::ArpPacketData, wifi_scan::WifiInfo},
-    enums::{PacketTypeEnum, PacketsInfoTypesEnum, TabsEnum},
+    enums::{ExportData, PacketTypeEnum, PacketsInfoTypesEnum, TabsEnum},
     mode::Mode,
 };
 
@@ -49,6 +49,8 @@ pub enum Action {
     PortScan(usize, u16),
     PortScanDone(usize),
     Clear,
+    Export,
+    ExportData(ExportData),
 }
 
 impl<'de> Deserialize<'de> for Action {
@@ -83,6 +85,7 @@ impl<'de> Deserialize<'de> for Action {
                     "Left" => Ok(Action::Left),
                     "Right" => Ok(Action::Right),
                     "Tab" => Ok(Action::Tab),
+                    "Export" => Ok(Action::Export),
                     "JumpDiscovery" => Ok(Action::TabChange(TabsEnum::Discovery)),
                     "JumpPackets" => Ok(Action::TabChange(TabsEnum::Packets)),
                     "JumpPorts" => Ok(Action::TabChange(TabsEnum::Ports)),

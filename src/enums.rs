@@ -9,6 +9,14 @@ use pnet::{
 };
 use strum::{Display, EnumCount, EnumIter, FromRepr};
 
+use crate::components::{discovery::ScannedIp, ports::ScannedIpPorts};
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExportData {
+    pub scanned_ips: Vec<ScannedIp>,
+    pub scanned_ports: Vec<ScannedIpPorts>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct UDPPacketInfo {
     pub interface_name: String,
@@ -99,7 +107,7 @@ pub enum PacketTypeEnum {
     Icmp6,
 }
 
-#[derive(PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum PortsScanState {
     Waiting,
     Scanning,

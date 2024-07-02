@@ -968,6 +968,7 @@ dependencies = [
  "color-eyre",
  "config",
  "crossterm",
+ "csv",
  "derive_deref",
  "directories",
  "dns-lookup",

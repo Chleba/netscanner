@@ -42,10 +42,11 @@ use tui_input::Input;
 static POOL_SIZE: usize = 64;
 const SPINNER_SYMBOLS: [&str; 6] = ["⠷", "⠯", "⠟", "⠻", "⠽", "⠾"];
 
-struct ScannedIpPorts {
-    ip: String,
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScannedIpPorts {
+    pub ip: String,
     state: PortsScanState,
-    ports: Vec<u16>,
+    pub ports: Vec<u16>,
 }
 
 pub struct Ports {
@@ -73,6 +74,10 @@ impl Ports {
             scrollbar_state: ScrollbarState::new(0),
             spinner_index: 0,
         }
+    }
+
+    pub fn get_scanned_ports(&self) -> &Vec<ScannedIpPorts> {
+        &self.ip_ports
     }
 
     fn process_ip(&mut self, ip: &str) {
@@ -219,11 +224,6 @@ impl Ports {
             .block(
                 Block::new()
                     .title(
-                        ratatui::widgets::block::Title::from("|Ports|".yellow())
-                            .position(ratatui::widgets::block::Position::Top)
-                            .alignment(Alignment::Right),
-                    )
-                    .title(
                         ratatui::widgets::block::Title::from(Line::from(vec![
                             Span::raw("|"),
                             Span::styled(
@@ -233,8 +233,12 @@ impl Ports {
                             Span::styled("can selected", Style::default().fg(Color::Yellow)),
                             Span::raw("|"),
                         ]))
-                        .alignment(Alignment::Left)
-                        .position(ratatui::widgets::block::Position::Bottom),
+                        .alignment(Alignment::Right), // .position(ratatui::widgets::block::Position::Bottom),
+                    )
+                    .title(
+                        ratatui::widgets::block::Title::from("|Ports|".yellow())
+                            .position(ratatui::widgets::block::Position::Top)
+                            .alignment(Alignment::Right),
                     )
                     .title(
                         ratatui::widgets::block::Title::from(Line::from(vec![
@@ -263,6 +267,10 @@ impl Ports {
 impl Component for Ports {
     fn init(&mut self, area: Rect) -> Result<()> {
         Ok(())
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
     fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {

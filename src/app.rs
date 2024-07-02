@@ -5,15 +5,19 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 use crate::{
-    action::Action,
-    components::{
-        discovery::Discovery, title::Title, interfaces::Interfaces, packetdump::PacketDump,
-        tabs::Tabs, wifi_chart::WifiChart, wifi_interface::WifiInterface, wifi_scan::WifiScan, 
-        ports::Ports, Component,
-    },
-    config::Config,
-    mode::Mode,
-    tui,
+    action::Action, components::{
+        discovery::{self, Discovery, ScannedIp},
+        export::Export,
+        interfaces::Interfaces,
+        packetdump::PacketDump,
+        ports::{Ports, ScannedIpPorts},
+        tabs::Tabs,
+        title::Title,
+        wifi_chart::WifiChart,
+        wifi_interface::WifiInterface,
+        wifi_scan::WifiScan,
+        Component,
+    }, config::Config, enums::ExportData, mode::Mode, tui
 };
 
 pub struct App {
@@ -37,10 +41,11 @@ impl App {
         let wifiscan = WifiScan::default();
         let wifi_interface = WifiInterface::default();
         let wifi_chart = WifiChart::default();
-        let tabs = Tabs::default(); 
+        let tabs = Tabs::default();
         let discovery = Discovery::default();
         let packetdump = PacketDump::default();
         let ports = Ports::default();
+        let export = Export::default();
         let config = Config::new()?;
 
         let mode = Mode::Normal;
@@ -59,6 +64,7 @@ impl App {
                 Box::new(discovery),
                 Box::new(packetdump),
                 Box::new(ports),
+                Box::new(export),
             ],
             should_quit: false,
             should_suspend: false,
@@ -133,7 +139,6 @@ impl App {
                     log::debug!("{action:?}");
                 }
                 match action {
-                    // Action::AppModeChange(mode) => {
                     Action::AppModeChange(mode) => {
                         self.mode = mode;
                     }
@@ -141,6 +146,27 @@ impl App {
                     Action::Error(ref err_msg) => {
                         self.post_exist_msg = Some(err_msg.to_string());
                         self.should_quit = true;
+                    }
+
+                    Action::Export => {
+                        // get data from specific components by downcasting them and then try to
+                        // comvert into specific struct
+                        let mut scanned_ips: Vec<ScannedIp> = Vec::new();
+                        let mut scanned_ports: Vec<ScannedIpPorts> = Vec::new();
+
+                        for component in &self.components {
+                            if let Some(d) = component.as_any().downcast_ref::<Discovery>() {
+                                scanned_ips = d.get_scanned_ips().clone();
+                            } else if let Some(pd) = component.as_any().downcast_ref::<PacketDump>() {
+                               println!("maslo"); 
+                            } else if let Some(p) = component.as_any().downcast_ref::<Ports>() {
+                                scanned_ports = p.get_scanned_ports().clone();
+                            }
+                        }
+                        action_tx.send(Action::ExportData(ExportData {
+                            scanned_ips,
+                            scanned_ports,
+                        })).unwrap();
                     }
 
                     Action::Tick => {

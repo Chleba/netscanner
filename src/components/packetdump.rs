@@ -897,6 +897,19 @@ impl PacketDump {
                             .alignment(Alignment::Right),
                     )
                     .title(
+                        ratatui::widgets::block::Title::from(Line::from(vec![
+                            Span::raw("|"),
+                            Span::styled(
+                                "e",
+                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                            ),
+                            Span::styled("xport data", Style::default().fg(Color::Yellow)),
+                            Span::raw("|"),
+                        ]))
+                        .alignment(Alignment::Left)
+                        .position(ratatui::widgets::block::Position::Bottom),
+                    )
+                    .title(
                         ratatui::widgets::block::Title::from(Span::styled(
                             "|Packets|",
                             Style::default().fg(Color::Yellow),
@@ -1002,6 +1015,10 @@ impl Component for PacketDump {
     fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
     fn handle_key_events(&mut self, key: KeyEvent) -> Result<Option<Action>> {

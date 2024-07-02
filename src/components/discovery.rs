@@ -45,7 +45,7 @@ static INPUT_SIZE: usize = 30;
 static DEFAULT_IP: &str = "192.168.1.0/24";
 const SPINNER_SYMBOLS: [&str; 6] = ["⠷", "⠯", "⠟", "⠻", "⠽", "⠾"];
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ScannedIp {
     pub ip: String,
     pub mac: String,
@@ -98,6 +98,10 @@ impl Discovery {
         }
     }
 
+    pub fn get_scanned_ips(&self) -> &Vec<ScannedIp> {
+        &self.scanned_ips
+    } 
+
     fn set_cidr(&mut self, cidr_str: String, scan: bool) {
         match &cidr_str.parse::<Ipv4Cidr>() {
             Ok(ip_cidr) => {
@@ -120,8 +124,6 @@ impl Discovery {
 
     fn send_arp(&mut self, target_ip: Ipv4Addr) {
         let active_interface = self.active_interface.clone().unwrap();
-        // let active_interface_mac = active_interface.mac.unwrap()
-
         if let Some(active_interface_mac) = active_interface.mac {
             let ipv4 = active_interface.ips.iter().find(|f| f.is_ipv4()).unwrap();
             let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
@@ -379,6 +381,19 @@ impl Discovery {
                 )
                 .title(
                     ratatui::widgets::block::Title::from(Line::from(vec![
+                        Span::raw("|"),
+                        Span::styled(
+                            "e",
+                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                        ),
+                        Span::styled("xport data", Style::default().fg(Color::Yellow)),
+                        Span::raw("|"),
+                    ]))
+                    .alignment(Alignment::Left)
+                    .position(ratatui::widgets::block::Position::Bottom),
+                )
+                .title(
+                    ratatui::widgets::block::Title::from(Line::from(vec![
                         Span::styled("|", Style::default().fg(Color::Yellow)),
                         Span::styled(format!("{}", ip_num), Style::default().fg(Color::Green)),
                         Span::styled(
@@ -499,6 +514,10 @@ impl Component for Discovery {
         Ok(())
     }
 
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
@@ -605,7 +624,11 @@ impl Component for Discovery {
                     // self.input.reset();
                     self.cidr_error = false;
                 }
-                self.action_tx.clone().unwrap().send(Action::AppModeChange(mode)).unwrap();
+                self.action_tx
+                    .clone()
+                    .unwrap()
+                    .send(Action::AppModeChange(mode))
+                    .unwrap();
                 self.mode = mode;
             }
         }
@@ -664,6 +687,7 @@ impl Component for Discovery {
                 input_size,
                 3,
             );
+
             // -- INPUT_SIZE - 3 is offset for border + 1char for cursor
             let scroll = self.input.visual_scroll(INPUT_SIZE - 3);
             let mut block = self.make_input(scroll);
@@ -671,6 +695,7 @@ impl Component for Discovery {
                 block = block.clone().add_modifier(Modifier::DIM);
             }
             f.render_widget(block, input_rect);
+
             // -- cursor
             match self.mode {
                 Mode::Input => {

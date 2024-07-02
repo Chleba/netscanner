@@ -245,6 +245,10 @@ impl Component for WifiScan {
         Ok(())
     }
 
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         if let Action::Tick = action {
             self.app_tick()?
