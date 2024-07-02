@@ -28,9 +28,11 @@
 - [x] start/pause packetdump
 - [x] scanning open ports (TCP)
 - [x] packet logs filter
+- [x] export scanned ips, ports into csv
 
 **TODO:**
 - [ ] ipv6 scanning & dumping
+- [ ] export scanned packets into csv files
 
 ## *Notes*:
 - Must be run with root privileges. 

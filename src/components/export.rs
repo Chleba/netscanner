@@ -1,8 +1,11 @@
-use color_eyre::eyre::{Ok, Result};
+use color_eyre::eyre::Result;
 use csv::Writer;
 use ratatui::{prelude::*, widgets::*};
-use std::env;
+use std::{
+    env,
+};
 use tokio::sync::mpsc::UnboundedSender;
+use chrono::Local;
 
 use super::{discovery::ScannedIp, ports::ScannedIpPorts, Component, Frame};
 use crate::action::Action;
@@ -39,8 +42,8 @@ impl Export {
         }
     }
 
-    pub fn write_discovery(&mut self, data: Vec<ScannedIp>) -> Result<()> {
-        let mut w = Writer::from_path(format!("{}/scanned_ips.csv", self.home_dir))?;
+    pub fn write_discovery(&mut self, data: Vec<ScannedIp>, timestamp: &String) -> Result<()> {
+        let mut w = Writer::from_path(format!("{}/scanned_ips.{}.csv", self.home_dir, timestamp))?;
 
         // -- header
         w.write_record(["ip", "mac", "hostname", "vendor"])?;
@@ -52,13 +55,18 @@ impl Export {
         Ok(())
     }
 
-    pub fn write_ports(&mut self, data: Vec<ScannedIpPorts>) -> Result<()> {
-        let mut w = Writer::from_path(format!("{}/scanned_ports.csv", self.home_dir))?;
+    pub fn write_ports(&mut self, data: Vec<ScannedIpPorts>, timestamp: &String) -> Result<()> {
+        let mut w = Writer::from_path(format!("{}/scanned_ports.{}.csv", self.home_dir, timestamp))?;
 
         // -- header
         w.write_record(["ip", "ports"])?;
         for s_ip in data {
-            let ports: String = s_ip.ports.iter().map(|n| n.to_string()).collect::<Vec<String>>().join(":");
+            let ports: String = s_ip
+                .ports
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<String>>()
+                .join(":");
             w.write_record([s_ip.ip, ports])?;
         }
         w.flush()?;
@@ -86,8 +94,11 @@ impl Component for Export {
         match action {
             Action::Export => {}
             Action::ExportData(data) => {
-                let _ = self.write_discovery(data.scanned_ips);
-                let _ = self.write_ports(data.scanned_ports);
+                let now = Local::now();
+                // let now_str = now.format("%Y-%m-%d-%H-%M-%S").to_string();
+                let now_str = now.timestamp().to_string();
+                let _ = self.write_discovery(data.scanned_ips, &now_str);
+                let _ = self.write_ports(data.scanned_ports, &now_str);
             }
             _ => {}
         }
