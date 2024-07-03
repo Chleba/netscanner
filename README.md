@@ -36,6 +36,7 @@
 ## *Notes*:
 - Must be run with root privileges. 
 - After `cargo install` You may try to change binary file chown & chmod
+- Export default path is in the user's `$HOME` directory (linux & macos)
 ```
 sudo chown root:user /home/user/.cargo/bin/netscanner
 sudo chmod u+s /home/user/.cargo/bin/netscanner
