@@ -1,20 +1,25 @@
-use std::net::{IpAddr, Ipv4Addr};
-
+use crate::components::{discovery::ScannedIp, ports::ScannedIpPorts};
+use chrono::{DateTime, Local};
 use pnet::{
     packet::{
         arp::{ArpOperation, ArpOperations},
-        icmp::IcmpType, icmpv6::Icmpv6Type,
+        icmp::IcmpType,
+        icmpv6::Icmpv6Type,
     },
     util::MacAddr,
 };
+use std::net::{IpAddr, Ipv4Addr};
 use strum::{Display, EnumCount, EnumIter, FromRepr};
-
-use crate::components::{discovery::ScannedIp, ports::ScannedIpPorts};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExportData {
     pub scanned_ips: Vec<ScannedIp>,
     pub scanned_ports: Vec<ScannedIpPorts>,
+    pub arp_packets: Vec<(DateTime<Local>, PacketsInfoTypesEnum)>,
+    pub udp_packets: Vec<(DateTime<Local>, PacketsInfoTypesEnum)>,
+    pub tcp_packets: Vec<(DateTime<Local>, PacketsInfoTypesEnum)>,
+    pub icmp_packets: Vec<(DateTime<Local>, PacketsInfoTypesEnum)>,
+    pub icmp6_packets: Vec<(DateTime<Local>, PacketsInfoTypesEnum)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -195,4 +200,3 @@ pub const COMMON_PORTS: &[u16] = &[
     3849, 3853, 5081, 8097, 3944, 1287, 3863, 4555, 4430, 7744, 1812, 7913, 1166, 1164, 1165,
     10160, 8019, 4658, 7878, 1259, 1092, 10008, 3304, 3307,
 ];
-

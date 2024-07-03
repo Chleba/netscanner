@@ -498,7 +498,7 @@ impl PacketDump {
         }
     }
 
-    fn get_array_by_packet_type(
+    pub fn get_array_by_packet_type(
         &mut self,
         packet_type: PacketTypeEnum,
     ) -> &Vec<(DateTime<Local>, PacketsInfoTypesEnum)> {
@@ -509,6 +509,25 @@ impl PacketDump {
             PacketTypeEnum::Icmp => self.icmp_packets.get_vec(),
             PacketTypeEnum::Icmp6 => self.icmp6_packets.get_vec(),
             PacketTypeEnum::All => self.all_packets.get_vec(),
+        }
+    }
+
+    pub fn get_arp_packages(&self) -> Vec<(DateTime<Local>, PacketsInfoTypesEnum)> {
+        let a = &self.arp_packets.get_vec().to_vec();
+        a.clone()
+    }
+
+    pub fn clone_array_by_packet_type(
+        &self,
+        packet_type: PacketTypeEnum,
+    ) -> Vec<(DateTime<Local>, PacketsInfoTypesEnum)> {
+        match packet_type {
+            PacketTypeEnum::Arp => self.arp_packets.get_vec().to_vec(),
+            PacketTypeEnum::Tcp => self.tcp_packets.get_vec().to_vec(),
+            PacketTypeEnum::Udp => self.udp_packets.get_vec().to_vec(),
+            PacketTypeEnum::Icmp => self.icmp_packets.get_vec().to_vec(),
+            PacketTypeEnum::Icmp6 => self.icmp6_packets.get_vec().to_vec(),
+            PacketTypeEnum::All => self.all_packets.get_vec().to_vec(),
         }
     }
 
