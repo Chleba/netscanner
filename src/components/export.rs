@@ -22,6 +22,7 @@ impl Export {
         }
     }
 
+    #[cfg(target_os = "linux")]
     fn get_user_home_dir(&mut self) {
         let mut home_dir = String::from("/root");
         if let Some(h_dir) = env::var_os("HOME") {
@@ -29,6 +30,25 @@ impl Export {
         }
         if let Some(sudo_user) = env::var_os("SUDO_USER") {
             home_dir = format!("/home/{}", sudo_user.to_str().unwrap());
+        }
+        self.home_dir = format!("{}/.netscanner", home_dir);
+
+        // -- create dot folder
+        if std::fs::metadata(self.home_dir.clone()).is_err() {
+            if std::fs::create_dir_all(self.home_dir.clone()).is_err() {
+                println!("Failed to create export dir");
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn get_user_home_dir(&mut self) {
+        let mut home_dir = String::from("/root");
+        if let Some(h_dir) = env::var_os("HOME") {
+            home_dir = String::from(h_dir.to_str().unwrap());
+        }
+        if let Some(sudo_user) = env::var_os("SUDO_USER") {
+            home_dir = format!("/Users/{}", sudo_user.to_str().unwrap());
         }
         self.home_dir = format!("{}/.netscanner", home_dir);
 
@@ -67,27 +87,6 @@ impl Export {
                 .collect::<Vec<String>>()
                 .join(":");
             w.write_record([s_ip.ip, ports])?;
-        }
-        w.flush()?;
-
-        Ok(())
-    }
-
-    pub fn write_arp_packets(
-        &mut self,
-        data: Vec<(DateTime<Local>, PacketsInfoTypesEnum)>,
-        timestamp: &String,
-    ) -> Result<()> {
-        let mut w = Writer::from_path(format!("{}/arp_packets.{}.csv", self.home_dir, timestamp))?;
-
-        // -- header
-        w.write_record(["time", "log"])?;
-        for (t, p) in data {
-            let mut log_str = String::from("");
-            if let PacketsInfoTypesEnum::Arp(log) = p {
-                log_str = log.raw_str;
-            }
-            w.write_record([t.to_string(), log_str])?;
         }
         w.flush()?;
 
