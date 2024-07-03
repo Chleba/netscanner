@@ -225,13 +225,13 @@ impl Ports {
                 Block::new()
                     .title(
                         ratatui::widgets::block::Title::from(Line::from(vec![
-                            Span::raw("|"),
+                            Span::styled("|", Style::default().fg(Color::Yellow)),
                             Span::styled(
                                 "s",
                                 Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
                             ),
                             Span::styled("can selected", Style::default().fg(Color::Yellow)),
-                            Span::raw("|"),
+                            Span::styled("|", Style::default().fg(Color::Yellow)),
                         ]))
                         .alignment(Alignment::Right), // .position(ratatui::widgets::block::Position::Bottom),
                     )

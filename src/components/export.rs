@@ -1,5 +1,6 @@
 use chrono::{DateTime, Local};
-use color_eyre::eyre::Result;
+use color_eyre::{eyre::Result, owo_colors::OwoColorize};
+use crossterm::style::Stylize;
 use csv::Writer;
 use ratatui::{prelude::*, widgets::*};
 use std::env;
@@ -12,6 +13,8 @@ use crate::{action::Action, enums::PacketsInfoTypesEnum};
 pub struct Export {
     action_tx: Option<UnboundedSender<Action>>,
     home_dir: String,
+    export_done: bool,
+    export_failed: bool,
 }
 
 impl Export {
@@ -19,6 +22,8 @@ impl Export {
         Self {
             action_tx: None,
             home_dir: String::new(),
+            export_done: false,
+            export_failed: false,
         }
     }
 
@@ -36,7 +41,8 @@ impl Export {
         // -- create dot folder
         if std::fs::metadata(self.home_dir.clone()).is_err() {
             if std::fs::create_dir_all(self.home_dir.clone()).is_err() {
-                println!("Failed to create export dir");
+                self.export_failed = true;
+                // println!("Failed to create export dir");
             }
         }
     }
@@ -151,6 +157,8 @@ impl Component for Export {
                 let _ = self.write_packets(data.udp_packets, &now_str, "udp");
                 let _ = self.write_packets(data.icmp_packets, &now_str, "icmp");
                 let _ = self.write_packets(data.icmp6_packets, &now_str, "icmp6");
+
+                self.export_done = true;
             }
             _ => {}
         }
@@ -158,10 +166,25 @@ impl Component for Export {
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        // let rect = Rect::new(0, 0, f.size().width, 1);
-        // let version: &str = env!("CARGO_PKG_VERSION");
-        // let title = format!(" Network Scanner (v{})", version);
-        // f.render_widget(Paragraph::new(title), rect);
+        if self.export_done {
+            let l_area = Rect {
+                x: 15,
+                y: area.height - 1,
+                width: area.width - 15,
+                height: 1,
+            };
+            let line = Line::from(vec![
+                Span::styled("|", Style::default().fg(Color::Yellow)),
+                Span::styled("exported: ", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    format!("{}/*", self.home_dir),
+                    Style::default().fg(Color::Green),
+                ),
+                Span::styled("|", Style::default().fg(Color::Yellow)),
+            ]);
+            f.render_widget(line, l_area);
+        }
+
         Ok(())
     }
 }

@@ -381,13 +381,13 @@ impl Discovery {
                 )
                 .title(
                     ratatui::widgets::block::Title::from(Line::from(vec![
-                        Span::raw("|"),
+                        Span::styled("|", Style::default().fg(Color::Yellow)),
                         Span::styled(
                             "e",
                             Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
                         ),
                         Span::styled("xport data", Style::default().fg(Color::Yellow)),
-                        Span::raw("|"),
+                        Span::styled("|", Style::default().fg(Color::Yellow)),
                     ]))
                     .alignment(Alignment::Left)
                     .position(ratatui::widgets::block::Position::Bottom),
