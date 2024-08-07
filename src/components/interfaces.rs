@@ -13,10 +13,10 @@ use tokio::sync::mpsc::UnboundedSender;
 use super::Component;
 use crate::{
     action::Action,
+    config::DEFAULT_BORDER_STYLE,
     layout::{get_horizontal_layout, get_vertical_layout},
     mode::Mode,
     tui::Frame,
-    config::DEFAULT_BORDER_STYLE,
 };
 
 pub struct Interfaces {
@@ -98,14 +98,17 @@ impl Interfaces {
     }
 
     fn make_table(&mut self) -> Table {
-        let active_interface = &self.active_interfaces[self.active_interface_index];
+        let mut active_interface: Option<&NetworkInterface> = None;
+        if !self.active_interfaces.is_empty() {
+            active_interface = Some(&self.active_interfaces[self.active_interface_index]);
+        }
         let header = Row::new(vec!["", "name", "mac", "ipv4", "ipv6"])
             .style(Style::default().fg(Color::Yellow))
             .height(1);
         let mut rows = Vec::new();
         for w in &self.interfaces {
             let mut active = String::from("");
-            if active_interface == w {
+            if active_interface.is_some() && active_interface.unwrap() == w {
                 active = String::from("*");
             }
             let name = w.name.clone();
