@@ -201,9 +201,9 @@ impl Ports {
     fn make_list(&self) -> List {
         let mut items = Vec::new();
         for ip in &self.ip_ports {
-            let ip_line = Line::from(vec!["ip: ".yellow(), ip.ip.clone().blue()]);
+            let ip_line = Line::from(vec!["IP: ".yellow(), ip.ip.clone().blue()]);
 
-            let mut ports_spans = vec!["ports: ".yellow()];
+            let mut ports_spans = vec!["PORTS: ".yellow()];
             if ip.state == PortsScanState::Waiting {
                 ports_spans.push("?".red());
             } else if ip.state == PortsScanState::Scanning {
