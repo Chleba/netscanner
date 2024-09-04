@@ -67,6 +67,7 @@ libc = "0.2.155"
 log = "0.4.20"
 mac_oui = { version = "0.4.8", features = ["with-db"] }
 pnet = "0.34.0"
+port-desc = "0.1.1"
 pretty_assertions = "1.4.0"
 rand = "0.8.5"
 ratatui = { version = "0.26.1", features = ["serde", "macros"] }

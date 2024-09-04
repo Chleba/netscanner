@@ -14,6 +14,7 @@ use pnet::packet::{
 use ratatui::style::Stylize;
 
 use core::str;
+use port_desc::{PortDescription, TransportProtocol};
 use ratatui::{prelude::*, widgets::*};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::{string, time::Duration};
@@ -27,17 +28,11 @@ use super::Component;
 use crate::enums::COMMON_PORTS;
 use crate::{
     action::Action,
-    components::discovery::ScannedIp,
     config::DEFAULT_BORDER_STYLE,
     enums::{PortsScanState, TabsEnum},
     layout::get_vertical_layout,
-    mode::Mode,
     tui::Frame,
 };
-use crossterm::event::{KeyCode, KeyEvent};
-use rand::random;
-use tui_input::backend::crossterm::EventHandler;
-use tui_input::Input;
 
 static POOL_SIZE: usize = 64;
 const SPINNER_SYMBOLS: [&str; 6] = ["⠷", "⠯", "⠟", "⠻", "⠽", "⠾"];
@@ -56,6 +51,7 @@ pub struct Ports {
     list_state: ListState,
     scrollbar_state: ScrollbarState,
     spinner_index: usize,
+    port_desc: Option<PortDescription>,
 }
 
 impl Default for Ports {
@@ -66,6 +62,11 @@ impl Default for Ports {
 
 impl Ports {
     pub fn new() -> Self {
+        let mut port_desc = None;
+        if let Ok(pd) = PortDescription::default() {
+            port_desc = Some(pd);
+        }
+
         Self {
             active_tab: TabsEnum::Discovery,
             action_tx: None,
@@ -73,6 +74,7 @@ impl Ports {
             list_state: ListState::default().with_selected(Some(0)),
             scrollbar_state: ScrollbarState::new(0),
             spinner_index: 0,
+            port_desc,
         }
     }
 
@@ -210,6 +212,12 @@ impl Ports {
             } else {
                 for p in &ip.ports {
                     ports_spans.push(p.to_string().green());
+
+                    if let Some(pd) = &self.port_desc {
+                        let p_type = pd.get_port_service_name(p.to_owned(), TransportProtocol::Tcp);
+                        ports_spans.push(format!("({})", p_type).to_string().light_magenta());
+                    }
+
                     ports_spans.push(", ".yellow());
                 }
             }
