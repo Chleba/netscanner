@@ -5,12 +5,6 @@ use dns_lookup::{lookup_addr, lookup_host};
 use futures::StreamExt;
 use futures::{future::join_all, stream};
 
-use pnet::datalink::{Channel, NetworkInterface};
-use pnet::packet::{
-    arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
-    ethernet::{EtherTypes, MutableEthernetPacket},
-    MutablePacket, Packet,
-};
 use ratatui::style::Stylize;
 
 use core::str;
@@ -273,7 +267,7 @@ impl Ports {
 }
 
 impl Component for Ports {
-    fn init(&mut self, area: Rect) -> Result<()> {
+    fn init(&mut self, area: Size) -> Result<()> {
         Ok(())
     }
 
@@ -352,7 +346,7 @@ impl Component for Ports {
             scroll_rect.height -= 2;
             f.render_stateful_widget(
                 scrollbar,
-                scroll_rect.inner(&Margin {
+                scroll_rect.inner(Margin {
                     vertical: 1,
                     horizontal: 1,
                 }),

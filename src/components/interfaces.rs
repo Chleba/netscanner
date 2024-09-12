@@ -187,7 +187,7 @@ impl Interfaces {
 }
 
 impl Component for Interfaces {
-    fn init(&mut self, area: Rect) -> Result<()> {
+    fn init(&mut self, area: Size) -> Result<()> {
         self.get_interfaces();
         self.send_active_interface();
         Ok(())

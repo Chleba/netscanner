@@ -20,6 +20,7 @@
       "<1>": "JumpDiscovery",
       "<2>": "JumpPackets",
       "<3>": "JumpPorts",
+      "<4>": "JumpSniffer",
     },
     "Input": {
       "<Esc>": "NormalMode"

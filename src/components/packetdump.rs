@@ -3,9 +3,9 @@ use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::{KeyCode, KeyEvent};
 use ipnetwork::Ipv4Network;
+
 use pnet::datalink::{Channel, NetworkInterface};
-use pnet::packet::icmpv6::{Icmpv6Type, Icmpv6Types};
-use pnet::packet::PrimitiveValues;
+use pnet::packet::icmpv6::Icmpv6Types;
 use pnet::packet::{
     arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
     ethernet::{EtherTypes, EthernetPacket, MutableEthernetPacket},
@@ -19,6 +19,8 @@ use pnet::packet::{
     MutablePacket, Packet,
 };
 use pnet::util::MacAddr;
+
+use ratatui::layout::Position;
 use ratatui::style::Stylize;
 use ratatui::{prelude::*, widgets::*};
 use std::{
@@ -563,14 +565,10 @@ impl PacketDump {
         let index = match self.table_state.selected() {
             Some(index) => {
                 let logs = self.get_array_by_packet_type(self.packet_type);
-                if logs.is_empty() {
+                if logs.is_empty() || index >= logs.len() - 1 {
                     0
                 } else {
-                    if index >= logs.len() - 1 {
-                        0
-                    } else {
-                        index + 1
-                    }
+                    index + 1
                 }
             }
             None => 0,
@@ -646,12 +644,12 @@ impl PacketDump {
                             _ => {}
                         }
                         spans.push(Span::styled(
-                            format!("{}", icmp.source.to_string()),
+                            icmp.source.to_string(),
                             Style::default().fg(Color::Blue),
                         ));
                         spans.push(Span::styled(" -> ", Style::default().fg(Color::Yellow)));
                         spans.push(Span::styled(
-                            format!("{}", icmp.destination.to_string()),
+                            icmp.destination.to_string(),
                             Style::default().fg(Color::Blue),
                         ));
                         spans.push(Span::styled("(seq=", Style::default().fg(Color::Yellow)));
@@ -704,12 +702,12 @@ impl PacketDump {
                         ));
 
                         spans.push(Span::styled(
-                            format!("{}", icmp.source.to_string()),
+                            icmp.source.to_string(),
                             Style::default().fg(Color::Blue),
                         ));
                         spans.push(Span::styled(" -> ", Style::default().fg(Color::Yellow)));
                         spans.push(Span::styled(
-                            format!("{}", icmp.destination.to_string()),
+                            icmp.destination.to_string(),
                             Style::default().fg(Color::Blue),
                         ));
                         spans.push(Span::styled(", ", Style::default().fg(Color::Yellow)));
@@ -731,22 +729,22 @@ impl PacketDump {
                             Style::default().fg(Color::Yellow),
                         ));
                         spans.push(Span::styled(
-                            format!("{}", udp.source.to_string()),
+                            udp.source.to_string(),
                             Style::default().fg(Color::Blue),
                         ));
                         spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
                         spans.push(Span::styled(
-                            format!("{}", udp.source_port.to_string()),
+                            udp.source_port.to_string(),
                             Style::default().fg(Color::Green),
                         ));
                         spans.push(Span::styled(" > ", Style::default().fg(Color::Yellow)));
                         spans.push(Span::styled(
-                            format!("{}", udp.destination.to_string()),
+                            udp.destination.to_string(),
                             Style::default().fg(Color::Blue),
                         ));
                         spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
                         spans.push(Span::styled(
-                            format!("{}", udp.destination_port.to_string()),
+                            udp.destination_port.to_string(),
                             Style::default().fg(Color::Green),
                         ));
                         spans.push(Span::styled(";", Style::default().fg(Color::Yellow)));
@@ -775,22 +773,22 @@ impl PacketDump {
                             Style::default().fg(Color::Yellow),
                         ));
                         spans.push(Span::styled(
-                            format!("{}", tcp.source.to_string()),
+                            tcp.source.to_string(),
                             Style::default().fg(Color::Blue),
                         ));
                         spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
                         spans.push(Span::styled(
-                            format!("{}", tcp.source_port.to_string()),
+                            tcp.source_port.to_string(),
                             Style::default().fg(Color::Green),
                         ));
                         spans.push(Span::styled(" > ", Style::default().fg(Color::Yellow)));
                         spans.push(Span::styled(
-                            format!("{}", tcp.destination.to_string()),
+                            tcp.destination.to_string(),
                             Style::default().fg(Color::Blue),
                         ));
                         spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
                         spans.push(Span::styled(
-                            format!("{}", tcp.destination_port.to_string()),
+                            tcp.destination_port.to_string(),
                             Style::default().fg(Color::Green),
                         ));
                         spans.push(Span::styled(";", Style::default().fg(Color::Yellow)));
@@ -819,20 +817,20 @@ impl PacketDump {
                             Style::default().fg(Color::Yellow),
                         ));
                         spans.push(Span::styled(
-                            format!("{}", arp.source_mac.to_string()),
+                            arp.source_mac.to_string(),
                             Style::default().fg(Color::Green),
                         ));
                         spans.push(Span::styled(
-                            format!("({})", arp.source_ip.to_string()),
+                            arp.source_ip.to_string(),
                             Style::default().fg(Color::Blue),
                         ));
                         spans.push(Span::styled(" > ", Style::default().fg(Color::Yellow)));
                         spans.push(Span::styled(
-                            format!("{}", arp.destination_mac.to_string()),
+                            arp.destination_mac.to_string(),
                             Style::default().fg(Color::Green),
                         ));
                         spans.push(Span::styled(
-                            format!("({})", arp.destination_ip.to_string()),
+                            arp.destination_ip.to_string(),
                             Style::default().fg(Color::Blue),
                         ));
                         spans.push(Span::styled(";", Style::default().fg(Color::Yellow)));
@@ -852,11 +850,11 @@ impl PacketDump {
         rows
     }
 
-    fn make_table<'a>(
-        rows: Vec<Row<'a>>,
+    fn make_table(
+        rows: Vec<Row>,
         packet_type: PacketTypeEnum,
         dump_paused: bool,
-    ) -> Table<'a> {
+    ) -> Table {
         let header = Row::new(vec!["time", "packet log"])
             .style(Style::default().fg(Color::Yellow))
             .top_margin(1)
@@ -1182,12 +1180,12 @@ impl Component for PacketDump {
             // -- cursor
             match self.mode {
                 Mode::Input => {
-                    f.set_cursor(
-                        input_rect.x
+                    f.set_cursor_position(Position {
+                        x: input_rect.x
                             + ((self.input.visual_cursor()).max(scroll) - scroll) as u16
                             + 1,
-                        input_rect.y + 1,
-                    );
+                        y: input_rect.y + 1,
+                    });
                 }
                 Mode::Normal => {}
             }
@@ -1199,7 +1197,7 @@ impl Component for PacketDump {
             scroll_rect.height -= 1;
             f.render_stateful_widget(
                 scrollbar,
-                scroll_rect.inner(&Margin {
+                scroll_rect.inner(Margin {
                     vertical: 1,
                     horizontal: 1,
                 }),

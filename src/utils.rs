@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
 use directories::ProjectDirs;
+use human_panic::metadata;
 use lazy_static::lazy_static;
 use std::net::Ipv4Addr;
 use tracing::error;
@@ -90,12 +91,10 @@ pub fn initialize_panic_handler() -> Result<()> {
         #[cfg(not(debug_assertions))]
         {
             use human_panic::{handle_dump, print_msg, Metadata};
-            let meta = Metadata {
-                version: env!("CARGO_PKG_VERSION").into(),
-                name: env!("CARGO_PKG_NAME").into(),
-                authors: env!("CARGO_PKG_AUTHORS").replace(':', ", ").into(),
-                homepage: env!("CARGO_PKG_HOMEPAGE").into(),
-            };
+            let meta = metadata!()
+                .authors("Chleba <chlebik@gmail.com>")
+                .homepage("https://github.com/Chleba/netscanner")
+                .support("https://github.com/Chleba/netscanner/issues");
 
             let file_path = handle_dump(&meta, panic_info);
             // prints human-panic message
@@ -148,12 +147,14 @@ pub fn initialize_logging() -> Result<()> {
     std::fs::create_dir_all(directory.clone())?;
     let log_path = directory.join(LOG_FILE.clone());
     let log_file = std::fs::File::create(log_path)?;
-    std::env::set_var(
-        "RUST_LOG",
-        std::env::var("RUST_LOG")
-            .or_else(|_| std::env::var(LOG_ENV.clone()))
-            .unwrap_or_else(|_| format!("{}=info", env!("CARGO_CRATE_NAME"))),
-    );
+    unsafe {
+        std::env::set_var(
+            "RUST_LOG",
+            std::env::var("RUST_LOG")
+                .or_else(|_| std::env::var(LOG_ENV.clone()))
+                .unwrap_or_else(|_| format!("{}=info", env!("CARGO_CRATE_NAME"))),
+        );
+    }
     let file_subscriber = tracing_subscriber::fmt::layer()
         .with_file(true)
         .with_line_number(true)

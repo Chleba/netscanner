@@ -93,6 +93,8 @@ pub enum TabsEnum {
     Packets,
     #[strum(to_string = "Ports")]
     Ports,
+    #[strum(to_string = "Traffic")]
+    Traffic,
 }
 
 #[derive(Default, Clone, Copy, Display, FromRepr, EnumIter, EnumCount, PartialEq, Debug)]

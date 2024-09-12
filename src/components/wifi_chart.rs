@@ -90,7 +90,7 @@ impl WifiChart {
             datasets.push(dataset);
         }
 
-        let x_labels = [
+        let x_labels: Vec<Span> = [
             self.signal_tick[0].to_string(),
             (((self.signal_tick[1] - self.signal_tick[0]) / 2.0) + self.signal_tick[0]).to_string(),
             self.signal_tick[1].to_string(),
@@ -131,7 +131,7 @@ impl WifiChart {
                             .iter()
                             .cloned()
                             .map(Span::from)
-                            .collect(),
+                            .collect::<Vec<Span>>(),
                     )
                     .style(Style::default().fg(Color::Yellow)),
             )

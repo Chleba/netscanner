@@ -39,11 +39,10 @@ impl Export {
         self.home_dir = format!("{}/.netscanner", home_dir);
 
         // -- create dot folder
-        if std::fs::metadata(self.home_dir.clone()).is_err() {
-            if std::fs::create_dir_all(self.home_dir.clone()).is_err() {
-                self.export_failed = true;
-                // println!("Failed to create export dir");
-            }
+        if std::fs::metadata(self.home_dir.clone()).is_err()
+            && std::fs::create_dir_all(self.home_dir.clone()).is_err()
+        {
+            self.export_failed = true;
         }
     }
 
@@ -129,7 +128,7 @@ impl Export {
 }
 
 impl Component for Export {
-    fn init(&mut self, area: Rect) -> Result<()> {
+    fn init(&mut self, area: Size) -> Result<()> {
         self.get_user_home_dir();
         Ok(())
     }

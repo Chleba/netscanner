@@ -1,23 +1,27 @@
-use std::any::Any;
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyEvent, MouseEvent};
-use ratatui::layout::Rect;
-use tokio::sync::mpsc::{UnboundedSender, UnboundedReceiver};
+use ratatui::layout::{Rect, Size};
+use std::any::Any;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
-    action::Action, config::Config, enums::TabsEnum, tui::{Event, Frame}
+    action::Action,
+    config::Config,
+    enums::TabsEnum,
+    tui::{Event, Frame},
 };
 
 pub mod discovery;
-pub mod title;
+pub mod export;
 pub mod interfaces;
 pub mod packetdump;
+pub mod ports;
+pub mod sniff;
+pub mod tabs;
+pub mod title;
 pub mod wifi_chart;
 pub mod wifi_interface;
 pub mod wifi_scan;
-pub mod tabs;
-pub mod ports;
-pub mod export;
 
 /// `Component` is a trait that represents a visual and interactive element of the user interface.
 /// Implementors of this trait can be registered with the main application loop and will be able to receive events,
@@ -41,10 +45,6 @@ pub trait Component: Any {
         Ok(())
     }
 
-    // #[allow(unused_variables)]
-    // fn register_action_reciever(&mut self, ref rx: &UnboundedReceiver<Action>) -> Result<()> {
-    //     Ok(())
-    // }
     /// Register a configuration handler that provides configuration settings if necessary.
     /// # Arguments
     /// * `config` - Configuration settings.
@@ -60,7 +60,7 @@ pub trait Component: Any {
     /// * `area` - Rectangular area to initialize the component within.
     /// # Returns
     /// * `Result<()>` - An Ok result or an error.
-    fn init(&mut self, area: Rect) -> Result<()> {
+    fn init(&mut self, _area: Size) -> Result<()> {
         Ok(())
     }
 
@@ -97,7 +97,7 @@ pub trait Component: Any {
     fn handle_mouse_events(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
         Ok(None)
     }
-    
+
     /// Update the state of the component based on a received action. (REQUIRED)
     /// # Arguments
     /// * `action` - An action that may modify the state of the component.
@@ -107,7 +107,7 @@ pub trait Component: Any {
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         Ok(None)
     }
-    
+
     /// Render the component on the screen. (REQUIRED)
     /// # Arguments
     /// * `f` - A frame used for rendering.

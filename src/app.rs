@@ -18,6 +18,7 @@ use crate::{
         wifi_chart::WifiChart,
         wifi_interface::WifiInterface,
         wifi_scan::WifiScan,
+        // sniff
         Component,
     },
     config::Config,
@@ -201,7 +202,7 @@ impl App {
                         tui.resize(Rect::new(0, 0, w, h))?;
                         tui.draw(|f| {
                             for component in self.components.iter_mut() {
-                                let r = component.draw(f, f.size());
+                                let r = component.draw(f, f.area());
                                 if let Err(e) = r {
                                     action_tx
                                         .send(Action::Error(format!("Failed to draw: {:?}", e)))
@@ -213,7 +214,7 @@ impl App {
                     Action::Render => {
                         tui.draw(|f| {
                             for component in self.components.iter_mut() {
-                                let r = component.draw(f, f.size());
+                                let r = component.draw(f, f.area());
                                 if let Err(e) = r {
                                     action_tx
                                         .send(Action::Error(format!("Failed to draw: {:?}", e)))

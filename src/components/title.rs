@@ -43,7 +43,7 @@ impl Component for Title {
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        let rect = Rect::new(0, 0, f.size().width, 1);
+        let rect = Rect::new(0, 0, f.area().width, 1);
         let version: &str = env!("CARGO_PKG_VERSION");
         let title = format!(" Network Scanner (v{})", version);
         f.render_widget(Paragraph::new(title), rect);

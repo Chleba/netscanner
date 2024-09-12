@@ -14,6 +14,7 @@ use pnet::util::MacAddr;
 
 use core::str;
 use ratatui::{prelude::*, widgets::*};
+use ratatui::layout::Position;
 use std::net::{IpAddr, Ipv4Addr};
 use std::string;
 use std::time::{Duration, Instant};
@@ -39,6 +40,7 @@ use mac_oui::Oui;
 use rand::random;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
+use crossterm::event::Event;
 
 static POOL_SIZE: usize = 32;
 static INPUT_SIZE: usize = 30;
@@ -502,7 +504,7 @@ impl Discovery {
 }
 
 impl Component for Discovery {
-    fn init(&mut self, area: Rect) -> Result<()> {
+    fn init(&mut self, area: Size) -> Result<()> {
         if self.cidr.is_none() {
             self.set_cidr(String::from(DEFAULT_IP), false);
         }
@@ -535,7 +537,7 @@ impl Component for Discovery {
                         Action::ModeChange(Mode::Normal)
                     }
                     _ => {
-                        self.input.handle_event(&crossterm::event::Event::Key(key));
+                        self.input.handle_event(&Event::Key(key));
                         return Ok(None);
                     }
                 },
@@ -665,7 +667,7 @@ impl Component for Discovery {
             scroll_rect.height -= 3;
             f.render_stateful_widget(
                 scrollbar,
-                scroll_rect.inner(&Margin {
+                scroll_rect.inner(Margin {
                     vertical: 1,
                     horizontal: 1,
                 }),
@@ -699,12 +701,12 @@ impl Component for Discovery {
             // -- cursor
             match self.mode {
                 Mode::Input => {
-                    f.set_cursor(
-                        input_rect.x
+                    f.set_cursor_position(Position {
+                        x: input_rect.x
                             + ((self.input.visual_cursor()).max(scroll) - scroll) as u16
                             + 1,
-                        input_rect.y + 1,
-                    );
+                        y: input_rect.y + 1,
+                    });
                 }
                 Mode::Normal => {}
             }
