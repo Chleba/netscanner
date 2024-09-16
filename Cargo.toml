@@ -9,7 +9,9 @@ repository = "https://github.com/Chleba/netscanner"
 homepage = "https://github.com/Chleba/netscanner"
 
 [profile.release]
-strip = "debuginfo"
+strip = true
+opt-level = "z"
+lto = true
 
 [package.metadata.deb]
 maintainer = "Dominic Orsi <dominic.orsi@gmail.com>"
