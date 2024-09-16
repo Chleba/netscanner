@@ -11,6 +11,7 @@ use core::str;
 use port_desc::{PortDescription, TransportProtocol};
 use ratatui::{prelude::*, widgets::*};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::usize;
 use std::{string, time::Duration};
 use tokio::{
     net::TcpStream,
@@ -192,10 +193,13 @@ impl Ports {
         }
     }
 
-    fn make_list(&self) -> List {
+    fn make_list(&self, rect: Rect) -> List {
         let mut items = Vec::new();
         for ip in &self.ip_ports {
-            let ip_line = Line::from(vec!["IP: ".yellow(), ip.ip.clone().blue()]);
+            let mut lines = Vec::new();
+
+            let ip_line = Line::from(vec!["IP:    ".yellow(), ip.ip.clone().blue()]);
+            lines.push(ip_line);
 
             let mut ports_spans = vec!["PORTS: ".yellow()];
             if ip.state == PortsScanState::Waiting {
@@ -204,22 +208,36 @@ impl Ports {
                 let spinner = SPINNER_SYMBOLS[self.spinner_index];
                 ports_spans.push(spinner.magenta());
             } else {
+                let mut line_size = 0;
+
                 for p in &ip.ports {
-                    ports_spans.push(p.to_string().green());
+                    let port = p.to_string();
+                    line_size += port.len();
+
+                    ports_spans.push(port.green());
 
                     if let Some(pd) = &self.port_desc {
                         let p_type = pd.get_port_service_name(p.to_owned(), TransportProtocol::Tcp);
-                        ports_spans.push(format!("({})", p_type).to_string().light_magenta());
+                        let p_type_str = format!("({})", p_type).to_string();
+                        ports_spans.push(p_type_str.clone().light_magenta());
+                        line_size += p_type_str.len();
                     }
 
                     ports_spans.push(", ".yellow());
+
+                    let t_width: usize = (rect.width as usize) - 8;
+                    if line_size >= t_width {
+                        line_size = 0;
+                        lines.push(Line::from(ports_spans.clone()));
+                        ports_spans.clear();
+                        ports_spans.push("       ".gray());
+                    }
                 }
             }
+            lines.push(Line::from(ports_spans.clone()));
 
-            let ports = Line::from(ports_spans);
-            let p = Text::from(vec![ip_line, ports]);
-
-            items.push(p);
+            let t = Text::from(lines);
+            items.push(t);
         }
 
         List::new(items)
@@ -336,7 +354,7 @@ impl Component for Ports {
             list_rect.height -= 1;
 
             // -- LIST
-            let list = self.make_list();
+            let list = self.make_list(list_rect);
             f.render_stateful_widget(list, list_rect, &mut self.list_state.clone());
 
             // -- SCROLLBAR
