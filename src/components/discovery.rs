@@ -125,8 +125,12 @@ impl Discovery {
     }
 
     fn send_arp(&mut self, target_ip: Ipv4Addr) {
-        let active_interface = self.active_interface.clone().unwrap();
-        if let Some(active_interface_mac) = active_interface.mac {
+            let active_interface = match self.active_interface.clone() {
+                Some(intf) => intf,
+                None => return, // Or send an error Action
+            };
+
+            if let Some(active_interface_mac) = active_interface.mac {
             let ipv4 = active_interface.ips.iter().find(|f| f.is_ipv4()).unwrap();
             let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
 
