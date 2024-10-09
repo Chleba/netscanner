@@ -11,7 +11,6 @@ use core::str;
 use port_desc::{PortDescription, TransportProtocol};
 use ratatui::{prelude::*, widgets::*};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::usize;
 use std::{string, time::Duration};
 use tokio::{
     net::TcpStream,
@@ -198,7 +197,7 @@ impl Ports {
         for ip in &self.ip_ports {
             let mut lines = Vec::new();
 
-            let ip_line = Line::from(vec!["IP:    ".yellow(), ip.ip.clone().blue()]);
+            let ip_line = Line::from(vec!["IP:    ".yellow(), ip.ip.clone().cyan()]);
             lines.push(ip_line);
 
             let mut ports_spans = vec!["PORTS: ".yellow()];

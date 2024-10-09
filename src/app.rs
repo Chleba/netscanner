@@ -18,7 +18,7 @@ use crate::{
         wifi_chart::WifiChart,
         wifi_interface::WifiInterface,
         wifi_scan::WifiScan,
-        // sniff
+        sniff::Sniffer,
         Component,
     },
     config::Config,
@@ -52,6 +52,7 @@ impl App {
         let discovery = Discovery::default();
         let packetdump = PacketDump::default();
         let ports = Ports::default();
+        let sniff = Sniffer::default();
         let export = Export::default();
         let config = Config::new()?;
 
@@ -71,6 +72,7 @@ impl App {
                 Box::new(discovery),
                 Box::new(packetdump),
                 Box::new(ports),
+                Box::new(sniff),
                 Box::new(export),
             ],
             should_quit: false,

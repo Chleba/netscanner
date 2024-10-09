@@ -90,3 +90,4 @@ tracing = "0.1.40"
 tracing-error = "0.2.0"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "serde"] }
 tui-input = { version = "0.10.1", features = ["serde"] }
+tui-scrollview = "0.4.0"

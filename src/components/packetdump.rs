@@ -145,7 +145,7 @@ impl PacketDump {
                     source_port: udp.get_source(),
                     destination,
                     destination_port: udp.get_destination(),
-                    length: udp.get_length(),
+                    length: udp.get_length() as usize,
                     raw_str,
                 }),
                 PacketTypeEnum::Udp,

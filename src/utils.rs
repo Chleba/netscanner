@@ -1,3 +1,4 @@
+use std::cmp;
 use std::path::PathBuf;
 
 use cidr::Ipv4Cidr;
@@ -11,6 +12,8 @@ use tracing_error::ErrorLayer;
 use tracing_subscriber::{
     self, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt, Layer,
 };
+
+use crate::components::sniff::IPTraffic;
 
 pub static GIT_COMMIT_HASH: &'static str = env!("_GIT_INFO");
 
@@ -44,6 +47,16 @@ pub fn count_ipv4_net_length(net_length: u32) -> u32 {
     2u32.pow(32 - net_length)
 }
 
+pub fn count_traffic_total(traffic: &[IPTraffic]) -> (f64, f64) {
+    let mut download = 0.0;
+    let mut upload = 0.0;
+    for ip in traffic.iter() {
+        download += ip.download;
+        upload += ip.upload;
+    }
+    (download, upload)
+}
+
 #[derive(Clone, Debug)]
 pub struct MaxSizeVec<T> {
     p_vec: Vec<T>,
@@ -68,6 +81,25 @@ impl<T> MaxSizeVec<T> {
     pub fn get_vec(&self) -> &Vec<T> {
         &self.p_vec
     }
+}
+
+pub fn bytes_convert(num: f64) -> String {
+    let num = num.abs();
+    let units = ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+    if num < 1_f64 {
+        return format!("{}{}", num, "B");
+    }
+    let delimiter = 1000_f64;
+    let exponent = cmp::min(
+        (num.ln() / delimiter.ln()).floor() as i32,
+        (units.len() - 1) as i32,
+    );
+    let pretty_bytes = format!("{:.2}", num / delimiter.powi(exponent))
+        .parse::<f64>()
+        .unwrap()
+        * 1_f64;
+    let unit = units[exponent as usize];
+    format!("{}{}", pretty_bytes, unit)
 }
 
 pub fn initialize_panic_handler() -> Result<()> {
@@ -147,14 +179,12 @@ pub fn initialize_logging() -> Result<()> {
     std::fs::create_dir_all(directory.clone())?;
     let log_path = directory.join(LOG_FILE.clone());
     let log_file = std::fs::File::create(log_path)?;
-    unsafe {
-        std::env::set_var(
-            "RUST_LOG",
-            std::env::var("RUST_LOG")
-                .or_else(|_| std::env::var(LOG_ENV.clone()))
-                .unwrap_or_else(|_| format!("{}=info", env!("CARGO_CRATE_NAME"))),
-        );
-    }
+    std::env::set_var(
+        "RUST_LOG",
+        std::env::var("RUST_LOG")
+            .or_else(|_| std::env::var(LOG_ENV.clone()))
+            .unwrap_or_else(|_| format!("{}=info", env!("CARGO_CRATE_NAME"))),
+    );
     let file_subscriber = tracing_subscriber::fmt::layer()
         .with_file(true)
         .with_line_number(true)
