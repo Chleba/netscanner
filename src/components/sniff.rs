@@ -2,10 +2,13 @@ use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use dns_lookup::{lookup_addr, lookup_host};
 
-use pnet::packet::{
-    arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
-    ethernet::{EtherTypes, MutableEthernetPacket},
-    MutablePacket, Packet,
+use pnet::{
+    datalink::NetworkInterface,
+    packet::{
+        arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
+        ethernet::{EtherTypes, MutableEthernetPacket},
+        MutablePacket, Packet,
+    },
 };
 use ratatui::style::Stylize;
 
@@ -21,6 +24,7 @@ use crate::{
     enums::{PacketTypeEnum, PacketsInfoTypesEnum, TabsEnum},
     layout::{get_vertical_layout, HORIZONTAL_CONSTRAINTS},
     tui::Frame,
+    utils::bytes_convert,
     widgets::scroll_traffic::TrafficScroll,
 };
 
@@ -35,10 +39,13 @@ pub struct IPTraffic {
 pub struct Sniffer {
     active_tab: TabsEnum,
     action_tx: Option<UnboundedSender<Action>>,
+    active_interface: Option<NetworkInterface>,
     list_state: ListState,
     scrollbar_state: ScrollbarState,
     traffic_ips: Vec<IPTraffic>,
     scrollview_state: ScrollViewState,
+    udp_sum: f64,
+    tcp_sum: f64,
 }
 
 impl Default for Sniffer {
@@ -52,28 +59,14 @@ impl Sniffer {
         Self {
             active_tab: TabsEnum::Discovery,
             action_tx: None,
+            active_interface: None,
             list_state: ListState::default().with_selected(Some(0)),
             scrollbar_state: ScrollbarState::new(0),
             traffic_ips: Vec::new(),
             scrollview_state: ScrollViewState::new(),
+            udp_sum: 0.0,
+            tcp_sum: 0.0,
         }
-    }
-
-    fn set_scrollbar_height(&mut self) {
-        // let mut ip_len = 0;
-        // if !self.ip_ports.is_empty() {
-        //     ip_len = self.ip_ports.len() - 1;
-        // }
-        // self.scrollbar_state = self.scrollbar_state.content_length(ip_len);
-    }
-
-    pub fn make_scrollbar<'a>() -> Scrollbar<'a> {
-        let scrollbar = Scrollbar::default()
-            .orientation(ScrollbarOrientation::VerticalRight)
-            .style(Style::default().fg(Color::Rgb(100, 100, 100)))
-            .begin_symbol(None)
-            .end_symbol(None);
-        scrollbar
     }
 
     fn scroll_down(&mut self) {
@@ -129,13 +122,36 @@ impl Sniffer {
     fn process_packet(&mut self, packet: PacketsInfoTypesEnum) {
         match packet {
             PacketsInfoTypesEnum::Tcp(p) => {
-                self.count_traffic_packet(p.source, p.destination, p.length)
+                self.count_traffic_packet(p.source, p.destination, p.length);
+                self.tcp_sum += p.length as f64;
             }
             PacketsInfoTypesEnum::Udp(p) => {
-                self.count_traffic_packet(p.source, p.destination, p.length)
+                self.count_traffic_packet(p.source, p.destination, p.length);
+                self.udp_sum += p.length as f64;
             }
             _ => {}
         }
+    }
+
+    fn make_charts(&self) -> BarChart {
+        BarChart::default()
+            .direction(Direction::Vertical)
+            .bar_width(12)
+            .bar_gap(4)
+            .data(
+                BarGroup::default().bars(&[
+                    Bar::default()
+                        .value(self.udp_sum as u64)
+                        .text_value(bytes_convert(self.udp_sum))
+                        .label("UDP".into())
+                        .style(Color::Yellow),
+                    Bar::default()
+                        .value(self.tcp_sum as u64)
+                        .text_value(bytes_convert(self.tcp_sum))
+                        .label("TCP".into())
+                        .style(Color::Green),
+                ]),
+            )
     }
 
     fn make_ips_block(&self) -> Block {
@@ -170,6 +186,80 @@ impl Sniffer {
         ips_block
     }
 
+    fn make_sum_block(&self) -> Block {
+        let ips_block = Block::default()
+            .title(
+                ratatui::widgets::block::Title::from(Span::styled(
+                    "|Summary|",
+                    Style::default().fg(Color::Yellow),
+                ))
+                .position(ratatui::widgets::block::Position::Top)
+                .alignment(Alignment::Right),
+            )
+            .borders(Borders::ALL)
+            .border_style(Color::Rgb(100, 100, 100))
+            .border_type(BorderType::Rounded);
+        ips_block
+    }
+
+    fn make_charts_block(&self) -> Block {
+        Block::default()
+            .title(
+                ratatui::widgets::block::Title::from(Span::styled(
+                    "|Protocols sum|",
+                    Style::default().fg(Color::Yellow),
+                ))
+                .position(ratatui::widgets::block::Position::Top)
+                .alignment(Alignment::Right),
+            )
+            .borders(Borders::ALL)
+            .border_style(Color::Rgb(100, 100, 100))
+            .border_type(BorderType::Rounded)
+    }
+
+    fn render_summary(&mut self, f: &mut Frame<'_>, area: Rect) {
+        if !self.traffic_ips.is_empty() {
+            let total_download = Line::from(vec![
+                "Total download: ".into(),
+                bytes_convert(self.traffic_ips[0].download).green(),
+            ]);
+            f.render_widget(
+                total_download,
+                Rect {
+                    x: area.x + 2,
+                    y: area.y + 2,
+                    width: area.width / 2,
+                    height: 1,
+                },
+            );
+
+            let total_upload = Line::from(vec![
+                "Total upload: ".into(),
+                bytes_convert(self.traffic_ips[0].upload).red(),
+            ]);
+            f.render_widget(
+                total_upload,
+                Rect {
+                    x: area.x + (area.width / 2) + 2,
+                    y: area.y + 2,
+                    width: area.width / 2,
+                    height: 1,
+                },
+            );
+
+            let top_uploader = Line::from(vec!["Top uploader:".into()]);
+            f.render_widget(
+                top_uploader,
+                Rect {
+                    x: area.x + 2,
+                    y: area.y + 4,
+                    width: area.width,
+                    height: 1,
+                },
+            );
+        }
+    }
+
     fn tab_changed(&mut self, tab: TabsEnum) -> Result<()> {
         self.active_tab = tab;
         Ok(())
@@ -198,6 +288,10 @@ impl Component for Sniffer {
 
         if let Action::Up = action {
             self.scroll_up();
+        }
+
+        if let Action::ActiveInterface(ref interface) = action {
+            self.active_interface = Some(interface.clone());
         }
 
         if let Action::PacketDump(time, packet, packet_type) = action {
@@ -234,6 +328,28 @@ impl Component for Sniffer {
                 traffic_ips: self.traffic_ips.clone(),
             };
             f.render_stateful_widget(ips_scroll, ips_rect, &mut self.scrollview_state);
+
+            // -- summary
+            let sum_layout =
+                Layout::vertical([Constraint::Percentage(30), Constraint::Percentage(70)])
+                    .split(ips_layout[1]);
+            let sum_block = self.make_sum_block();
+            f.render_widget(sum_block, sum_layout[0]);
+
+            self.render_summary(f, sum_layout[0]);
+
+            // -- charts
+            let charts_block = self.make_charts_block();
+            f.render_widget(charts_block, sum_layout[1]);
+
+            let charts = self.make_charts();
+            let charts_rect = Rect {
+                x: sum_layout[1].x + 2,
+                y: sum_layout[1].y + 2,
+                width: sum_layout[1].width - 5,
+                height: sum_layout[1].height - 3,
+            };
+            f.render_widget(charts, charts_rect);
         }
 
         Ok(())
