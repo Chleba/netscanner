@@ -31,7 +31,7 @@ impl StatefulWidget for TrafficScroll {
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                 .title_style(Style::default().fg(Color::Blue))
                 .title(Line::from(vec![
-                    format!("|{}|", item.ip).blue(),
+                    format!("{}", item.ip).blue(),
                     format!(" ({})", item.hostname.clone()).magenta(),
                 ]));
             scrollview.render_widget(b, b_rect);

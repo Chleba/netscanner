@@ -2,6 +2,7 @@ use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use dns_lookup::{lookup_addr, lookup_host};
 
+use ipnetwork::IpNetwork;
 use pnet::{
     datalink::NetworkInterface,
     packet::{
@@ -39,13 +40,13 @@ pub struct IPTraffic {
 pub struct Sniffer {
     active_tab: TabsEnum,
     action_tx: Option<UnboundedSender<Action>>,
-    active_interface: Option<NetworkInterface>,
     list_state: ListState,
     scrollbar_state: ScrollbarState,
     traffic_ips: Vec<IPTraffic>,
     scrollview_state: ScrollViewState,
     udp_sum: f64,
     tcp_sum: f64,
+    active_inft_ips: Vec<IpNetwork>,
 }
 
 impl Default for Sniffer {
@@ -59,13 +60,13 @@ impl Sniffer {
         Self {
             active_tab: TabsEnum::Discovery,
             action_tx: None,
-            active_interface: None,
             list_state: ListState::default().with_selected(Some(0)),
             scrollbar_state: ScrollbarState::new(0),
             traffic_ips: Vec::new(),
             scrollview_state: ScrollViewState::new(),
             udp_sum: 0.0,
             tcp_sum: 0.0,
+            active_inft_ips: Vec::new(),
         }
     }
 
@@ -228,7 +229,7 @@ impl Sniffer {
                 Rect {
                     x: area.x + 2,
                     y: area.y + 2,
-                    width: area.width / 2,
+                    width: area.width,
                     height: 1,
                 },
             );
@@ -240,19 +241,79 @@ impl Sniffer {
             f.render_widget(
                 total_upload,
                 Rect {
-                    x: area.x + (area.width / 2) + 2,
-                    y: area.y + 2,
-                    width: area.width / 2,
+                    x: area.x + 2,
+                    y: area.y + 3,
+                    width: area.width,
                     height: 1,
                 },
             );
 
-            let top_uploader = Line::from(vec!["Top uploader:".into()]);
+            let a_intfs = self.active_inft_ips.clone();
+            let tu = self
+                .traffic_ips
+                .iter()
+                .filter(|item| {
+                    let t_ip = item.ip.to_string();
+                    for i_ip in a_intfs.clone() {
+                        if i_ip.ip().to_string() == t_ip {
+                            return false;
+                        }
+                    }
+                    true
+                })
+                .max_by_key(|t| t.upload as u64);
+
+            let mut tu_ip = String::from("");
+            let mut tu_name = String::from("");
+            if tu.is_some() {
+                tu_ip = tu.unwrap().ip.to_string();
+                tu_name = format!(" ({})", tu.unwrap().hostname);
+            }
+            let top_uploader = Line::from(vec![
+                "Top uploader: ".into(),
+                tu_ip.blue(),
+                tu_name.magenta(),
+            ]);
             f.render_widget(
                 top_uploader,
                 Rect {
                     x: area.x + 2,
-                    y: area.y + 4,
+                    y: area.y + 5,
+                    width: area.width,
+                    height: 1,
+                },
+            );
+
+            let td = self
+                .traffic_ips
+                .iter()
+                .filter(|item| {
+                    let t_ip = item.ip.to_string();
+                    for i_ip in a_intfs.clone() {
+                        if i_ip.ip().to_string() == t_ip {
+                            return false;
+                        }
+                    }
+                    true
+                })
+                .max_by_key(|t| t.download as u64);
+
+            let mut td_ip = String::from("");
+            let mut td_name = String::from("");
+            if td.is_some() {
+                td_ip = td.unwrap().ip.to_string();
+                td_name = format!(" ({})", tu.unwrap().hostname);
+            }
+            let top_downloader = Line::from(vec![
+                "Top downloader: ".into(),
+                td_ip.blue(),
+                td_name.magenta(),
+            ]);
+            f.render_widget(
+                top_downloader,
+                Rect {
+                    x: area.x + 2,
+                    y: area.y + 6,
                     width: area.width,
                     height: 1,
                 },
@@ -291,7 +352,7 @@ impl Component for Sniffer {
         }
 
         if let Action::ActiveInterface(ref interface) = action {
-            self.active_interface = Some(interface.clone());
+            self.active_inft_ips = interface.ips.clone();
         }
 
         if let Action::PacketDump(time, packet, packet_type) = action {
