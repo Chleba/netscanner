@@ -414,7 +414,7 @@ impl PacketDump {
         let (_, mut receiver) = match pnet::datalink::channel(&interface, Default::default()) {
             Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
             Ok(_) => {
-                tx.send(Action::Error("Unknown or unsopported channel type".into()))
+                tx.send(Action::Error("Unknown or unsupported channel type".into()))
                     .unwrap();
                 return;
             }
@@ -424,14 +424,13 @@ impl PacketDump {
                 )))
                 .unwrap();
                 return;
-            } // Ok(_) => panic!("Unknown channel type"),
-              // Err(e) => panic!("Error happened {}", e),
+            }
         };
-        // while !paused.load(Ordering::Relaxed) {
+    
         loop {
             let mut buf: [u8; 1600] = [0u8; 1600];
             let mut fake_ethernet_frame = MutableEthernetPacket::new(&mut buf[..]).unwrap();
-
+    
             match receiver.next() {
                 Ok(packet) => {
                     let payload_offset;
@@ -490,9 +489,9 @@ impl PacketDump {
 
     fn start_loop(&mut self) {
         if self.loop_thread.is_none() {
-            let tx = self.action_tx.clone().unwrap();
-            let interface = self.active_interface.clone().unwrap();
-            let paused = self.dump_paused.clone();
+            let tx = self.action_tx.take().unwrap();
+            let interface = self.active_interface.take().unwrap();
+            let paused = Arc::clone(&self.dump_paused);
             let t_handle = thread::spawn(move || {
                 Self::t_logic(tx, interface, paused);
             });
@@ -516,7 +515,7 @@ impl PacketDump {
 
     pub fn get_arp_packages(&self) -> Vec<(DateTime<Local>, PacketsInfoTypesEnum)> {
         let a = &self.arp_packets.get_vec().to_vec();
-        a.clone()
+        a.to_vec()
     }
 
     pub fn clone_array_by_packet_type(
