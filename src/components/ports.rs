@@ -154,6 +154,10 @@ impl Ports {
     }
 
     fn scan_ports(&mut self, index: usize) {
+        if index >= self.ip_ports.len() {
+            return; // -- index out of bounds
+        }
+
         self.ip_ports[index].state = PortsScanState::Scanning;
 
         let tx = self.action_tx.clone().unwrap();
