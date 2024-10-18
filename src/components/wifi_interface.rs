@@ -135,20 +135,18 @@ impl WifiInterface {
         if let Some(wifi_info) = &self.wifi_info {
             let interface = &wifi_info.interface;
             let interface_label = "Interface:";
-            let ssid = &wifi_info.ssid.clone();
+            let ssid = &wifi_info.ssid;
             let ssid_label = "SSID:";
             let ifindex = &wifi_info.ifindex;
             let ifindex_label = "Intf index:";
-            let channel = &wifi_info.channel.clone();
+            let channel = &wifi_info.channel;
             let channel_label = "Channel:";
-            let txpower = &wifi_info.txpower.clone();
+            let txpower = &wifi_info.txpower;
             let txpower_label = "TxPower:";
-            let mac = &wifi_info.mac.clone();
+            let mac = &wifi_info.mac;
             let mac_label = "Mac addr:";
 
-            // let list = List::new()
             let mut items: Vec<ListItem> = Vec::new();
-            // let list = List::new(items);
 
             items.push(ListItem::new(vec![
                 Line::from(vec![
