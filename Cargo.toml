@@ -1,6 +1,6 @@
 [package]
 name = "netscanner"
-version = "0.5.4"
+version = "0.6.0"
 edition = "2021"
 description = "Network Scanner"
 license = "MIT"
@@ -90,7 +90,7 @@ tracing = "0.1.40"
 tracing-error = "0.2.0"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "serde"] }
 tui-input = { version = "0.10.1", features = ["serde"] }
-
+tui-scrollview = "0.4.0"
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 anyhow = "1.0.86"
@@ -100,5 +100,3 @@ clap = { version = "4.5.13", features = ["derive"] }
 clap-verbosity-flag = "2.2.1"
 clap_complete = "4.5.12"
 clap_mangen = "0.2.23"
-
-

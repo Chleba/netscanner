@@ -11,7 +11,7 @@ const VERTICAL_CONSTRAINTS: [Constraint; 3] = [
     Constraint::Percentage(VERTICAL_BOTTOM_PERCENT),
 ];
 
-const HORIZONTAL_CONSTRAINTS: [Constraint; 2] = [
+pub const HORIZONTAL_CONSTRAINTS: [Constraint; 2] = [
     Constraint::Percentage(HORIZONTAL_SPLIT),
     Constraint::Percentage(HORIZONTAL_SPLIT),
 ];

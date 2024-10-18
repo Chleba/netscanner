@@ -29,7 +29,7 @@ pub struct UDPPacketInfo {
     pub source_port: u16,
     pub destination: IpAddr,
     pub destination_port: u16,
-    pub length: u16,
+    pub length: usize,
     pub raw_str: String,
 }
 
