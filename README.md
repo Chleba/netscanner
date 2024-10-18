@@ -29,6 +29,7 @@
 - [x] scanning open ports (TCP)
 - [x] packet logs filter
 - [x] export scanned ips, ports, packets into csv
+- [x] traffic counting + DNS records
 
 **TODO:**
 - [ ] ipv6 scanning & dumping
