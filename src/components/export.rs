@@ -65,6 +65,26 @@ impl Export {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    fn get_user_home_dir(&mut self) {
+        let mut home_dir = String::from("C:\\Users\\Administrator");
+        if let Some(h_dir) = env::var_os("USERPROFILE") {
+            home_dir = String::from(h_dir.to_str().unwrap());
+        }
+        if let Some(sudo_user) = env::var_os("SUDO_USER") {
+            home_dir = format!("C:\\Users\\{}", sudo_user.to_str().unwrap());
+        }
+        self.home_dir = format!("{}\\.netscanner", home_dir);
+
+        // -- create .netscanner folder if it doesn't exist
+        if std::fs::metadata(self.home_dir.clone()).is_err() {
+            if std::fs::create_dir_all(self.home_dir.clone()).is_err() {
+                self.export_failed = true;
+            }
+        }
+    }
+
+
     pub fn write_discovery(&mut self, data: Vec<ScannedIp>, timestamp: &String) -> Result<()> {
         let mut w = Writer::from_path(format!("{}/scanned_ips.{}.csv", self.home_dir, timestamp))?;
 
