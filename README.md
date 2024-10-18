@@ -10,8 +10,7 @@
 <img src='./demo.gif' width='550px'/>
 
 [![Arch package](https://repology.org/badge/version-for-repo/arch/netscanner.svg)](https://repology.org/project/netscanner/versions)
-[![Alpine Linux Edge package](https://repology.org/badge/version-for-repo/alpine_edge/netscanner.svg)](https://repology.org/project/netscanner/versions)
-[![nixpkgs stable 24.05 package](https://repology.org/badge/version-for-repo/nix_stable_24_05/netscanner.svg)](https://repology.org/project/netscanner/versions)
+[![nixpkgs unstable package](https://repology.org/badge/version-for-repo/nix_unstable/netscanner.svg)](https://repology.org/project/netscanner/versions)
 [![Manjaro Stable package](https://repology.org/badge/version-for-repo/manjaro_stable/netscanner.svg)](https://repology.org/project/netscanner/versions)
 [![Kali Linux Rolling package](https://repology.org/badge/version-for-repo/kali_rolling/netscanner.svg)](https://repology.org/project/netscanner/versions)
 
