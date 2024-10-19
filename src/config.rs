@@ -37,47 +37,47 @@ pub struct Config {
 
 impl Config {
   pub fn new() -> Result<Self, config::ConfigError> {
-      let default_config: Config = json5::from_str(CONFIG).unwrap();
-      let data_dir = crate::utils::get_data_dir();
-      let config_dir = crate::utils::get_config_dir();
-      let mut builder = config::Config::builder()
-          .set_default("_data_dir", data_dir.to_str().unwrap())?
-          .set_default("_config_dir", config_dir.to_str().unwrap())?;
+    let default_config: Config = json5::from_str(CONFIG).unwrap();
+    let data_dir = crate::utils::get_data_dir();
+    let config_dir = crate::utils::get_config_dir();
+    let mut builder = config::Config::builder()
+      .set_default("_data_dir", data_dir.to_str().unwrap())?
+      .set_default("_config_dir", config_dir.to_str().unwrap())?;
 
-      let config_files = [
-          ("config.json5", config::FileFormat::Json5),
-          ("config.json", config::FileFormat::Json),
-          ("config.yaml", config::FileFormat::Yaml),
-          ("config.toml", config::FileFormat::Toml),
-          ("config.ini", config::FileFormat::Ini),
-      ];
-      let mut found_config = false;
-      for (file, format) in &config_files {
-          builder = builder.add_source(config::File::from(config_dir.join(file)).format(*format).required(false));
-          if config_dir.join(file).exists() {
-              found_config = true
-          }
+    let config_files = [
+      ("config.json5", config::FileFormat::Json5),
+      ("config.json", config::FileFormat::Json),
+      ("config.yaml", config::FileFormat::Yaml),
+      ("config.toml", config::FileFormat::Toml),
+      ("config.ini", config::FileFormat::Ini),
+    ];
+    let mut found_config = false;
+    for (file, format) in &config_files {
+      builder = builder.add_source(config::File::from(config_dir.join(file)).format(*format).required(false));
+      if config_dir.join(file).exists() {
+        found_config = true
       }
-      if !found_config {
-          log::error!("No configuration file found. Application may not behave as expected");
-      }
+    }
+    if !found_config {
+      log::error!("No configuration file found. Application may not behave as expected");
+    }
 
-      let mut cfg: Self = builder.build()?.try_deserialize()?;
+    let mut cfg: Self = builder.build()?.try_deserialize()?;
 
-      for (mode, default_bindings) in &(*default_config.keybindings) {
-          let user_bindings = cfg.keybindings.entry(*mode).or_default();
-          for (key, cmd) in default_bindings {
-              user_bindings.entry(key.to_owned()).or_insert_with(|| cmd.to_owned());
-          }
+    for (mode, default_bindings) in default_config.keybindings.iter() {
+      let user_bindings = cfg.keybindings.entry(*mode).or_default();
+      for (key, cmd) in default_bindings.iter() {
+        user_bindings.entry(key.clone()).or_insert_with(|| cmd.clone());
       }
-      for (mode, default_styles) in &(*default_config.styles) {
-          let user_styles = cfg.styles.entry(*mode).or_default();
-          for (style_key, style) in default_styles {
-              user_styles.entry(style_key.to_owned()).or_insert_with(|| style.to_owned());
-          }
+    }
+    for (mode, default_styles) in default_config.styles.iter() {
+      let user_styles = cfg.styles.entry(*mode).or_default();
+      for (style_key, style) in default_styles.iter() {
+        user_styles.entry(style_key.clone()).or_insert_with(|| style.clone());
       }
+    }
 
-      Ok(cfg)
+    Ok(cfg)
   }
 }
 

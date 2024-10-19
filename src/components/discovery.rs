@@ -130,7 +130,7 @@ impl Discovery {
             if let Some(active_interface_mac) = active_interface.mac {
                 let ipv4 = active_interface.ips.iter().find(|f| f.is_ipv4()).unwrap();
                 let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
-    
+
                 let (mut sender, _) =
                     match pnet::datalink::channel(active_interface, Default::default()) {
                         Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
@@ -153,17 +153,17 @@ impl Discovery {
                             return;
                         }
                     };
-    
+
                 let mut ethernet_buffer = [0u8; 42];
                 let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer).unwrap();
-    
+
                 ethernet_packet.set_destination(MacAddr::broadcast());
                 ethernet_packet.set_source(active_interface_mac);
                 ethernet_packet.set_ethertype(EtherTypes::Arp);
-    
+
                 let mut arp_buffer = [0u8; 28];
                 let mut arp_packet = MutableArpPacket::new(&mut arp_buffer).unwrap();
-    
+
                 arp_packet.set_hardware_type(ArpHardwareTypes::Ethernet);
                 arp_packet.set_protocol_type(EtherTypes::Ipv4);
                 arp_packet.set_hw_addr_len(6);
@@ -173,9 +173,9 @@ impl Discovery {
                 arp_packet.set_sender_proto_addr(source_ip);
                 arp_packet.set_target_hw_addr(MacAddr::zero());
                 arp_packet.set_target_proto_addr(target_ip);
-    
+
                 ethernet_packet.set_payload(arp_packet.packet_mut());
-    
+
                 sender
                     .send_to(ethernet_packet.packet(), None)
                     .unwrap()
@@ -186,7 +186,7 @@ impl Discovery {
 
     fn scan(&mut self) {
         self.reset_scan();
-    
+
         if let Some(cidr) = self.cidr {
             self.is_scanning = true;
             let tx = self.action_tx.as_ref().unwrap().clone();
@@ -206,7 +206,7 @@ impl Discovery {
                                     .pinger(IpAddr::V4(ip), PingIdentifier(random()))
                                     .await;
                                 pinger.timeout(Duration::from_secs(2));
-    
+
                                 match pinger.ping(PingSequence(2), &payload).await {
                                     Ok((IcmpPacket::V4(packet), dur)) => {
                                         tx.send(Action::PingIp(packet.get_real_dest().to_string()))
@@ -224,7 +224,7 @@ impl Discovery {
                             task::spawn(closure())
                         })
                         .collect();
-    
+
                     let _ = join_all(tasks).await;
                 }
             });
@@ -255,7 +255,7 @@ impl Discovery {
         let tx = self.action_tx.as_ref().unwrap();
         let ipv4: Ipv4Addr = ip.parse().unwrap();
         self.send_arp(ipv4);
-    
+
         if let Some(n) = self.scanned_ips.iter_mut().find(|item| item.ip == ip) {
             let hip: IpAddr = ip.parse().unwrap();
             let host = lookup_addr(&hip).unwrap_or_default();
@@ -270,14 +270,14 @@ impl Discovery {
                 hostname: host,
                 vendor: String::new(),
             });
-    
+
             self.scanned_ips.sort_by(|a, b| {
                 let a_ip: Ipv4Addr = a.ip.parse::<Ipv4Addr>().unwrap();
                 let b_ip: Ipv4Addr = b.ip.parse::<Ipv4Addr>().unwrap();
                 a_ip.partial_cmp(&b_ip).unwrap()
             });
         }
-    
+
         self.set_scrollbar_height();
     }
 
@@ -352,7 +352,7 @@ impl Discovery {
             Some(c) => count_ipv4_net_length(c.network_length() as u32),
             None => 0,
         };
-    
+
         for sip in scanned_ips {
             let ip = &sip.ip;
             rows.push(Row::new(vec![
@@ -365,7 +365,7 @@ impl Discovery {
                 Cell::from(sip.vendor.as_str().yellow()),
             ]));
         }
-    
+
         let table = Table::new(
             rows,
             [
@@ -653,15 +653,15 @@ impl Component for Discovery {
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         if self.active_tab == TabsEnum::Discovery {
             let layout = get_vertical_layout(area);
-    
+
             // -- TABLE
             let mut table_rect = layout.bottom;
             table_rect.y += 1;
             table_rect.height -= 1;
-    
+
             let table = Self::make_table(&self.scanned_ips, self.cidr, self.ip_num);
             f.render_stateful_widget(table, table_rect, &mut self.table_state);
-    
+
             // -- SCROLLBAR
             let scrollbar = Self::make_scrollbar();
             let mut scroll_rect = table_rect;
@@ -675,14 +675,14 @@ impl Component for Discovery {
                 }),
                 &mut self.scrollbar_state,
             );
-    
+
             // -- ERROR
             if self.cidr_error {
                 let error_rect = Rect::new(table_rect.width - (19 + 41), table_rect.y + 1, 18, 3);
                 let block = self.make_error();
                 f.render_widget(block, error_rect);
             }
-    
+
             // -- INPUT
             let input_size: u16 = INPUT_SIZE as u16;
             let input_rect = Rect::new(
@@ -691,7 +691,7 @@ impl Component for Discovery {
                 input_size,
                 3,
             );
-    
+
             // -- INPUT_SIZE - 3 is offset for border + 1char for cursor
             let scroll = self.input.visual_scroll(INPUT_SIZE - 3);
             let mut block = self.make_input(scroll);
@@ -699,7 +699,7 @@ impl Component for Discovery {
                 block = block.add_modifier(Modifier::DIM);
             }
             f.render_widget(block, input_rect);
-    
+
             // -- cursor
             match self.mode {
                 Mode::Input => {
@@ -712,7 +712,7 @@ impl Component for Discovery {
                 }
                 Mode::Normal => {}
             }
-    
+
             // -- THROBBER
             if self.is_scanning {
                 let throbber = self.make_spinner();
@@ -720,7 +720,7 @@ impl Component for Discovery {
                 f.render_widget(throbber, throbber_rect);
             }
         }
-    
+
         Ok(())
     }
 }

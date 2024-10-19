@@ -1,6 +1,5 @@
 use chrono::{DateTime, Local, Timelike};
 use config::Source;
-use std::collections::HashMap;
 use std::time::Instant;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_wifiscanner::Wifi;
@@ -172,44 +171,56 @@ impl WifiScan {
             let networks = tokio_wifiscanner::scan().await;
             match networks {
                 Ok(nets) => {
+                    let mut wifi_nets: Vec<WifiInfo> = Vec::new();
                     let now = Local::now();
-                    let wifi_nets: Vec<WifiInfo> = nets.iter().map(|w| {
-                        WifiInfo {
-                            time: now,
-                            ssid: w.ssid.to_string(),
-                            channel: w.channel.parse::<u8>().unwrap_or(0),
-                            signal: w.signal_level.parse::<f32>().unwrap_or(-100.00),
-                            mac: w.mac.to_string(),
-                            color: COLORS_NAMES[nets.len() % COLORS_NAMES.len()],
+                    for w in nets {
+                        if let Some(n) = wifi_nets.iter_mut().find(|item| item.ssid == w.ssid) {
+                            let signal: f32 = w.signal_level.parse().unwrap_or(-100.00);
+                            if n.signal < signal {
+                                n.signal = signal;
+                                n.mac = w.mac;
+                                let channel = w.channel.parse::<u8>().unwrap_or(0);
+                                n.channel = channel;
+                            }
+                        } else {
+                            wifi_nets.push(WifiInfo {
+                                time: now,
+                                ssid: w.ssid,
+                                channel: w.channel.parse::<u8>().unwrap_or(0),
+                                signal: w.signal_level.parse::<f32>().unwrap_or(-100.00),
+                                mac: w.mac,
+                                color: COLORS_NAMES[wifi_nets.len() % COLORS_NAMES.len()],
+                            });
                         }
-                    }).collect();
+                    }
 
-                    if tx.send(Action::Scan(wifi_nets)).is_err() {
-                        // Handle error
+                    let t_send = tx.send(Action::Scan(wifi_nets));
+                    match t_send {
+                        Ok(n) => (),
+                        Err(e) => (),
                     }
                 }
-                Err(_) => {
-                    // Handle error
-                }
-            }
+                Err(_e) => (),
+            };
         });
     }
 
     fn parse_networks_data(&mut self, nets: &Vec<WifiInfo>) {
-        let mut wifi_map: HashMap<String, WifiInfo> = self.wifis.drain(..)
-            .map(|w| (w.ssid.clone(), w))
-            .collect();
-
+        // -- clear signal values
+        self.wifis.iter_mut().for_each(|item| {
+            item.signal = 0.0;
+        });
+        // -- add or update wifi info
         for w in nets {
-            if let Some(existing) = wifi_map.get_mut(&w.ssid) {
-                existing.copy_values(w.clone());
+            if let Some(n) = self.wifis.iter_mut().find(|item| item.ssid == w.ssid) {
+                n.copy_values(w.clone());
             } else {
-                wifi_map.insert(w.ssid.clone(), w.clone());
+                self.wifis.push(w.clone());
             }
         }
-
-        self.wifis = wifi_map.into_values().collect();
-        self.wifis.sort_by(|a, b| b.signal.partial_cmp(&a.signal).unwrap());
+        // -- sort wifi networks by it's signal strength
+        self.wifis
+            .sort_by(|a, b| b.signal.partial_cmp(&a.signal).unwrap());
     }
 
     fn app_tick(&mut self) -> Result<()> {
