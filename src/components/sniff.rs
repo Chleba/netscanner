@@ -248,13 +248,13 @@ impl Sniffer {
                 },
             );
 
-            let a_intfs = self.active_inft_ips.clone();
+            let a_intfs = &self.active_inft_ips;
             let tu = self
                 .traffic_ips
                 .iter()
                 .filter(|item| {
                     let t_ip = item.ip.to_string();
-                    for i_ip in a_intfs.clone() {
+                    for i_ip in a_intfs {
                         if i_ip.ip().to_string() == t_ip {
                             return false;
                         }
@@ -265,9 +265,9 @@ impl Sniffer {
 
             let mut tu_ip = String::from("");
             let mut tu_name = String::from("");
-            if tu.is_some() {
-                tu_ip = tu.unwrap().ip.to_string();
-                tu_name = format!(" ({})", tu.unwrap().hostname);
+            if let Some(tu) = tu {
+                tu_ip = tu.ip.to_string();
+                tu_name = format!(" ({})", tu.hostname);
             }
             let top_uploader = Line::from(vec![
                 "Top uploader: ".into(),
@@ -289,7 +289,7 @@ impl Sniffer {
                 .iter()
                 .filter(|item| {
                     let t_ip = item.ip.to_string();
-                    for i_ip in a_intfs.clone() {
+                    for i_ip in a_intfs {
                         if i_ip.ip().to_string() == t_ip {
                             return false;
                         }
@@ -300,9 +300,9 @@ impl Sniffer {
 
             let mut td_ip = String::from("");
             let mut td_name = String::from("");
-            if td.is_some() {
-                td_ip = td.unwrap().ip.to_string();
-                td_name = format!(" ({})", tu.unwrap().hostname);
+            if let Some(td) = td {
+                td_ip = td.ip.to_string();
+                td_name = format!(" ({})", td.hostname);
             }
             let top_downloader = Line::from(vec![
                 "Top downloader: ".into(),
@@ -357,8 +357,8 @@ impl Component for Sniffer {
 
         if let Action::PacketDump(time, packet, packet_type) = action {
             match packet_type {
-                PacketTypeEnum::Tcp => self.process_packet(packet.clone()),
-                PacketTypeEnum::Udp => self.process_packet(packet.clone()),
+                PacketTypeEnum::Tcp => self.process_packet(packet),
+                PacketTypeEnum::Udp => self.process_packet(packet),
                 _ => {}
             }
         }

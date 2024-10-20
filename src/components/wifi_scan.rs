@@ -185,10 +185,10 @@ impl WifiScan {
                         } else {
                             wifi_nets.push(WifiInfo {
                                 time: now,
-                                ssid: w.ssid.clone(),
+                                ssid: w.ssid,
                                 channel: w.channel.parse::<u8>().unwrap_or(0),
                                 signal: w.signal_level.parse::<f32>().unwrap_or(-100.00),
-                                mac: w.mac.clone(),
+                                mac: w.mac,
                                 color: COLORS_NAMES[wifi_nets.len() % COLORS_NAMES.len()],
                             });
                         }
