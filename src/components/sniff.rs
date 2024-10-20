@@ -343,12 +343,14 @@ impl Component for Sniffer {
             self.tab_changed(tab).unwrap();
         }
 
-        if let Action::Down = action {
-            self.scroll_down();
-        }
+        if self.active_tab == TabsEnum::Traffic {
+            if let Action::Down = action {
+                self.scroll_down();
+            }
 
-        if let Action::Up = action {
-            self.scroll_up();
+            if let Action::Up = action {
+                self.scroll_up();
+            }
         }
 
         if let Action::ActiveInterface(ref interface) = action {

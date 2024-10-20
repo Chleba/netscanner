@@ -111,13 +111,11 @@ impl Component for Tabs {
                 self.next_tab();
             }
 
-            Action::TabChange(tab_enum) => {
-                TabsEnum::iter().enumerate().for_each(|(idx, t)| {
-                    if tab_enum == t {
-                        self.tab_index = idx;
-                    }
-                })
-            }
+            Action::TabChange(tab_enum) => TabsEnum::iter().enumerate().for_each(|(idx, t)| {
+                if tab_enum == t {
+                    self.tab_index = idx;
+                }
+            }),
 
             _ => {}
         }

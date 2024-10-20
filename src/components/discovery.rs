@@ -13,8 +13,8 @@ use pnet::packet::{
 use pnet::util::MacAddr;
 
 use core::str;
-use ratatui::{prelude::*, widgets::*};
 use ratatui::layout::Position;
+use ratatui::{prelude::*, widgets::*};
 use std::net::{IpAddr, Ipv4Addr};
 use std::string;
 use std::time::{Duration, Instant};
@@ -35,12 +35,12 @@ use crate::{
     tui::Frame,
     utils::{count_ipv4_net_length, get_ips4_from_cidr},
 };
+use crossterm::event::Event;
 use crossterm::event::{KeyCode, KeyEvent};
 use mac_oui::Oui;
 use rand::random;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
-use crossterm::event::Event;
 
 static POOL_SIZE: usize = 32;
 static INPUT_SIZE: usize = 30;
@@ -102,7 +102,7 @@ impl Discovery {
 
     pub fn get_scanned_ips(&self) -> &Vec<ScannedIp> {
         &self.scanned_ips
-    } 
+    }
 
     fn set_cidr(&mut self, cidr_str: String, scan: bool) {
         match cidr_str.parse::<Ipv4Cidr>() {
@@ -137,7 +137,9 @@ impl Discovery {
                         Ok(_) => {
                             if let Some(tx_action) = &self.action_tx {
                                 tx_action
-                                    .send(Action::Error("Unknown or unsupported channel type".into()))
+                                    .send(Action::Error(
+                                        "Unknown or unsupported channel type".into(),
+                                    ))
                                     .unwrap();
                             }
                             return;

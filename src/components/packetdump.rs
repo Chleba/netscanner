@@ -849,11 +849,7 @@ impl PacketDump {
         rows
     }
 
-    fn make_table(
-        rows: Vec<Row>,
-        packet_type: PacketTypeEnum,
-        dump_paused: bool,
-    ) -> Table {
+    fn make_table(rows: Vec<Row>, packet_type: PacketTypeEnum, dump_paused: bool) -> Table {
         let header = Row::new(vec!["time", "packet log"])
             .style(Style::default().fg(Color::Yellow))
             .top_margin(1)
