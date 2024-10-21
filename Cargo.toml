@@ -85,9 +85,18 @@ strum = "0.26.3"
 surge-ping = "0.8.1"
 tokio = { version = "1.40.0", features = ["full"] }
 tokio-util = "0.7.12"
-tokio-wifiscanner = "0.2.1"
+tokio-wifiscanner = { git = "https://github.com/EphemeralSapient/tokio-wifiscanner" }
 tracing = "0.1.40"
 tracing-error = "0.2.0"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "serde"] }
 tui-input = { version = "0.10.1", features = ["serde"] }
 tui-scrollview = "0.4.0"
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
+anyhow = "1.0.86"
+http_req = "0.11.1"
+zip = "2.1.6"
+clap = { version = "4.5.13", features = ["derive"] }
+clap-verbosity-flag = "2.2.1"
+clap_complete = "4.5.12"
+clap_mangen = "0.2.23"

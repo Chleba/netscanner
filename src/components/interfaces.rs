@@ -47,16 +47,19 @@ impl Interfaces {
     fn get_interfaces(&mut self) {
         self.interfaces.clear();
         self.active_interfaces.clear();
-
+    
         let interfaces = datalink::interfaces();
         for intf in &interfaces {
             // -- get active interface with non-local IP
-            if intf.is_up() && !intf.ips.is_empty() {
+            if cfg!(windows) || (intf.is_up() && !intf.ips.is_empty()) {
+                // Windows doesn't have the is_up() method
                 for ip in &intf.ips {
-                    // -- set active interface that's not localhost
-                    if ip.is_ipv4() && ip.ip().to_string().ne("127.0.0.1") {
-                        self.active_interfaces.push(intf.clone());
-                        break;
+                    // -- set active interface that's not localhost and starts with 192 [for windows compatibility]
+                    if let IpAddr::V4(ipv4) = ip.ip() { 
+                        if ipv4.octets()[0] == 192 && ip.ip().to_string().ne("127.0.0.1") {
+                            self.active_interfaces.push(intf.clone());
+                            break;
+                        }
                     }
                 }
             }
@@ -66,7 +69,7 @@ impl Interfaces {
         // -- sort interfaces
         self.interfaces.sort_by(|a, b| a.name.cmp(&b.name));
     }
-
+    
     fn next_active_interface(&mut self) {
         let mut new_index = self.active_interface_index + 1;
         if new_index >= self.active_interfaces.len() {
@@ -111,8 +114,11 @@ impl Interfaces {
             if active_interface.is_some() && active_interface.unwrap() == w {
                 active = String::from("*");
             }
-            let name = w.name.clone();
-            let mac = w.mac.unwrap_or(MacAddr::default()).to_string();
+            let name = if cfg!(windows) {
+                w.description.clone()
+            } else {
+                w.name.clone()
+            };            let mac = w.mac.unwrap_or(MacAddr::default()).to_string();
             let ipv4: Vec<Line> = w
                 .ips
                 .iter()
