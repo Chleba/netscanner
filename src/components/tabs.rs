@@ -82,15 +82,11 @@ impl Tabs {
     }
 
     fn next_tab(&mut self) {
-        let mut new_tab_index = self.tab_index + 1;
-        new_tab_index %= TabsEnum::COUNT;
-
-        let tab_enum: TabsEnum = TabsEnum::iter().nth(new_tab_index).unwrap();
-        self.action_tx
-            .clone()
-            .unwrap()
-            .send(Action::TabChange(tab_enum))
-            .unwrap();
+        self.tab_index = (self.tab_index + 1) % TabsEnum::COUNT;
+        if let Some(ref action_tx) = self.action_tx {
+            let tab_enum = TabsEnum::iter().nth(self.tab_index).unwrap();
+            action_tx.send(Action::TabChange(tab_enum)).unwrap();
+        }
     }
 }
 
@@ -115,13 +111,11 @@ impl Component for Tabs {
                 self.next_tab();
             }
 
-            Action::TabChange(tab_enum) => {
-                TabsEnum::iter().enumerate().for_each(|(idx, t)| {
-                    if tab_enum == t {
-                        self.tab_index = idx;
-                    }
-                })
-            }
+            Action::TabChange(tab_enum) => TabsEnum::iter().enumerate().for_each(|(idx, t)| {
+                if tab_enum == t {
+                    self.tab_index = idx;
+                }
+            }),
 
             _ => {}
         }

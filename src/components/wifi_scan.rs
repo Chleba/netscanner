@@ -10,10 +10,10 @@ use ratatui::{prelude::*, widgets::*};
 use super::Component;
 use crate::{
     action::Action,
+    config::DEFAULT_BORDER_STYLE,
     layout::{get_horizontal_layout, get_vertical_layout},
     mode::Mode,
     tui::Frame,
-    config::DEFAULT_BORDER_STYLE,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -42,7 +42,6 @@ pub struct WifiScan {
     pub wifis: Vec<WifiInfo>,
     pub signal_tick: [f64; 2],
     show_graph: bool,
-    // pub mode: Mode,
 }
 
 impl Default for WifiScan {
@@ -185,10 +184,10 @@ impl WifiScan {
                         } else {
                             wifi_nets.push(WifiInfo {
                                 time: now,
-                                ssid: w.ssid.clone(),
+                                ssid: w.ssid,
                                 channel: w.channel.parse::<u8>().unwrap_or(0),
                                 signal: w.signal_level.parse::<f32>().unwrap_or(-100.00),
-                                mac: w.mac.clone(),
+                                mac: w.mac,
                                 color: COLORS_NAMES[wifi_nets.len() % COLORS_NAMES.len()],
                             });
                         }

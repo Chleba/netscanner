@@ -13,8 +13,8 @@ use pnet::packet::{
 use pnet::util::MacAddr;
 
 use core::str;
-use ratatui::{prelude::*, widgets::*};
 use ratatui::layout::Position;
+use ratatui::{prelude::*, widgets::*};
 use std::net::{IpAddr, Ipv4Addr};
 use std::string;
 use std::time::{Duration, Instant};
@@ -35,12 +35,12 @@ use crate::{
     tui::Frame,
     utils::{count_ipv4_net_length, get_ips4_from_cidr},
 };
+use crossterm::event::Event;
 use crossterm::event::{KeyCode, KeyEvent};
 use mac_oui::Oui;
 use rand::random;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
-use crossterm::event::Event;
 
 static POOL_SIZE: usize = 32;
 static INPUT_SIZE: usize = 30;
@@ -102,19 +102,20 @@ impl Discovery {
 
     pub fn get_scanned_ips(&self) -> &Vec<ScannedIp> {
         &self.scanned_ips
-    } 
+    }
 
     fn set_cidr(&mut self, cidr_str: String, scan: bool) {
-        match &cidr_str.parse::<Ipv4Cidr>() {
+        match cidr_str.parse::<Ipv4Cidr>() {
             Ok(ip_cidr) => {
-                self.cidr = Some(*ip_cidr);
+                self.cidr = Some(ip_cidr);
                 if scan {
                     self.scan();
                 }
             }
             Err(e) => {
-                let tx = self.action_tx.clone().unwrap();
-                tx.send(Action::CidrError).unwrap();
+                if let Some(tx) = &self.action_tx {
+                    tx.send(Action::CidrError).unwrap();
+                }
             }
         }
     }
@@ -125,63 +126,63 @@ impl Discovery {
     }
 
     fn send_arp(&mut self, target_ip: Ipv4Addr) {
-            let active_interface = match self.active_interface.clone() {
-                Some(intf) => intf,
-                None => return, // Or send an error Action
-            };
-
+        if let Some(active_interface) = &self.active_interface {
             if let Some(active_interface_mac) = active_interface.mac {
-            let ipv4 = active_interface.ips.iter().find(|f| f.is_ipv4()).unwrap();
-            let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
+                let ipv4 = active_interface.ips.iter().find(|f| f.is_ipv4()).unwrap();
+                let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
 
-            let (mut sender, _) =
-                match pnet::datalink::channel(&active_interface, Default::default()) {
-                    Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
-                    Ok(_) => {
-                        let tx_action = self.action_tx.clone().unwrap();
-                        tx_action
-                            .send(Action::Error("Unknown or unsopported channel type".into()))
-                            .unwrap();
-                        return;
-                    }
-                    Err(e) => {
-                        let tx_action = self.action_tx.clone().unwrap();
-                        tx_action
-                            .send(Action::Error(format!(
-                                "Unable to create datalink channel: {e}"
-                            )))
-                            .unwrap();
-                        return;
-                    }
-                };
+                let (mut sender, _) =
+                    match pnet::datalink::channel(active_interface, Default::default()) {
+                        Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
+                        Ok(_) => {
+                            if let Some(tx_action) = &self.action_tx {
+                                tx_action
+                                    .send(Action::Error(
+                                        "Unknown or unsupported channel type".into(),
+                                    ))
+                                    .unwrap();
+                            }
+                            return;
+                        }
+                        Err(e) => {
+                            if let Some(tx_action) = &self.action_tx {
+                                tx_action
+                                    .send(Action::Error(format!(
+                                        "Unable to create datalink channel: {e}"
+                                    )))
+                                    .unwrap();
+                            }
+                            return;
+                        }
+                    };
 
-            let mut ethernet_buffer = [0u8; 42];
-            let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer).unwrap();
+                let mut ethernet_buffer = [0u8; 42];
+                let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer).unwrap();
 
-            ethernet_packet.set_destination(MacAddr::broadcast());
-            // ethernet_packet.set_source(active_interface.mac.unwrap());
-            ethernet_packet.set_source(active_interface_mac);
-            ethernet_packet.set_ethertype(EtherTypes::Arp);
+                ethernet_packet.set_destination(MacAddr::broadcast());
+                ethernet_packet.set_source(active_interface_mac);
+                ethernet_packet.set_ethertype(EtherTypes::Arp);
 
-            let mut arp_buffer = [0u8; 28];
-            let mut arp_packet = MutableArpPacket::new(&mut arp_buffer).unwrap();
+                let mut arp_buffer = [0u8; 28];
+                let mut arp_packet = MutableArpPacket::new(&mut arp_buffer).unwrap();
 
-            arp_packet.set_hardware_type(ArpHardwareTypes::Ethernet);
-            arp_packet.set_protocol_type(EtherTypes::Ipv4);
-            arp_packet.set_hw_addr_len(6);
-            arp_packet.set_proto_addr_len(4);
-            arp_packet.set_operation(ArpOperations::Request);
-            arp_packet.set_sender_hw_addr(active_interface_mac);
-            arp_packet.set_sender_proto_addr(source_ip);
-            arp_packet.set_target_hw_addr(MacAddr::zero());
-            arp_packet.set_target_proto_addr(target_ip);
+                arp_packet.set_hardware_type(ArpHardwareTypes::Ethernet);
+                arp_packet.set_protocol_type(EtherTypes::Ipv4);
+                arp_packet.set_hw_addr_len(6);
+                arp_packet.set_proto_addr_len(4);
+                arp_packet.set_operation(ArpOperations::Request);
+                arp_packet.set_sender_hw_addr(active_interface_mac);
+                arp_packet.set_sender_proto_addr(source_ip);
+                arp_packet.set_target_hw_addr(MacAddr::zero());
+                arp_packet.set_target_proto_addr(target_ip);
 
-            ethernet_packet.set_payload(arp_packet.packet_mut());
+                ethernet_packet.set_payload(arp_packet.packet_mut());
 
-            sender
-                .send_to(ethernet_packet.packet(), None)
-                .unwrap()
-                .unwrap();
+                sender
+                    .send_to(ethernet_packet.packet(), None)
+                    .unwrap()
+                    .unwrap();
+            }
         }
     }
 
@@ -190,10 +191,9 @@ impl Discovery {
 
         if let Some(cidr) = self.cidr {
             self.is_scanning = true;
-            let tx = self.action_tx.clone().unwrap();
+            let tx = self.action_tx.as_ref().unwrap().clone();
             self.task = tokio::spawn(async move {
                 let ips = get_ips4_from_cidr(cidr);
-                let tx = tx.clone();
                 let chunks: Vec<_> = ips.chunks(POOL_SIZE).collect();
                 for chunk in chunks {
                     let tasks: Vec<_> = chunk
@@ -254,23 +254,23 @@ impl Discovery {
     }
 
     fn process_ip(&mut self, ip: &str) {
-        let tx = self.action_tx.clone().unwrap();
+        let tx = self.action_tx.as_ref().unwrap();
         let ipv4: Ipv4Addr = ip.parse().unwrap();
         self.send_arp(ipv4);
 
         if let Some(n) = self.scanned_ips.iter_mut().find(|item| item.ip == ip) {
             let hip: IpAddr = ip.parse().unwrap();
-            let host = lookup_addr(&hip).unwrap_or(String::from(""));
+            let host = lookup_addr(&hip).unwrap_or_default();
             n.hostname = host;
             n.ip = ip.to_string();
         } else {
             let hip: IpAddr = ip.parse().unwrap();
-            let host = lookup_addr(&hip).unwrap_or(String::from(""));
+            let host = lookup_addr(&hip).unwrap_or_default();
             self.scanned_ips.push(ScannedIp {
                 ip: ip.to_string(),
-                mac: String::from(""),
+                mac: String::new(),
                 hostname: host,
-                vendor: String::from(""),
+                vendor: String::new(),
             });
 
             self.scanned_ips.sort_by(|a, b| {
@@ -340,11 +340,11 @@ impl Discovery {
         self.scrollbar_state = self.scrollbar_state.position(index);
     }
 
-    fn make_table(
-        scanned_ips: Vec<ScannedIp>,
+    fn make_table<'a>(
+        scanned_ips: &'a Vec<ScannedIp>,
         cidr: Option<Ipv4Cidr>,
         ip_num: i32,
-    ) -> Table<'static> {
+    ) -> Table<'a> {
         let header = Row::new(vec!["ip", "mac", "hostname", "vendor"])
             .style(Style::default().fg(Color::Yellow))
             .top_margin(1)
@@ -362,9 +362,9 @@ impl Discovery {
                     format!("{ip:<2}"),
                     Style::default().fg(Color::Blue),
                 )),
-                Cell::from(sip.mac.clone().green()),
-                Cell::from(sip.hostname.clone()),
-                Cell::from(sip.vendor.clone().yellow()),
+                Cell::from(sip.mac.as_str().green()),
+                Cell::from(sip.hostname.as_str()),
+                Cell::from(sip.vendor.as_str().yellow()),
             ]));
         }
 
@@ -661,8 +661,8 @@ impl Component for Discovery {
             table_rect.y += 1;
             table_rect.height -= 1;
 
-            let table = Self::make_table(self.scanned_ips.clone(), self.cidr, self.ip_num);
-            f.render_stateful_widget(table, table_rect, &mut self.table_state.clone());
+            let table = Self::make_table(&self.scanned_ips, self.cidr, self.ip_num);
+            f.render_stateful_widget(table, table_rect, &mut self.table_state);
 
             // -- SCROLLBAR
             let scrollbar = Self::make_scrollbar();
@@ -698,7 +698,7 @@ impl Component for Discovery {
             let scroll = self.input.visual_scroll(INPUT_SIZE - 3);
             let mut block = self.make_input(scroll);
             if self.is_scanning {
-                block = block.clone().add_modifier(Modifier::DIM);
+                block = block.add_modifier(Modifier::DIM);
             }
             f.render_widget(block, input_rect);
 

@@ -414,7 +414,7 @@ impl PacketDump {
         let (_, mut receiver) = match pnet::datalink::channel(&interface, Default::default()) {
             Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
             Ok(_) => {
-                tx.send(Action::Error("Unknown or unsopported channel type".into()))
+                tx.send(Action::Error("Unknown or unsupported channel type".into()))
                     .unwrap();
                 return;
             }
@@ -424,10 +424,9 @@ impl PacketDump {
                 )))
                 .unwrap();
                 return;
-            } // Ok(_) => panic!("Unknown channel type"),
-              // Err(e) => panic!("Error happened {}", e),
+            }
         };
-        // while !paused.load(Ordering::Relaxed) {
+
         loop {
             let mut buf: [u8; 1600] = [0u8; 1600];
             let mut fake_ethernet_frame = MutableEthernetPacket::new(&mut buf[..]).unwrap();
@@ -850,11 +849,7 @@ impl PacketDump {
         rows
     }
 
-    fn make_table(
-        rows: Vec<Row>,
-        packet_type: PacketTypeEnum,
-        dump_paused: bool,
-    ) -> Table {
+    fn make_table(rows: Vec<Row>, packet_type: PacketTypeEnum, dump_paused: bool) -> Table {
         let header = Row::new(vec!["time", "packet log"])
             .style(Style::default().fg(Color::Yellow))
             .top_margin(1)

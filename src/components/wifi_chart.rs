@@ -53,7 +53,7 @@ impl WifiChart {
         Ok(())
     }
 
-    fn parse_char_data(&mut self, nets: &Vec<WifiInfo>) {
+    fn parse_char_data(&mut self, nets: &[WifiInfo]) {
         for w in nets {
             let seconds: f64 = w.time.second() as f64;
             if let Some(p) = self
@@ -67,7 +67,6 @@ impl WifiChart {
             } else {
                 self.wifi_datasets.push(WifiDataset {
                     ssid: w.ssid.clone(),
-                    // data: vec![(0.0, 0.0)],
                     data: MaxSizeVec::new(100),
                     color: w.color,
                 });
@@ -82,7 +81,7 @@ impl WifiChart {
         for d in &self.wifi_datasets {
             let d_data = &d.data.get_vec();
             let dataset = Dataset::default()
-                .name(d.ssid.clone())
+                .name(&*d.ssid)
                 .marker(symbols::Marker::Dot)
                 .style(Style::default().fg(d.color))
                 .graph_type(GraphType::Line)
