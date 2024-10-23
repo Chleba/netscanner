@@ -1,7 +1,7 @@
 
 fn main() {
-  #[cfg(target_os = "windows")]
-  download_windows_npcap_sdk().unwrap();
+  // #[cfg(target_os = "windows")]
+  // download_windows_npcap_sdk().unwrap();
 
   let git_output = std::process::Command::new("git").args(["rev-parse", "--git-dir"]).output().ok();
   let git_dir = git_output.as_ref().and_then(|output| {
