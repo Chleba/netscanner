@@ -747,6 +747,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "fastping-rs"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3261c7483f161f043bb77ed9ab4891441562bf314ad19709b8ec0b8c85a48f0e"
+dependencies = [
+ "log",
+ "pnet 0.34.0",
+ "pnet_macros_support 0.34.0",
+ "rand",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1305,6 +1317,7 @@ dependencies = [
  "derive_deref",
  "directories",
  "dns-lookup",
+ "fastping-rs",
  "futures",
  "http_req",
  "human-panic",
@@ -1315,7 +1328,7 @@ dependencies = [
  "libc",
  "log",
  "mac_oui",
- "pnet",
+ "pnet 0.35.0",
  "port-desc",
  "pretty_assertions",
  "rand",
@@ -1587,16 +1600,30 @@ checksum = "953ec861398dccce10c670dfeaf3ec4911ca479e9c02154b3a215178c5f566f2"
 
 [[package]]
 name = "pnet"
+version = "0.34.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "130c5b738eeda2dc5796fe2671e49027e6935e817ab51b930a36ec9e6a206a64"
+dependencies = [
+ "ipnetwork",
+ "pnet_base 0.34.0",
+ "pnet_datalink 0.34.0",
+ "pnet_packet 0.34.0",
+ "pnet_sys 0.34.0",
+ "pnet_transport 0.34.0",
+]
+
+[[package]]
+name = "pnet"
 version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "682396b533413cc2e009fbb48aadf93619a149d3e57defba19ff50ce0201bd0d"
 dependencies = [
  "ipnetwork",
  "pnet_base 0.35.0",
- "pnet_datalink",
+ "pnet_datalink 0.35.0",
  "pnet_packet 0.35.0",
- "pnet_sys",
- "pnet_transport",
+ "pnet_sys 0.35.0",
+ "pnet_transport 0.35.0",
 ]
 
 [[package]]
@@ -1619,6 +1646,19 @@ dependencies = [
 
 [[package]]
 name = "pnet_datalink"
+version = "0.34.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad5854abf0067ebbd3967f7d45ebc8976ff577ff0c7bd101c4973ae3c70f98fe"
+dependencies = [
+ "ipnetwork",
+ "libc",
+ "pnet_base 0.34.0",
+ "pnet_sys 0.34.0",
+ "winapi",
+]
+
+[[package]]
+name = "pnet_datalink"
 version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e79e70ec0be163102a332e1d2d5586d362ad76b01cec86f830241f2b6452a7b7"
@@ -1626,7 +1666,7 @@ dependencies = [
  "ipnetwork",
  "libc",
  "pnet_base 0.35.0",
- "pnet_sys",
+ "pnet_sys 0.35.0",
  "winapi",
 ]
 
@@ -1698,12 +1738,34 @@ dependencies = [
 
 [[package]]
 name = "pnet_sys"
+version = "0.34.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "417c0becd1b573f6d544f73671070b039051e5ad819cc64aa96377b536128d00"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
+name = "pnet_sys"
 version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d4643d3d4db6b08741050c2f3afa9a892c4244c085a72fcda93c9c2c9a00f4b"
 dependencies = [
  "libc",
  "winapi",
+]
+
+[[package]]
+name = "pnet_transport"
+version = "0.34.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2637e14d7de974ee2f74393afccbc8704f3e54e6eb31488715e72481d1662cc3"
+dependencies = [
+ "libc",
+ "pnet_base 0.34.0",
+ "pnet_packet 0.34.0",
+ "pnet_sys 0.34.0",
 ]
 
 [[package]]
@@ -1715,7 +1777,7 @@ dependencies = [
  "libc",
  "pnet_base 0.35.0",
  "pnet_packet 0.35.0",
- "pnet_sys",
+ "pnet_sys 0.35.0",
 ]
 
 [[package]]
