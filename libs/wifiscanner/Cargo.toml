@@ -18,6 +18,8 @@ path = "src/examples/main.rs"
 regex = "1"
 itertools = "0.10.0"
 tokio =  { version = "1.40.0", features = ["process"] }
+os-version = "0.2.0"
+version-compare = "0.2.0"
 
 [dev-dependencies]
 regex = "1"

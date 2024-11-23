@@ -1,14 +1,75 @@
 use crate::{Error, Result, Wifi};
+use os_version::{self, MacOS};
+use regex::Regex;
+use tokio::process::Command;
+use version_compare::{compare_to, Cmp};
 
 /// Returns a list of WiFi hotspots in your area - (OSX/MacOS) uses `airport`
 pub(crate) async fn scan() -> Result<Vec<Wifi>> {
-    use tokio::process::Command;
+    let mac_version = match os_version::MacOS::detect() {
+        Ok(version) => version,
+        Err(_) => MacOS {
+            version: "0.0.0".to_string(),
+        },
+    };
+
+    let r = match compare_to(mac_version.version, "14.4", Cmp::Ge) {
+        Ok(cmp) => {
+            if cmp {
+                scan_system_profile().await
+            } else {
+                scan_airport().await
+            }
+        }
+        Err(_) => scan_airport().await,
+    };
+
+    return r;
+}
+
+async fn scan_system_profile() -> Result<Vec<Wifi>> {
+    let output = Command::new("system_profiler")
+        .arg("SPAirPortDataType")
+        .output()
+        .await
+        .map_err(|_| Error::CommandNotFound)?;
+    let data = String::from_utf8_lossy(&output.stdout);
+    parse_system_profile(&data)
+}
+
+fn parse_system_profile(network_list: &str) -> Result<Vec<Wifi>> {
+    let mut wifis: Vec<Wifi> = Vec::new();
+
+    let re = Regex::new(r"(?m)^\s+([^\n]+):\n\s+PHY Mode: [^\n]+\n\s+Channel: ([^\n]+)\n\s+.*?\n\s+Security: ([^\n]+)\n\s+Signal / Noise: ([^\n]+)")
+        .unwrap();
+    for w in re.captures_iter(network_list) {
+
+        let ssid = w[1].trim().to_string();
+        let channel = w[2].split('(').next().unwrap().trim().to_string();
+        let security = w[3].trim().to_string();
+        let signal = w[4].split('/').next().unwrap().trim().to_string();
+
+        let wifi = Wifi{
+            ssid,
+            channel,
+            signal_level: signal.split(' ').next().unwrap().trim().to_string(),
+            security,
+            mac: String::new(),
+        };
+        wifis.push(wifi);
+    }
+
+    Ok(wifis)
+}
+
+async fn scan_airport() -> Result<Vec<Wifi>> {
     let output = Command::new(
         "/System/Library/PrivateFrameworks/Apple80211.\
          framework/Versions/Current/Resources/airport",
     )
     .arg("-s")
-    .output().await
+    .output()
+    .await
     .map_err(|_| Error::CommandNotFound)?;
 
     let data = String::from_utf8_lossy(&output.stdout);
