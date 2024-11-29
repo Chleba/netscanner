@@ -43,20 +43,21 @@ fn parse_system_profile(network_list: &str) -> Result<Vec<Wifi>> {
     let re = Regex::new(r"(?m)^\s+([^\n]+):\n\s+PHY Mode: [^\n]+\n\s+Channel: ([^\n]+)\n\s+.*?\n\s+Security: ([^\n]+)\n\s+Signal / Noise: ([^\n]+)")
         .unwrap();
     for w in re.captures_iter(network_list) {
-
         let ssid = w[1].trim().to_string();
-        let channel = w[2].split('(').next().unwrap().trim().to_string();
-        let security = w[3].trim().to_string();
-        let signal = w[4].split('/').next().unwrap().trim().to_string();
+        if !ssid.contains("Other Local Wi-Fi Networks") {
+            let channel = w[2].split('(').next().unwrap().trim().to_string();
+            let security = w[3].trim().to_string();
+            let signal = w[4].split('/').next().unwrap().trim().to_string();
 
-        let wifi = Wifi{
-            ssid,
-            channel,
-            signal_level: signal.split(' ').next().unwrap().trim().to_string(),
-            security,
-            mac: String::new(),
-        };
-        wifis.push(wifi);
+            let wifi = Wifi {
+                ssid,
+                channel,
+                signal_level: signal.split(' ').next().unwrap().trim().to_string(),
+                security,
+                mac: String::new(),
+            };
+            wifis.push(wifi);
+        }
     }
 
     Ok(wifis)
