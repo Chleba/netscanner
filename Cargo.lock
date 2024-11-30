@@ -2612,8 +2612,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-wifiscanner"
-version = "0.2.1"
-source = "git+https://github.com/Chleba/tokio-wifiscanner.git#6106aa461b0c73e7e2d52aea43fa1dc2aaa5ac91"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed7d0f9c65b01c6a6368ac63159de22d07dfd57e4cf811168f75750592087d5f"
 dependencies = [
  "itertools 0.10.5",
  "os-version",

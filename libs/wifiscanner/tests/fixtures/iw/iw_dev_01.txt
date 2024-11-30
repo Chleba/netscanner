@@ -1,9 +1,0 @@
-phy#0
-	Interface wlp2s0
-		ifindex 4
-		wdev 0x1
-		addr 11:22:33:44:55:66
-		ssid hello
-		type managed
-		channel 1 (2412 MHz), width: 20 MHz, center1: 2412 MHz
-		txpower 20.00 dBm
