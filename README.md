@@ -56,6 +56,11 @@ apk add netscanner --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testin
 ```
 cargo install netscanner
 ```
+
+## Windows Installation
+
+To use `netscanner` on Windows, you need to install [Npcap](https://npcap.com/dist/npcap-1.80.exe), otherwise you may encounter packet.dll error. Npcap is a packet capture library required for network scanning and packet analysis.
+
 ## Appreciation
 `netscanner` has been made thanks to some awesome libraries that can be found in [Cargo.toml](./Cargo.toml) file.
 But mostly I would like to link these two libraries that help me the most:

@@ -51,12 +51,11 @@ impl Interfaces {
         let interfaces = datalink::interfaces();
         for intf in &interfaces {
             // -- get active interface with non-local IP
-            if cfg!(windows) || (intf.is_up() && !intf.ips.is_empty()) {
+            if (cfg!(windows) || intf.is_up()) && !intf.ips.is_empty() {
                 // Windows doesn't have the is_up() method
                 for ip in &intf.ips {
-                    // -- set active interface that's not localhost and starts with 192 [for windows compatibility]
-                    if let IpAddr::V4(ipv4) = ip.ip() { 
-                        if ipv4.octets()[0] == 192 && ip.ip().to_string().ne("127.0.0.1") {
+                    if let IpAddr::V4(ipv4) = ip.ip() {
+                        if ipv4.is_private() && !ipv4.is_loopback() && !ipv4.is_unspecified() {
                             self.active_interfaces.push(intf.clone());
                             break;
                         }
