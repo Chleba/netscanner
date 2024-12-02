@@ -35,6 +35,7 @@ const SPINNER_SYMBOLS: [&str; 6] = ["⠷", "⠯", "⠟", "⠻", "⠽", "⠾"];
 pub struct ScannedIpPorts {
     pub ip: String,
     state: PortsScanState,
+    hostname: String,
     pub ports: Vec<u16>,
 }
 
@@ -78,12 +79,14 @@ impl Ports {
 
     fn process_ip(&mut self, ip: &str) {
         let ipv4: Ipv4Addr = ip.parse().unwrap();
+        let hostname = lookup_addr(&ipv4.into()).unwrap_or_default();
 
         if let Some(n) = self.ip_ports.iter_mut().find(|item| item.ip == ip) {
             n.ip = ip.to_string();
         } else {
             self.ip_ports.push(ScannedIpPorts {
                 ip: ip.to_string(),
+                hostname,
                 state: PortsScanState::Waiting,
                 ports: Vec::new(),
             });
@@ -201,8 +204,16 @@ impl Ports {
         for ip in &self.ip_ports {
             let mut lines = Vec::new();
 
-            let ip_line = Line::from(vec!["IP:    ".yellow(), ip.ip.clone().cyan()]);
-            lines.push(ip_line);
+            let mut ip_line_vec = vec![
+                "IP:    ".yellow(), 
+                ip.ip.clone().blue(),
+            ];
+            if !ip.hostname.is_empty() {
+                ip_line_vec.push(" (".into());
+                ip_line_vec.push(ip.hostname.clone().cyan());
+                ip_line_vec.push(")".into());
+            }
+            lines.push(Line::from(ip_line_vec));
 
             let mut ports_spans = vec!["PORTS: ".yellow()];
             if ip.state == PortsScanState::Waiting {
