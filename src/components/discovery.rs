@@ -298,11 +298,9 @@ impl Discovery {
 
             if let Some(oui) = &self.oui {
                 let oui_res = oui.lookup_by_mac(&n.mac);
-                if let Ok(oui_res) = oui_res {
-                    if let Some(oui_res) = oui_res {
-                        let cn = oui_res.company_name.clone();
-                        n.vendor = cn;
-                    }
+                if let Ok(Some(oui_res)) = oui_res {
+                    let cn = oui_res.company_name.clone();
+                    n.vendor = cn;
                 }
             }
         }
@@ -395,11 +393,12 @@ impl Discovery {
         self.scrollbar_state = self.scrollbar_state.position(index);
     }
 
-    fn make_table<'a>(
-        scanned_ips: &'a Vec<ScannedIp>,
+    fn make_table(
+        scanned_ips: &Vec<ScannedIp>,
         cidr: Option<Ipv4Cidr>,
         ip_num: i32,
-    ) -> Table<'a> {
+        is_scanning: bool,
+    ) -> Table {
         let header = Row::new(vec!["ip", "mac", "hostname", "vendor"])
             .style(Style::default().fg(Color::Yellow))
             .top_margin(1)
@@ -421,6 +420,22 @@ impl Discovery {
                 Cell::from(sip.hostname.as_str()),
                 Cell::from(sip.vendor.as_str().yellow()),
             ]));
+        }
+
+        let mut scan_title = vec![
+            Span::styled("|", Style::default().fg(Color::Yellow)),
+            "◉ ".green(),
+            Span::styled(
+                format!("{}", scanned_ips.len()),
+                Style::default().fg(Color::Red),
+            ),
+            Span::styled("|", Style::default().fg(Color::Yellow)),
+        ];
+        if is_scanning {
+            scan_title.push(" ⣿(".yellow());
+            scan_title.push(format!("{}", ip_num).red());
+            scan_title.push(format!("/{}", cidr_length).green());
+            scan_title.push(")".yellow());
         }
 
         let table = Table::new(
@@ -454,17 +469,9 @@ impl Discovery {
                     .position(ratatui::widgets::block::Position::Bottom),
                 )
                 .title(
-                    ratatui::widgets::block::Title::from(Line::from(vec![
-                        Span::styled("|", Style::default().fg(Color::Yellow)),
-                        Span::styled(format!("{}", ip_num), Style::default().fg(Color::Green)),
-                        Span::styled(
-                            format!("/{}", cidr_length),
-                            Style::default().fg(Color::Green),
-                        ),
-                        Span::styled(" ip|", Style::default().fg(Color::Yellow)),
-                    ]))
-                    .position(ratatui::widgets::block::Position::Top)
-                    .alignment(Alignment::Left),
+                    ratatui::widgets::block::Title::from(Line::from(scan_title))
+                        .position(ratatui::widgets::block::Position::Top)
+                        .alignment(Alignment::Left),
                 )
                 .title(
                     ratatui::widgets::block::Title::from(Line::from(vec![
@@ -716,7 +723,8 @@ impl Component for Discovery {
             table_rect.y += 1;
             table_rect.height -= 1;
 
-            let table = Self::make_table(&self.scanned_ips, self.cidr, self.ip_num);
+            let table =
+                Self::make_table(&self.scanned_ips, self.cidr, self.ip_num, self.is_scanning);
             f.render_stateful_widget(table, table_rect, &mut self.table_state);
 
             // -- SCROLLBAR
