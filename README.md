@@ -14,7 +14,7 @@
 [![Manjaro Stable package](https://repology.org/badge/version-for-repo/manjaro_stable/netscanner.svg)](https://repology.org/project/netscanner/versions)
 [![Kali Linux Rolling package](https://repology.org/badge/version-for-repo/kali_rolling/netscanner.svg)](https://repology.org/project/netscanner/versions)
 
-`netscanner` - Network scanning & diagnostic tool.
+`netscanner` - Network scanner & diagnostic tool.
 
 **FEATURES:**
 - [x] List HW Interfaces
