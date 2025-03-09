@@ -4,7 +4,7 @@ use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::{KeyCode, KeyEvent};
 use ipnetwork::Ipv4Network;
 
-use pnet::datalink::{Channel, NetworkInterface};
+use pnet::datalink::{Channel, ChannelType, NetworkInterface};
 use pnet::packet::icmpv6::Icmpv6Types;
 use pnet::packet::{
     arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
@@ -71,6 +71,7 @@ pub struct PacketDump {
     loop_thread: Option<JoinHandle<()>>,
     should_quit: bool,
     dump_paused: Arc<AtomicBool>,
+    dump_stop: Arc<AtomicBool>,
     active_interface: Option<NetworkInterface>,
     table_state: TableState,
     scrollbar_state: ScrollbarState,
@@ -78,6 +79,7 @@ pub struct PacketDump {
     input: Input,
     mode: Mode,
     filter_str: String,
+    changed_interface: bool,
 
     arp_packets: MaxSizeVec<(DateTime<Local>, PacketsInfoTypesEnum)>,
     udp_packets: MaxSizeVec<(DateTime<Local>, PacketsInfoTypesEnum)>,
@@ -101,6 +103,7 @@ impl PacketDump {
             loop_thread: None,
             should_quit: false,
             dump_paused: Arc::new(AtomicBool::new(false)),
+            dump_stop: Arc::new(AtomicBool::new(false)),
             active_interface: None,
             table_state: TableState::default().with_selected(0),
             scrollbar_state: ScrollbarState::new(0),
@@ -108,6 +111,7 @@ impl PacketDump {
             input: Input::default().with_value(String::from("")),
             mode: Mode::Normal,
             filter_str: String::from(""),
+            changed_interface: false,
 
             arp_packets: MaxSizeVec::new(1000),
             udp_packets: MaxSizeVec::new(1000),
@@ -410,8 +414,21 @@ impl PacketDump {
         }
     }
 
-    fn t_logic(tx: UnboundedSender<Action>, interface: NetworkInterface, paused: Arc<AtomicBool>) {
-        let (_, mut receiver) = match pnet::datalink::channel(&interface, Default::default()) {
+    fn t_logic(tx: UnboundedSender<Action>, interface: NetworkInterface, stop: Arc<AtomicBool>) {
+        let (_, mut receiver) = match pnet::datalink::channel(
+            &interface,
+            pnet::datalink::Config {
+                write_buffer_size: 4096,
+                read_buffer_size: 4096,
+                read_timeout: Some(Duration::new(1, 0)),
+                write_timeout: None,
+                channel_type: ChannelType::Layer2,
+                bpf_fd_attempts: 1000,
+                linux_fanout: None,
+                promiscuous: true,
+                socket_fd: None,
+            },
+        ) {
             Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
             Ok(_) => {
                 tx.send(Action::Error("Unknown or unsupported channel type".into()))
@@ -428,6 +445,10 @@ impl PacketDump {
         };
 
         loop {
+            if stop.load(Ordering::Relaxed) {
+                break;
+            }
+
             let mut buf: [u8; 1600] = [0u8; 1600];
             let mut fake_ethernet_frame = MutableEthernetPacket::new(&mut buf[..]).unwrap();
 
@@ -482,7 +503,8 @@ impl PacketDump {
                         tx.clone(),
                     );
                 }
-                Err(e) => panic!("packetdump: unable to receive packet: {}", e),
+                // Err(e) => println!("packetdump: unable to receive packet: {}", e),
+                Err(e) => {}
             }
         }
     }
@@ -491,12 +513,18 @@ impl PacketDump {
         if self.loop_thread.is_none() {
             let tx = self.action_tx.clone().unwrap();
             let interface = self.active_interface.clone().unwrap();
-            let paused = self.dump_paused.clone();
+            // self.dump_stop.store(false, Ordering::Relaxed);
+            // let paused = self.dump_paused.clone();
+            let dump_stop = self.dump_stop.clone();
             let t_handle = thread::spawn(move || {
-                Self::t_logic(tx, interface, paused);
+                Self::t_logic(tx, interface, dump_stop);
             });
             self.loop_thread = Some(t_handle);
         }
+    }
+
+    fn restart_loop(&mut self) {
+        self.dump_stop.store(true, Ordering::Relaxed);
     }
 
     pub fn get_array_by_packet_type(
@@ -1058,6 +1086,18 @@ impl Component for PacketDump {
     }
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
+        // -- change thread loop if interface is changed
+        if self.changed_interface {
+            if let Some(ref lt) = self.loop_thread {
+                if lt.is_finished() {
+                    self.loop_thread = None;
+                    self.dump_stop.store(false, Ordering::SeqCst);
+                    self.start_loop();
+                    self.changed_interface = false;
+                }
+            }
+        }
+
         // -- tab change
         if let Action::TabChange(tab) = action {
             self.tab_changed(tab).unwrap();
@@ -1071,6 +1111,9 @@ impl Component for PacketDump {
             self.active_interface = Some(interface.clone());
             if was_none {
                 self.start_loop();
+            } else {
+                self.changed_interface = true;
+                self.restart_loop();
             }
         }
         if self.active_tab == TabsEnum::Packets {
