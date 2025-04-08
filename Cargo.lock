@@ -1049,12 +1049,14 @@ dependencies = [
 
 [[package]]
 name = "http_req"
-version = "0.11.1"
+version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0122ab6637149482eb66b57288ac597bc7eb9859cbaa79dee62fa19a350df3d2"
+checksum = "cd6349b559f67d8fc01513c3b67b304644617d617c12cbfcd2803ffed56d1cf2"
 dependencies = [
+ "base64 0.22.1",
  "native-tls",
  "unicase",
+ "zeroize",
 ]
 
 [[package]]
