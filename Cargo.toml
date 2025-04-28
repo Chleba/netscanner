@@ -95,7 +95,7 @@ tui-scrollview = "0.4.0"
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 anyhow = "1.0.86"
-http_req = "0.11.1"
+http_req = "0.13.3"
 zip = "2.1.6"
 clap = { version = "4.5.13", features = ["derive"] }
 clap-verbosity-flag = "2.2.1"
