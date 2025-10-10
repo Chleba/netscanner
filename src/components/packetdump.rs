@@ -51,6 +51,16 @@ use strum::{EnumCount, IntoEnumIterator};
 
 const INPUT_SIZE: usize = 30;
 
+// Network packet capture buffer size
+// Standard Ethernet MTU is 1500 bytes + 14 bytes Ethernet header = 1514 bytes
+// We use 1600 to provide some overhead for VLAN tags and other extensions
+const MAX_PACKET_BUFFER_SIZE: usize = 1600;
+
+// Maximum number of packets to keep in history per packet type
+// Limits memory usage to approximately 1000 packets * average packet size
+// This provides sufficient history for analysis while preventing unbounded growth
+const MAX_PACKET_HISTORY: usize = 1000;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArpPacketData {
     pub sender_mac: MacAddr,
@@ -107,12 +117,12 @@ impl PacketDump {
             filter_str: String::from(""),
             changed_interface: false,
 
-            arp_packets: MaxSizeVec::new(1000),
-            udp_packets: MaxSizeVec::new(1000),
-            tcp_packets: MaxSizeVec::new(1000),
-            icmp_packets: MaxSizeVec::new(1000),
-            icmp6_packets: MaxSizeVec::new(1000),
-            all_packets: MaxSizeVec::new(1000),
+            arp_packets: MaxSizeVec::new(MAX_PACKET_HISTORY),
+            udp_packets: MaxSizeVec::new(MAX_PACKET_HISTORY),
+            tcp_packets: MaxSizeVec::new(MAX_PACKET_HISTORY),
+            icmp_packets: MaxSizeVec::new(MAX_PACKET_HISTORY),
+            icmp6_packets: MaxSizeVec::new(MAX_PACKET_HISTORY),
+            all_packets: MaxSizeVec::new(MAX_PACKET_HISTORY),
         }
     }
 
@@ -447,7 +457,7 @@ impl PacketDump {
                 break;
             }
 
-            let mut buf: [u8; 1600] = [0u8; 1600];
+            let mut buf: [u8; MAX_PACKET_BUFFER_SIZE] = [0u8; MAX_PACKET_BUFFER_SIZE];
             // Create mutable ethernet frame for handling special cases
             let Some(mut fake_ethernet_frame) = MutableEthernetPacket::new(&mut buf[..]) else {
                 // Buffer too small, skip this iteration

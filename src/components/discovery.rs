@@ -36,9 +36,18 @@ use rand::random;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
+// Concurrent ping scan pool size
+// Limits the number of concurrent ping operations to avoid overwhelming the network
+// or exhausting system resources. 32 provides good throughput while remaining conservative.
 const POOL_SIZE: usize = 32;
+
+// Width of the CIDR input field in characters
 const INPUT_SIZE: usize = 30;
+
+// Default CIDR range for initial scan
 const DEFAULT_IP: &str = "192.168.1.0/24";
+
+// Animation frames for the scanning spinner
 const SPINNER_SYMBOLS: [&str; 6] = ["⠷", "⠯", "⠟", "⠻", "⠽", "⠾"];
 
 #[derive(Clone, Debug, PartialEq)]

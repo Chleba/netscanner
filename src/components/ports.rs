@@ -26,7 +26,12 @@ use crate::{
     tui::Frame,
 };
 
+// Concurrent port scan pool size
+// Limits the number of concurrent TCP connection attempts during port scanning
+// 64 allows faster scanning than discovery while still being network-friendly
 const POOL_SIZE: usize = 64;
+
+// Animation frames for the scanning spinner
 const SPINNER_SYMBOLS: [&str; 6] = ["⠷", "⠯", "⠟", "⠻", "⠽", "⠾"];
 
 #[derive(Debug, Clone, PartialEq)]
