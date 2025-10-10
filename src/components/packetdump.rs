@@ -441,7 +441,9 @@ impl PacketDump {
         };
 
         loop {
-            if stop.load(Ordering::Relaxed) {
+            // Use SeqCst ordering to ensure we see the stop signal
+            if stop.load(Ordering::SeqCst) {
+                log::debug!("Packet capture thread received stop signal");
                 break;
             }
 
@@ -523,8 +525,8 @@ impl PacketDump {
             let Some(interface) = self.active_interface.clone() else {
                 return;
             };
-            // self.dump_stop.store(false, Ordering::Relaxed);
-            // let paused = self.dump_paused.clone();
+
+            log::debug!("Starting packet capture thread for interface: {}", interface.name);
             let dump_stop = self.dump_stop.clone();
             let t_handle = thread::spawn(move || {
                 Self::t_logic(tx, interface, dump_stop);
@@ -534,7 +536,34 @@ impl PacketDump {
     }
 
     fn restart_loop(&mut self) {
-        self.dump_stop.store(true, Ordering::Relaxed);
+        log::debug!("Requesting packet capture thread to stop");
+        // Use SeqCst ordering for consistent memory visibility across threads
+        self.dump_stop.store(true, Ordering::SeqCst);
+
+        // Wait for thread to finish with timeout
+        if let Some(handle) = self.loop_thread.take() {
+            // Try to join the thread with a timeout
+            // We use a simple timeout mechanism by checking if thread is finished
+            let start = std::time::Instant::now();
+            let timeout = Duration::from_secs(1);
+
+            while !handle.is_finished() && start.elapsed() < timeout {
+                thread::sleep(Duration::from_millis(50));
+            }
+
+            if handle.is_finished() {
+                // Thread finished gracefully, join it to clean up
+                match handle.join() {
+                    Ok(_) => log::debug!("Packet capture thread stopped successfully"),
+                    Err(_) => log::warn!("Packet capture thread panicked during shutdown"),
+                }
+            } else {
+                // Thread didn't finish in time, but we've signaled it to stop
+                // Store the handle back so Drop can handle it
+                log::warn!("Packet capture thread did not stop within timeout, will be cleaned up on drop");
+                self.loop_thread = Some(handle);
+            }
+        }
     }
 
     pub fn get_array_by_packet_type(
@@ -1060,6 +1089,33 @@ impl PacketDump {
     }
 }
 
+impl Drop for PacketDump {
+    fn drop(&mut self) {
+        // Signal thread to stop
+        self.dump_stop.store(true, Ordering::SeqCst);
+
+        // Wait for thread to finish with timeout
+        if let Some(handle) = self.loop_thread.take() {
+            log::debug!("PacketDump dropping, waiting for thread to finish");
+            let start = std::time::Instant::now();
+            let timeout = Duration::from_secs(2);
+
+            while !handle.is_finished() && start.elapsed() < timeout {
+                thread::sleep(Duration::from_millis(50));
+            }
+
+            if handle.is_finished() {
+                // Thread finished gracefully
+                let _ = handle.join();
+                log::debug!("PacketDump thread cleaned up successfully");
+            } else {
+                log::warn!("PacketDump thread did not finish within timeout during drop");
+                // Thread handle will be dropped, potentially causing thread termination
+            }
+        }
+    }
+}
+
 impl Component for PacketDump {
     fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
@@ -1099,11 +1155,18 @@ impl Component for PacketDump {
         if self.changed_interface {
             if let Some(ref lt) = self.loop_thread {
                 if lt.is_finished() {
+                    // Thread has finished, clean it up and start new one
                     self.loop_thread = None;
                     self.dump_stop.store(false, Ordering::SeqCst);
+                    log::debug!("Previous packet capture thread finished, starting new one");
                     self.start_loop();
                     self.changed_interface = false;
                 }
+            } else {
+                // No thread running, safe to start immediately
+                self.dump_stop.store(false, Ordering::SeqCst);
+                self.start_loop();
+                self.changed_interface = false;
             }
         }
 
