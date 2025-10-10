@@ -101,7 +101,10 @@ impl Tui {
       let mut reader = crossterm::event::EventStream::new();
       let mut tick_interval = tokio::time::interval(tick_delay);
       let mut render_interval = tokio::time::interval(render_delay);
-      _event_tx.try_send(Event::Init).unwrap();
+      // Send init event; if this fails, the receiver is already dropped
+      if _event_tx.try_send(Event::Init).is_err() {
+        return;
+      }
       loop {
         let tick_delay = tick_interval.tick();
         let render_delay = render_interval.tick();
@@ -116,37 +119,38 @@ impl Tui {
                 match evt {
                   CrosstermEvent::Key(key) => {
                     if key.kind == KeyEventKind::Press {
-                      _event_tx.try_send(Event::Key(key)).unwrap();
+                      // Ignore send errors - channel may be full or receiver dropped
+                      let _ = _event_tx.try_send(Event::Key(key));
                     }
                   },
                   CrosstermEvent::Mouse(mouse) => {
-                    _event_tx.try_send(Event::Mouse(mouse)).unwrap();
+                    let _ = _event_tx.try_send(Event::Mouse(mouse));
                   },
                   CrosstermEvent::Resize(x, y) => {
-                    _event_tx.try_send(Event::Resize(x, y)).unwrap();
+                    let _ = _event_tx.try_send(Event::Resize(x, y));
                   },
                   CrosstermEvent::FocusLost => {
-                    _event_tx.try_send(Event::FocusLost).unwrap();
+                    let _ = _event_tx.try_send(Event::FocusLost);
                   },
                   CrosstermEvent::FocusGained => {
-                    _event_tx.try_send(Event::FocusGained).unwrap();
+                    let _ = _event_tx.try_send(Event::FocusGained);
                   },
                   CrosstermEvent::Paste(s) => {
-                    _event_tx.try_send(Event::Paste(s)).unwrap();
+                    let _ = _event_tx.try_send(Event::Paste(s));
                   },
                 }
               }
               Some(Err(_)) => {
-                _event_tx.try_send(Event::Error).unwrap();
+                let _ = _event_tx.try_send(Event::Error);
               }
               None => {},
             }
           },
           _ = tick_delay => {
-              _event_tx.try_send(Event::Tick).unwrap();
+              let _ = _event_tx.try_send(Event::Tick);
           },
           _ = render_delay => {
-              _event_tx.try_send(Event::Render).unwrap();
+              let _ = _event_tx.try_send(Event::Render);
           },
         }
       }
