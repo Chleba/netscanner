@@ -20,6 +20,7 @@ pub enum Action {
     Suspend,
     Resume,
     Quit,
+    Shutdown,
     Refresh,
     Error(String),
     Help,

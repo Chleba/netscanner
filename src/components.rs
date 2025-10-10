@@ -115,4 +115,13 @@ pub trait Component: Any {
     /// # Returns
     /// * `Result<()>` - An Ok result or an error.
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()>;
+
+    /// Gracefully shutdown the component and clean up resources.
+    /// This is called before the application exits to ensure proper cleanup.
+    /// Components should stop any running threads, close network connections, etc.
+    /// # Returns
+    /// * `Result<()>` - An Ok result or an error.
+    fn shutdown(&mut self) -> Result<()> {
+        Ok(())
+    }
 }

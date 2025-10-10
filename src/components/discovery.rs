@@ -666,6 +666,19 @@ impl Component for Discovery {
         Ok(())
     }
 
+    fn shutdown(&mut self) -> Result<()> {
+        log::info!("Shutting down discovery component");
+
+        // Mark as not scanning to stop any ongoing operations
+        self.is_scanning = false;
+
+        // Abort the scanning task if it's still running
+        self.task.abort();
+
+        log::info!("Discovery component shutdown complete");
+        Ok(())
+    }
+
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         if self.active_tab == TabsEnum::Discovery {
             let layout = get_vertical_layout(area);

@@ -1257,6 +1257,34 @@ impl Component for PacketDump {
         Ok(())
     }
 
+    fn shutdown(&mut self) -> Result<()> {
+        log::info!("Shutting down packet capture component");
+
+        // Signal thread to stop
+        self.dump_stop.store(true, Ordering::SeqCst);
+
+        // Wait for thread to finish with timeout
+        if let Some(handle) = self.loop_thread.take() {
+            let start = std::time::Instant::now();
+            let timeout = Duration::from_secs(2);
+
+            while !handle.is_finished() && start.elapsed() < timeout {
+                thread::sleep(Duration::from_millis(50));
+            }
+
+            if handle.is_finished() {
+                match handle.join() {
+                    Ok(_) => log::info!("Packet capture thread stopped successfully during shutdown"),
+                    Err(_) => log::error!("Packet capture thread panicked during shutdown"),
+                }
+            } else {
+                log::warn!("Packet capture thread did not stop within timeout during shutdown");
+            }
+        }
+
+        Ok(())
+    }
+
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         if self.active_tab == TabsEnum::Packets {
             let layout = get_vertical_layout(area);

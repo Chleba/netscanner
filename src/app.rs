@@ -243,6 +243,55 @@ impl App {
                 // tui.mouse(true);
                 tui.enter()?;
             } else if self.should_quit {
+                log::info!("Application shutting down, initiating graceful shutdown sequence");
+
+                // Send shutdown action to all components
+                action_tx.try_send(Action::Shutdown)?;
+
+                // Process any pending actions
+                while let Ok(action) = action_rx.try_recv() {
+                    for component in self.components.iter_mut() {
+                        if let Some(action) = component.update(action.clone())? {
+                            action_tx.try_send(action)?;
+                        }
+                    }
+                }
+
+                // Shutdown each component with timeout
+                let shutdown_start = std::time::Instant::now();
+                let total_timeout = std::time::Duration::from_secs(5);
+
+                for (idx, component) in self.components.iter_mut().enumerate() {
+                    let elapsed = shutdown_start.elapsed();
+                    if elapsed >= total_timeout {
+                        log::warn!(
+                            "Shutdown timeout reached, forcing termination for remaining components"
+                        );
+                        break;
+                    }
+
+                    log::debug!("Shutting down component {}", idx);
+
+                    // Shutdown with timeout
+                    let shutdown_result = std::panic::catch_unwind(
+                        std::panic::AssertUnwindSafe(|| component.shutdown())
+                    );
+
+                    match shutdown_result {
+                        Ok(Ok(())) => {
+                            log::debug!("Component {} shutdown successfully", idx);
+                        }
+                        Ok(Err(e)) => {
+                            log::error!("Component {} shutdown failed: {:?}", idx, e);
+                        }
+                        Err(_) => {
+                            log::error!("Component {} panicked during shutdown", idx);
+                        }
+                    }
+                }
+
+                log::info!("All components shutdown complete");
+
                 tui.stop()?;
                 break;
             }
