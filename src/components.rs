@@ -32,16 +32,13 @@ pub trait Component: Any {
     /// * `action_tx` - A bounded sender that can send actions.
     /// # Returns
     /// * `Result<()>` - An Ok result or an error.
-    #[allow(unused_variables)]
-    fn register_action_handler(&mut self, action_tx: Sender<Action>) -> Result<()> {
+    fn register_action_handler(&mut self, _action_tx: Sender<Action>) -> Result<()> {
         Ok(())
     }
 
-    #[allow(unused_variables)]
     fn as_any(&self) -> &dyn Any;
 
-    #[allow(unused_variables)]
-    fn tab_changed(&mut self, tab: TabsEnum) -> Result<()> {
+    fn tab_changed(&mut self, _tab: TabsEnum) -> Result<()> {
         Ok(())
     }
 
@@ -50,8 +47,7 @@ pub trait Component: Any {
     /// * `config` - Configuration settings.
     /// # Returns
     /// * `Result<()>` - An Ok result or an error.
-    #[allow(unused_variables)]
-    fn register_config_handler(&mut self, config: Config) -> Result<()> {
+    fn register_config_handler(&mut self, _config: Config) -> Result<()> {
         Ok(())
     }
 
@@ -83,8 +79,7 @@ pub trait Component: Any {
     /// * `key` - A key event to be processed.
     /// # Returns
     /// * `Result<Option<Action>>` - An action to be processed or none.
-    #[allow(unused_variables)]
-    fn handle_key_events(&mut self, key: KeyEvent) -> Result<Option<Action>> {
+    fn handle_key_events(&mut self, _key: KeyEvent) -> Result<Option<Action>> {
         Ok(None)
     }
 
@@ -93,8 +88,7 @@ pub trait Component: Any {
     /// * `mouse` - A mouse event to be processed.
     /// # Returns
     /// * `Result<Option<Action>>` - An action to be processed or none.
-    #[allow(unused_variables)]
-    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+    fn handle_mouse_events(&mut self, _mouse: MouseEvent) -> Result<Option<Action>> {
         Ok(None)
     }
 
@@ -103,8 +97,7 @@ pub trait Component: Any {
     /// * `action` - An action that may modify the state of the component.
     /// # Returns
     /// * `Result<Option<Action>>` - An action to be processed or none.
-    #[allow(unused_variables)]
-    fn update(&mut self, action: Action) -> Result<Option<Action>> {
+    fn update(&mut self, _action: Action) -> Result<Option<Action>> {
         Ok(None)
     }
 
