@@ -134,7 +134,7 @@ impl PacketDump {
                 udp.get_length()
             );
 
-            tx.send(Action::PacketDump(
+            let _ = tx.send(Action::PacketDump(
                 Local::now(),
                 PacketsInfoTypesEnum::Udp(UDPPacketInfo {
                     interface_name: interface_name.to_string(),
@@ -146,8 +146,7 @@ impl PacketDump {
                     raw_str,
                 }),
                 PacketTypeEnum::Udp,
-            ))
-            .unwrap();
+            ));
         }
     }
 
@@ -162,7 +161,10 @@ impl PacketDump {
         if let Some(icmp_packet) = icmp_packet {
             match icmp_packet.get_icmp_type() {
                 IcmpTypes::EchoReply => {
-                    let echo_reply_packet = echo_reply::EchoReplyPacket::new(packet).unwrap();
+                    // Validate packet can be parsed as echo reply
+                    let Some(echo_reply_packet) = echo_reply::EchoReplyPacket::new(packet) else {
+                        return;
+                    };
 
                     let raw_str = format!(
                         "[{}]: ICMP echo reply {} -> {} (seq={:?}, id={:?})",
@@ -185,11 +187,13 @@ impl PacketDump {
                             raw_str,
                         }),
                         PacketTypeEnum::Icmp,
-                    ))
-                    .unwrap();
+                    ));
                 }
                 IcmpTypes::EchoRequest => {
-                    let echo_request_packet = echo_request::EchoRequestPacket::new(packet).unwrap();
+                    // Validate packet can be parsed as echo request
+                    let Some(echo_request_packet) = echo_request::EchoRequestPacket::new(packet) else {
+                        return;
+                    };
 
                     let raw_str = format!(
                         "[{}]: ICMP echo request {} -> {} (seq={:?}, id={:?})",
@@ -212,8 +216,7 @@ impl PacketDump {
                             raw_str,
                         }),
                         PacketTypeEnum::Icmp,
-                    ))
-                    .unwrap();
+                    ));
                 }
                 _ => {}
             }
@@ -271,7 +274,7 @@ impl PacketDump {
                 packet.len()
             );
 
-            tx.send(Action::PacketDump(
+            let _ = tx.send(Action::PacketDump(
                 Local::now(),
                 PacketsInfoTypesEnum::Tcp(TCPPacketInfo {
                     interface_name: interface_name.to_string(),
@@ -283,8 +286,7 @@ impl PacketDump {
                     raw_str,
                 }),
                 PacketTypeEnum::Tcp,
-            ))
-            .unwrap();
+            ));
         }
     }
 
@@ -358,13 +360,12 @@ impl PacketDump {
     ) {
         let header = ArpPacket::new(ethernet.payload());
         if let Some(header) = header {
-            tx.send(Action::ArpRecieve(ArpPacketData {
+            let _ = tx.send(Action::ArpRecieve(ArpPacketData {
                 sender_mac: header.get_sender_hw_addr(),
                 sender_ip: header.get_sender_proto_addr(),
                 target_mac: header.get_target_hw_addr(),
                 target_ip: header.get_target_proto_addr(),
-            }))
-            .unwrap();
+            }));
 
             let raw_str = format!(
                 "[{}]: ARP packet: {}({}) > {}({}); operation: {:?}",
@@ -376,7 +377,7 @@ impl PacketDump {
                 header.get_operation()
             );
 
-            tx.send(Action::PacketDump(
+            let _ = tx.send(Action::PacketDump(
                 Local::now(),
                 PacketsInfoTypesEnum::Arp(ARPPacketInfo {
                     interface_name: interface_name.to_string(),
@@ -388,8 +389,7 @@ impl PacketDump {
                     raw_str,
                 }),
                 PacketTypeEnum::Arp,
-            ))
-            .unwrap();
+            ));
         }
     }
 
@@ -424,15 +424,13 @@ impl PacketDump {
         ) {
             Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
             Ok(_) => {
-                tx.send(Action::Error("Unknown or unsupported channel type".into()))
-                    .unwrap();
+                let _ = tx.send(Action::Error("Unknown or unsupported channel type".into()));
                 return;
             }
             Err(e) => {
-                tx.send(Action::Error(format!(
+                let _ = tx.send(Action::Error(format!(
                     "Unable to create datalink channel: {e}"
-                )))
-                .unwrap();
+                )));
                 return;
             }
         };
@@ -443,7 +441,11 @@ impl PacketDump {
             }
 
             let mut buf: [u8; 1600] = [0u8; 1600];
-            let mut fake_ethernet_frame = MutableEthernetPacket::new(&mut buf[..]).unwrap();
+            // Create mutable ethernet frame for handling special cases
+            let Some(mut fake_ethernet_frame) = MutableEthernetPacket::new(&mut buf[..]) else {
+                // Buffer too small, skip this iteration
+                continue;
+            };
 
             match receiver.next() {
                 Ok(packet) => {
@@ -462,9 +464,11 @@ impl PacketDump {
                             payload_offset = 0;
                         }
                         if packet.len() > payload_offset {
-                            let version = Ipv4Packet::new(&packet[payload_offset..])
-                                .unwrap()
-                                .get_version();
+                            // Try to parse as IPv4 packet to determine version
+                            let version = match Ipv4Packet::new(&packet[payload_offset..]) {
+                                Some(ipv4_packet) => ipv4_packet.get_version(),
+                                None => continue, // Invalid packet, skip
+                            };
                             if version == 4 {
                                 fake_ethernet_frame.set_destination(MacAddr(0, 0, 0, 0, 0, 0));
                                 fake_ethernet_frame.set_source(MacAddr(0, 0, 0, 0, 0, 0));
@@ -490,11 +494,14 @@ impl PacketDump {
                             }
                         }
                     }
-                    Self::handle_ethernet_frame(
-                        &interface,
-                        &EthernetPacket::new(packet).unwrap(),
-                        tx.clone(),
-                    );
+                    // Parse ethernet packet - skip if invalid
+                    if let Some(ethernet_packet) = EthernetPacket::new(packet) {
+                        Self::handle_ethernet_frame(
+                            &interface,
+                            &ethernet_packet,
+                            tx.clone(),
+                        );
+                    }
                 }
                 // Err(e) => println!("packetdump: unable to receive packet: {}", e),
                 Err(e) => {}
@@ -504,8 +511,13 @@ impl PacketDump {
 
     fn start_loop(&mut self) {
         if self.loop_thread.is_none() {
-            let tx = self.action_tx.clone().unwrap();
-            let interface = self.active_interface.clone().unwrap();
+            // Require both action_tx and active_interface to start loop
+            let Some(tx) = self.action_tx.clone() else {
+                return;
+            };
+            let Some(interface) = self.active_interface.clone() else {
+                return;
+            };
             // self.dump_stop.store(false, Ordering::Relaxed);
             // let paused = self.dump_paused.clone();
             let dump_stop = self.dump_stop.clone();
@@ -1092,7 +1104,7 @@ impl Component for PacketDump {
 
         // -- tab change
         if let Action::TabChange(tab) = action {
-            self.tab_changed(tab).unwrap();
+            let _ = self.tab_changed(tab);
         }
         // -- active interface set
         if let Action::ActiveInterface(ref interface) = action {
@@ -1141,11 +1153,9 @@ impl Component for PacketDump {
 
             // -- MODE CHANGE
             if let Action::ModeChange(mode) = action {
-                self.action_tx
-                    .clone()
-                    .unwrap()
-                    .send(Action::AppModeChange(mode))
-                    .unwrap();
+                if let Some(tx) = &self.action_tx {
+                    let _ = tx.clone().send(Action::AppModeChange(mode));
+                }
                 self.mode = mode;
             }
 
