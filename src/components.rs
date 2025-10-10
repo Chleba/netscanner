@@ -29,11 +29,11 @@ pub mod wifi_scan;
 pub trait Component: Any {
     /// Register an action handler that can send actions for processing if necessary.
     /// # Arguments
-    /// * `tx` - A bounded sender that can send actions.
+    /// * `action_tx` - A bounded sender that can send actions.
     /// # Returns
     /// * `Result<()>` - An Ok result or an error.
     #[allow(unused_variables)]
-    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
+    fn register_action_handler(&mut self, action_tx: Sender<Action>) -> Result<()> {
         Ok(())
     }
 

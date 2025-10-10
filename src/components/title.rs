@@ -25,8 +25,8 @@ impl Title {
 }
 
 impl Component for Title {
-    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
-        self.command_tx = Some(tx);
+    fn register_action_handler(&mut self, action_tx: Sender<Action>) -> Result<()> {
+        self.command_tx = Some(action_tx);
         Ok(())
     }
 

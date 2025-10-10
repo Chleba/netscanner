@@ -132,7 +132,7 @@ impl PacketDump {
         source: IpAddr,
         destination: IpAddr,
         packet: &[u8],
-        tx: Sender<Action>,
+        action_tx: Sender<Action>,
     ) {
         let udp = UdpPacket::new(packet);
         if let Some(udp) = udp {
@@ -146,7 +146,7 @@ impl PacketDump {
                 udp.get_length()
             );
 
-            let _ = tx.try_send(Action::PacketDump(
+            let _ = action_tx.try_send(Action::PacketDump(
                 Local::now(),
                 PacketsInfoTypesEnum::Udp(UDPPacketInfo {
                     interface_name: interface_name.to_string(),
@@ -167,7 +167,7 @@ impl PacketDump {
         source: IpAddr,
         destination: IpAddr,
         packet: &[u8],
-        tx: Sender<Action>,
+        action_tx: Sender<Action>,
     ) {
         let icmp_packet = IcmpPacket::new(packet);
         if let Some(icmp_packet) = icmp_packet {
@@ -187,7 +187,7 @@ impl PacketDump {
                         echo_reply_packet.get_identifier()
                     );
 
-                    tx.try_send(Action::PacketDump(
+                    action_tx.try_send(Action::PacketDump(
                         Local::now(),
                         PacketsInfoTypesEnum::Icmp(ICMPPacketInfo {
                             interface_name: interface_name.to_string(),
@@ -216,7 +216,7 @@ impl PacketDump {
                         echo_request_packet.get_identifier()
                     );
 
-                    tx.try_send(Action::PacketDump(
+                    action_tx.try_send(Action::PacketDump(
                         Local::now(),
                         PacketsInfoTypesEnum::Icmp(ICMPPacketInfo {
                             interface_name: interface_name.to_string(),
@@ -240,7 +240,7 @@ impl PacketDump {
         source: IpAddr,
         destination: IpAddr,
         packet: &[u8],
-        tx: Sender<Action>,
+        action_tx: Sender<Action>,
     ) {
         let icmpv6_packet = Icmpv6Packet::new(packet);
         if let Some(icmpv6_packet) = icmpv6_packet {
@@ -252,7 +252,7 @@ impl PacketDump {
                 icmpv6_packet.get_icmpv6_type()
             );
 
-            tx.try_send(Action::PacketDump(
+            action_tx.try_send(Action::PacketDump(
                 Local::now(),
                 PacketsInfoTypesEnum::Icmp6(ICMP6PacketInfo {
                     interface_name: interface_name.to_string(),
@@ -272,7 +272,7 @@ impl PacketDump {
         source: IpAddr,
         destination: IpAddr,
         packet: &[u8],
-        tx: Sender<Action>,
+        action_tx: Sender<Action>,
     ) {
         let tcp = TcpPacket::new(packet);
         if let Some(tcp) = tcp {
@@ -286,7 +286,7 @@ impl PacketDump {
                 packet.len()
             );
 
-            let _ = tx.try_send(Action::PacketDump(
+            let _ = action_tx.try_send(Action::PacketDump(
                 Local::now(),
                 PacketsInfoTypesEnum::Tcp(TCPPacketInfo {
                     interface_name: interface_name.to_string(),
@@ -308,20 +308,20 @@ impl PacketDump {
         destination: IpAddr,
         protocol: IpNextHeaderProtocol,
         packet: &[u8],
-        tx: Sender<Action>,
+        action_tx: Sender<Action>,
     ) {
         match protocol {
             IpNextHeaderProtocols::Udp => {
-                Self::handle_udp_packet(interface_name, source, destination, packet, tx)
+                Self::handle_udp_packet(interface_name, source, destination, packet, action_tx)
             }
             IpNextHeaderProtocols::Tcp => {
-                Self::handle_tcp_packet(interface_name, source, destination, packet, tx)
+                Self::handle_tcp_packet(interface_name, source, destination, packet, action_tx)
             }
             IpNextHeaderProtocols::Icmp => {
-                Self::handle_icmp_packet(interface_name, source, destination, packet, tx)
+                Self::handle_icmp_packet(interface_name, source, destination, packet, action_tx)
             }
             IpNextHeaderProtocols::Icmpv6 => {
-                Self::handle_icmpv6_packet(interface_name, source, destination, packet, tx)
+                Self::handle_icmpv6_packet(interface_name, source, destination, packet, action_tx)
             }
             _ => {}
         }
@@ -330,7 +330,7 @@ impl PacketDump {
     fn handle_ipv4_packet(
         interface_name: &str,
         ethernet: &EthernetPacket,
-        tx: Sender<Action>,
+        action_tx: Sender<Action>,
     ) {
         let header = Ipv4Packet::new(ethernet.payload());
         if let Some(header) = header {
@@ -340,7 +340,7 @@ impl PacketDump {
                 IpAddr::V4(header.get_destination()),
                 header.get_next_level_protocol(),
                 header.payload(),
-                tx,
+                action_tx,
             );
         }
     }
@@ -348,7 +348,7 @@ impl PacketDump {
     fn handle_ipv6_packet(
         interface_name: &str,
         ethernet: &EthernetPacket,
-        tx: Sender<Action>,
+        action_tx: Sender<Action>,
     ) {
         let header = Ipv6Packet::new(ethernet.payload());
         if let Some(header) = header {
@@ -358,7 +358,7 @@ impl PacketDump {
                 IpAddr::V6(header.get_destination()),
                 header.get_next_header(),
                 header.payload(),
-                tx,
+                action_tx,
             );
         } else {
             println!("[{}]: Malformed IPv6 Packet", interface_name);
@@ -368,11 +368,11 @@ impl PacketDump {
     fn handle_arp_packet(
         interface_name: &str,
         ethernet: &EthernetPacket,
-        tx: Sender<Action>,
+        action_tx: Sender<Action>,
     ) {
         let header = ArpPacket::new(ethernet.payload());
         if let Some(header) = header {
-            let _ = tx.try_send(Action::ArpRecieve(ArpPacketData {
+            let _ = action_tx.try_send(Action::ArpRecieve(ArpPacketData {
                 sender_mac: header.get_sender_hw_addr(),
                 sender_ip: header.get_sender_proto_addr(),
                 target_mac: header.get_target_hw_addr(),
@@ -389,7 +389,7 @@ impl PacketDump {
                 header.get_operation()
             );
 
-            let _ = tx.try_send(Action::PacketDump(
+            let _ = action_tx.try_send(Action::PacketDump(
                 Local::now(),
                 PacketsInfoTypesEnum::Arp(ARPPacketInfo {
                     interface_name: interface_name.to_string(),
@@ -408,18 +408,18 @@ impl PacketDump {
     fn handle_ethernet_frame(
         interface: &NetworkInterface,
         ethernet: &EthernetPacket,
-        tx: Sender<Action>,
+        action_tx: Sender<Action>,
     ) {
         let interface_name = &interface.name[..];
         match ethernet.get_ethertype() {
-            EtherTypes::Ipv4 => Self::handle_ipv4_packet(interface_name, ethernet, tx),
-            EtherTypes::Ipv6 => Self::handle_ipv6_packet(interface_name, ethernet, tx),
-            EtherTypes::Arp => Self::handle_arp_packet(interface_name, ethernet, tx),
+            EtherTypes::Ipv4 => Self::handle_ipv4_packet(interface_name, ethernet, action_tx),
+            EtherTypes::Ipv6 => Self::handle_ipv6_packet(interface_name, ethernet, action_tx),
+            EtherTypes::Arp => Self::handle_arp_packet(interface_name, ethernet, action_tx),
             _ => {}
         }
     }
 
-    fn t_logic(tx: Sender<Action>, interface: NetworkInterface, stop: Arc<AtomicBool>) {
+    fn t_logic(action_tx: Sender<Action>, interface: NetworkInterface, stop: Arc<AtomicBool>) {
         let (_, mut receiver) = match pnet::datalink::channel(
             &interface,
             pnet::datalink::Config {
@@ -434,9 +434,9 @@ impl PacketDump {
                 socket_fd: None,
             },
         ) {
-            Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
+            Ok(Channel::Ethernet(packet_tx, rx)) => (packet_tx, rx),
             Ok(_) => {
-                let _ = tx.try_send(Action::Error(format!(
+                let _ = action_tx.try_send(Action::Error(format!(
                     "Failed to create packet capture channel on interface '{}'.\n\
                     \n\
                     The network interface does not support the required Ethernet packet capture mode.\n\
@@ -451,7 +451,7 @@ impl PacketDump {
             }
             Err(e) => {
                 let error_msg = privilege::get_datalink_error_message(&e, &interface.name);
-                let _ = tx.try_send(Action::Error(error_msg));
+                let _ = action_tx.try_send(Action::Error(error_msg));
                 return;
             }
         };
@@ -521,7 +521,7 @@ impl PacketDump {
                                 Self::handle_ethernet_frame(
                                     &interface,
                                     &fake_ethernet_frame.to_immutable(),
-                                    tx.clone(),
+                                    action_tx.clone(),
                                 );
                                 continue;
                             } else if version == 6 {
@@ -532,7 +532,7 @@ impl PacketDump {
                                 Self::handle_ethernet_frame(
                                     &interface,
                                     &fake_ethernet_frame.to_immutable(),
-                                    tx.clone(),
+                                    action_tx.clone(),
                                 );
                                 continue;
                             }
@@ -543,7 +543,7 @@ impl PacketDump {
                         Self::handle_ethernet_frame(
                             &interface,
                             &ethernet_packet,
-                            tx.clone(),
+                            action_tx.clone(),
                         );
                     }
                 }
@@ -1160,8 +1160,8 @@ impl Drop for PacketDump {
 }
 
 impl Component for PacketDump {
-    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
-        self.action_tx = Some(tx);
+    fn register_action_handler(&mut self, action_tx: Sender<Action>) -> Result<()> {
+        self.action_tx = Some(action_tx);
         Ok(())
     }
 
