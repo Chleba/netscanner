@@ -2,7 +2,7 @@ use chrono::{DateTime, Local};
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
 use ratatui::prelude::Rect;
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use crate::{
     action::Action,
@@ -35,8 +35,8 @@ pub struct App {
     pub should_suspend: bool,
     pub mode: Mode,
     pub last_tick_key_events: Vec<KeyEvent>,
-    pub action_tx: UnboundedSender<Action>,
-    pub action_rx: UnboundedReceiver<Action>,
+    pub action_tx: Sender<Action>,
+    pub action_rx: Receiver<Action>,
     pub post_exist_msg: Option<String>,
 }
 
@@ -56,7 +56,9 @@ impl App {
         let config = Config::new()?;
 
         let mode = Mode::Normal;
-        let (action_tx, action_rx) = mpsc::unbounded_channel();
+        // Use bounded channel with capacity of 1000 for action messages
+        // This prevents memory exhaustion if consumers are slow
+        let (action_tx, action_rx) = mpsc::channel(1000);
 
         Ok(Self {
             tick_rate: 1.0,
@@ -111,15 +113,15 @@ impl App {
         loop {
             if let Some(e) = tui.next().await {
                 match e {
-                    tui::Event::Quit => action_tx.send(Action::Quit)?,
-                    tui::Event::Tick => action_tx.send(Action::Tick)?,
-                    tui::Event::Render => action_tx.send(Action::Render)?,
-                    tui::Event::Resize(x, y) => action_tx.send(Action::Resize(x, y))?,
+                    tui::Event::Quit => action_tx.try_send(Action::Quit)?,
+                    tui::Event::Tick => action_tx.try_send(Action::Tick)?,
+                    tui::Event::Render => action_tx.try_send(Action::Render)?,
+                    tui::Event::Resize(x, y) => action_tx.try_send(Action::Resize(x, y))?,
                     tui::Event::Key(key) => {
                         if let Some(keymap) = self.config.keybindings.get(&self.mode) {
                             if let Some(action) = keymap.get(&vec![key]) {
                                 log::info!("Got action: {action:?}");
-                                action_tx.send(action.clone())?;
+                                action_tx.try_send(action.clone())?;
                             } else {
                                 // If the key was not handled as a single key action,
                                 // then consider it for multi-key combinations.
@@ -128,7 +130,7 @@ impl App {
                                 // Check for multi-key combinations
                                 if let Some(action) = keymap.get(&self.last_tick_key_events) {
                                     log::info!("Got action: {action:?}");
-                                    action_tx.send(action.clone())?;
+                                    action_tx.try_send(action.clone())?;
                                 }
                             }
                         };
@@ -137,7 +139,7 @@ impl App {
                 }
                 for component in self.components.iter_mut() {
                     if let Some(action) = component.handle_events(Some(e.clone()))? {
-                        action_tx.send(action)?;
+                        action_tx.try_send(action)?;
                     }
                 }
             }
@@ -181,7 +183,7 @@ impl App {
                             }
                         }
                         action_tx
-                            .send(Action::ExportData(ExportData {
+                            .try_send(Action::ExportData(ExportData {
                                 scanned_ips,
                                 scanned_ports,
                                 arp_packets,
@@ -206,7 +208,7 @@ impl App {
                                 let r = component.draw(f, f.area());
                                 if let Err(e) = r {
                                     action_tx
-                                        .send(Action::Error(format!("Failed to draw: {:?}", e)))
+                                        .try_send(Action::Error(format!("Failed to draw: {:?}", e)))
                                         .unwrap();
                                 }
                             }
@@ -218,7 +220,7 @@ impl App {
                                 let r = component.draw(f, f.area());
                                 if let Err(e) = r {
                                     action_tx
-                                        .send(Action::Error(format!("Failed to draw: {:?}", e)))
+                                        .try_send(Action::Error(format!("Failed to draw: {:?}", e)))
                                         .unwrap();
                                 }
                             }
@@ -228,13 +230,13 @@ impl App {
                 }
                 for component in self.components.iter_mut() {
                     if let Some(action) = component.update(action.clone())? {
-                        action_tx.send(action)?
+                        action_tx.try_send(action)?
                     };
                 }
             }
             if self.should_suspend {
                 tui.suspend()?;
-                action_tx.send(Action::Resume)?;
+                action_tx.try_send(Action::Resume)?;
                 tui = tui::Tui::new()?
                     .tick_rate(self.tick_rate)
                     .frame_rate(self.frame_rate);

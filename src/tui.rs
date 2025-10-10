@@ -16,7 +16,7 @@ use futures::{FutureExt, StreamExt};
 use ratatui::backend::CrosstermBackend as Backend;
 use serde::{Deserialize, Serialize};
 use tokio::{
-  sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
+  sync::mpsc::{self, Receiver, Sender},
   task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
@@ -47,8 +47,8 @@ pub struct Tui {
   pub terminal: ratatui::Terminal<Backend<IO>>,
   pub task: JoinHandle<()>,
   pub cancellation_token: CancellationToken,
-  pub event_rx: UnboundedReceiver<Event>,
-  pub event_tx: UnboundedSender<Event>,
+  pub event_rx: Receiver<Event>,
+  pub event_tx: Sender<Event>,
   pub frame_rate: f64,
   pub tick_rate: f64,
   pub mouse: bool,
@@ -60,7 +60,9 @@ impl Tui {
     let tick_rate = 4.0;
     let frame_rate = 60.0;
     let terminal = ratatui::Terminal::new(Backend::new(io()))?;
-    let (event_tx, event_rx) = mpsc::unbounded_channel();
+    // Use bounded channel with capacity of 100 for high-frequency UI events
+    // This prevents memory exhaustion during event bursts
+    let (event_tx, event_rx) = mpsc::channel(100);
     let cancellation_token = CancellationToken::new();
     let task = tokio::spawn(async {});
     let mouse = false;
@@ -99,7 +101,7 @@ impl Tui {
       let mut reader = crossterm::event::EventStream::new();
       let mut tick_interval = tokio::time::interval(tick_delay);
       let mut render_interval = tokio::time::interval(render_delay);
-      _event_tx.send(Event::Init).unwrap();
+      _event_tx.try_send(Event::Init).unwrap();
       loop {
         let tick_delay = tick_interval.tick();
         let render_delay = render_interval.tick();
@@ -114,37 +116,37 @@ impl Tui {
                 match evt {
                   CrosstermEvent::Key(key) => {
                     if key.kind == KeyEventKind::Press {
-                      _event_tx.send(Event::Key(key)).unwrap();
+                      _event_tx.try_send(Event::Key(key)).unwrap();
                     }
                   },
                   CrosstermEvent::Mouse(mouse) => {
-                    _event_tx.send(Event::Mouse(mouse)).unwrap();
+                    _event_tx.try_send(Event::Mouse(mouse)).unwrap();
                   },
                   CrosstermEvent::Resize(x, y) => {
-                    _event_tx.send(Event::Resize(x, y)).unwrap();
+                    _event_tx.try_send(Event::Resize(x, y)).unwrap();
                   },
                   CrosstermEvent::FocusLost => {
-                    _event_tx.send(Event::FocusLost).unwrap();
+                    _event_tx.try_send(Event::FocusLost).unwrap();
                   },
                   CrosstermEvent::FocusGained => {
-                    _event_tx.send(Event::FocusGained).unwrap();
+                    _event_tx.try_send(Event::FocusGained).unwrap();
                   },
                   CrosstermEvent::Paste(s) => {
-                    _event_tx.send(Event::Paste(s)).unwrap();
+                    _event_tx.try_send(Event::Paste(s)).unwrap();
                   },
                 }
               }
               Some(Err(_)) => {
-                _event_tx.send(Event::Error).unwrap();
+                _event_tx.try_send(Event::Error).unwrap();
               }
               None => {},
             }
           },
           _ = tick_delay => {
-              _event_tx.send(Event::Tick).unwrap();
+              _event_tx.try_send(Event::Tick).unwrap();
           },
           _ = render_delay => {
-              _event_tx.send(Event::Render).unwrap();
+              _event_tx.try_send(Event::Render).unwrap();
           },
         }
       }

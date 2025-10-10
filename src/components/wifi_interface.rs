@@ -4,7 +4,7 @@ use ratatui::{prelude::*, widgets::*};
 use std::collections::HashMap;
 use std::process::{Command, Output};
 use std::time::Instant;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 use super::Component;
 use crate::{
@@ -28,7 +28,7 @@ struct CommandError {
 }
 
 pub struct WifiInterface {
-    action_tx: Option<UnboundedSender<Action>>,
+    action_tx: Option<Sender<Action>>,
     last_update: Instant,
     wifi_info: Option<WifiConn>,
 }
@@ -181,7 +181,7 @@ impl WifiInterface {
 }
 
 impl Component for WifiInterface {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
     }

@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use config::Source;
 use std::time::Instant;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 use color_eyre::eyre::Result;
 use ratatui::{prelude::*, widgets::*};
@@ -35,7 +35,7 @@ impl WifiInfo {
 }
 
 pub struct WifiScan {
-    pub action_tx: Option<UnboundedSender<Action>>,
+    pub action_tx: Option<Sender<Action>>,
     pub scan_start_time: Instant,
     pub wifis: Vec<WifiInfo>,
     pub signal_tick: [f64; 2],
@@ -191,7 +191,7 @@ impl WifiScan {
                         }
                     }
 
-                    let t_send = tx.send(Action::Scan(wifi_nets));
+                    let t_send = tx.try_send(Action::Scan(wifi_nets));
                     match t_send {
                         Ok(n) => (),
                         Err(e) => (),
@@ -237,7 +237,7 @@ impl WifiScan {
 }
 
 impl Component for WifiScan {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
     }
