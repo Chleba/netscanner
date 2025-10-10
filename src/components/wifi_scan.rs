@@ -91,7 +91,7 @@ impl WifiScan {
         }
     }
 
-    fn make_table(&mut self) -> Table {
+    fn make_table(&mut self) -> Table<'_> {
         let header = Row::new(vec!["time", "ssid", "ch", "mac", "signal"])
             .style(Style::default().fg(Color::Yellow));
         // .bottom_margin(1);

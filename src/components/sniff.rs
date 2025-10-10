@@ -134,7 +134,7 @@ impl Sniffer {
         }
     }
 
-    fn make_charts(&self) -> BarChart {
+    fn make_charts(&self) -> BarChart<'_> {
         BarChart::default()
             .direction(Direction::Vertical)
             .bar_width(12)
@@ -155,7 +155,7 @@ impl Sniffer {
             )
     }
 
-    fn make_ips_block(&self) -> Block {
+    fn make_ips_block(&self) -> Block<'_> {
         let ips_block = Block::default()
             .title(
                 ratatui::widgets::block::Title::from(Line::from(vec![
@@ -187,7 +187,7 @@ impl Sniffer {
         ips_block
     }
 
-    fn make_sum_block(&self) -> Block {
+    fn make_sum_block(&self) -> Block<'_> {
         let ips_block = Block::default()
             .title(
                 ratatui::widgets::block::Title::from(Span::styled(
@@ -203,7 +203,7 @@ impl Sniffer {
         ips_block
     }
 
-    fn make_charts_block(&self) -> Block {
+    fn make_charts_block(&self) -> Block<'_> {
         Block::default()
             .title(
                 ratatui::widgets::block::Title::from(Span::styled(

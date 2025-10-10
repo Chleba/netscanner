@@ -398,7 +398,7 @@ impl Discovery {
         cidr: Option<Ipv4Cidr>,
         ip_num: i32,
         is_scanning: bool,
-    ) -> Table {
+    ) -> Table<'_> {
         let header = Row::new(vec!["ip", "mac", "hostname", "vendor"])
             .style(Style::default().fg(Color::Yellow))
             .top_margin(1)
@@ -501,7 +501,7 @@ impl Discovery {
         scrollbar
     }
 
-    fn make_input(&self, scroll: usize) -> Paragraph {
+    fn make_input(&self, scroll: usize) -> Paragraph<'_> {
         let input = Paragraph::new(self.input.value())
             .style(Style::default().fg(Color::Green))
             .scroll((0, scroll as u16))
@@ -548,7 +548,7 @@ impl Discovery {
         input
     }
 
-    fn make_error(&mut self) -> Paragraph {
+    fn make_error(&mut self) -> Paragraph<'_> {
         let error = Paragraph::new("CIDR parse error")
             .style(Style::default().fg(Color::Red))
             .block(
@@ -560,7 +560,7 @@ impl Discovery {
         error
     }
 
-    fn make_spinner(&self) -> Span {
+    fn make_spinner(&self) -> Span<'_> {
         let spinner = SPINNER_SYMBOLS[self.spinner_index];
         Span::styled(
             format!("{spinner}scanning.."),

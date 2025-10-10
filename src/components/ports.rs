@@ -199,7 +199,7 @@ impl Ports {
         }
     }
 
-    fn make_list(&self, rect: Rect) -> List {
+    fn make_list(&self, rect: Rect) -> List<'_> {
         let mut items = Vec::new();
         for ip in &self.ip_ports {
             let mut lines = Vec::new();

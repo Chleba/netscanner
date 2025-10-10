@@ -36,7 +36,7 @@ impl Tabs {
         }
     }
 
-    fn make_tabs(&self) -> Paragraph {
+    fn make_tabs(&self) -> Paragraph<'_> {
         let enum_titles: Vec<Span> =
             TabsEnum::iter()
                 .enumerate()
