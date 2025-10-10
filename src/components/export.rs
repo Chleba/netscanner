@@ -3,6 +3,7 @@ use color_eyre::{eyre::Result, owo_colors::OwoColorize};
 use csv::Writer;
 use ratatui::prelude::*;
 use std::env;
+use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 
 use super::{discovery::ScannedIp, ports::ScannedIpPorts, Component, Frame};
@@ -84,33 +85,33 @@ impl Export {
     }
 
 
-    pub fn write_discovery(&mut self, data: Vec<ScannedIp>, timestamp: &String) -> Result<()> {
+    pub fn write_discovery(&mut self, data: Arc<Vec<ScannedIp>>, timestamp: &String) -> Result<()> {
         let mut w = Writer::from_path(format!("{}/scanned_ips.{}.csv", self.home_dir, timestamp))?;
 
         // -- header
         w.write_record(["ip", "mac", "hostname", "vendor"])?;
-        for s_ip in data {
-            w.write_record([s_ip.ip, s_ip.mac, s_ip.hostname, s_ip.vendor])?;
+        for s_ip in data.iter() {
+            w.write_record([&s_ip.ip, &s_ip.mac, &s_ip.hostname, &s_ip.vendor])?;
         }
         w.flush()?;
 
         Ok(())
     }
 
-    pub fn write_ports(&mut self, data: Vec<ScannedIpPorts>, timestamp: &String) -> Result<()> {
+    pub fn write_ports(&mut self, data: Arc<Vec<ScannedIpPorts>>, timestamp: &String) -> Result<()> {
         let mut w =
             Writer::from_path(format!("{}/scanned_ports.{}.csv", self.home_dir, timestamp))?;
 
         // -- header
         w.write_record(["ip", "ports"])?;
-        for s_ip in data {
+        for s_ip in data.iter() {
             let ports: String = s_ip
                 .ports
                 .iter()
                 .map(|n| n.to_string())
                 .collect::<Vec<String>>()
                 .join(":");
-            w.write_record([s_ip.ip, ports])?;
+            w.write_record([&s_ip.ip, &ports])?;
         }
         w.flush()?;
 
@@ -119,7 +120,7 @@ impl Export {
 
     pub fn write_packets(
         &mut self,
-        data: Vec<(DateTime<Local>, PacketsInfoTypesEnum)>,
+        data: Arc<Vec<(DateTime<Local>, PacketsInfoTypesEnum)>>,
         timestamp: &String,
         name: &str,
     ) -> Result<()> {
@@ -130,13 +131,13 @@ impl Export {
 
         // -- header
         w.write_record(["time", "log"])?;
-        for (t, p) in data {
+        for (t, p) in data.iter() {
             let log_str = match p {
-                PacketsInfoTypesEnum::Icmp(log) => log.raw_str,
-                PacketsInfoTypesEnum::Arp(log) => log.raw_str,
-                PacketsInfoTypesEnum::Icmp6(log) => log.raw_str,
-                PacketsInfoTypesEnum::Udp(log) => log.raw_str,
-                PacketsInfoTypesEnum::Tcp(log) => log.raw_str,
+                PacketsInfoTypesEnum::Icmp(log) => log.raw_str.clone(),
+                PacketsInfoTypesEnum::Arp(log) => log.raw_str.clone(),
+                PacketsInfoTypesEnum::Icmp6(log) => log.raw_str.clone(),
+                PacketsInfoTypesEnum::Udp(log) => log.raw_str.clone(),
+                PacketsInfoTypesEnum::Tcp(log) => log.raw_str.clone(),
             };
             w.write_record([t.to_string(), log_str])?;
         }
