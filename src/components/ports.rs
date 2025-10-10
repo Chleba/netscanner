@@ -26,10 +26,15 @@ use crate::{
     tui::Frame,
 };
 
-// Concurrent port scan pool size
-// Limits the number of concurrent TCP connection attempts during port scanning
-// 64 allows faster scanning than discovery while still being network-friendly
-const POOL_SIZE: usize = 64;
+// Default concurrent port scan pool size
+// Used as fallback if CPU detection fails
+const DEFAULT_POOL_SIZE: usize = 64;
+
+// Minimum concurrent operations to maintain reasonable scan speed
+const MIN_POOL_SIZE: usize = 32;
+
+// Maximum concurrent operations to prevent overwhelming the network
+const MAX_POOL_SIZE: usize = 128;
 
 // Port scan timeout in seconds
 // Time to wait for TCP connection before considering port closed
@@ -81,6 +86,22 @@ impl Ports {
             port_desc,
             dns_cache: DnsCache::new(),
         }
+    }
+
+    // Calculate optimal pool size based on available CPU cores
+    // Returns a value between MIN_POOL_SIZE and MAX_POOL_SIZE
+    // Port scanning uses higher limits than discovery as it's more I/O-bound
+    fn get_pool_size() -> usize {
+        // Try to detect number of CPU cores
+        let num_cpus = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4); // Default to 4 if detection fails
+
+        // Use 4x CPU cores for port scanning (very I/O-bound)
+        let calculated = num_cpus * 4;
+
+        // Clamp to min/max bounds
+        calculated.clamp(MIN_POOL_SIZE, MAX_POOL_SIZE)
     }
 
     pub fn get_scanned_ports(&self) -> &Vec<ScannedIpPorts> {
@@ -191,11 +212,14 @@ impl Ports {
         let ip: IpAddr = self.ip_ports[index].ip.parse().unwrap();
         let ports_box = Box::new(COMMON_PORTS.iter());
 
+        // Calculate optimal pool size based on system resources
+        let pool_size = Self::get_pool_size();
+
         tokio::spawn(async move {
-            log::debug!("Starting port scan for IP: {}", ip);
+            log::debug!("Starting port scan for IP: {} with pool size {}", ip, pool_size);
             let ports = stream::iter(ports_box);
             ports
-                .for_each_concurrent(POOL_SIZE, |port| {
+                .for_each_concurrent(pool_size, |port| {
                     Self::scan(tx.clone(), index, ip, port.to_owned())
                 })
                 .await;
