@@ -9,17 +9,36 @@ use pnet::{
     util::MacAddr,
 };
 use std::net::{IpAddr, Ipv4Addr};
+use std::sync::Arc;
 use strum::{Display, EnumCount, EnumIter, FromRepr};
 
-#[derive(Debug, Clone, PartialEq)]
+// ExportData uses Arc for memory-efficient sharing of potentially large packet collections.
+// This avoids deep cloning when passing data to the export component - only Arc pointers
+// are cloned, not the underlying data. This significantly reduces memory usage and latency
+// during export operations, especially with thousands of packets.
+#[derive(Debug, Clone)]
 pub struct ExportData {
-    pub scanned_ips: Vec<ScannedIp>,
-    pub scanned_ports: Vec<ScannedIpPorts>,
-    pub arp_packets: Vec<(DateTime<Local>, PacketsInfoTypesEnum)>,
-    pub udp_packets: Vec<(DateTime<Local>, PacketsInfoTypesEnum)>,
-    pub tcp_packets: Vec<(DateTime<Local>, PacketsInfoTypesEnum)>,
-    pub icmp_packets: Vec<(DateTime<Local>, PacketsInfoTypesEnum)>,
-    pub icmp6_packets: Vec<(DateTime<Local>, PacketsInfoTypesEnum)>,
+    pub scanned_ips: Arc<Vec<ScannedIp>>,
+    pub scanned_ports: Arc<Vec<ScannedIpPorts>>,
+    pub arp_packets: Arc<Vec<(DateTime<Local>, PacketsInfoTypesEnum)>>,
+    pub udp_packets: Arc<Vec<(DateTime<Local>, PacketsInfoTypesEnum)>>,
+    pub tcp_packets: Arc<Vec<(DateTime<Local>, PacketsInfoTypesEnum)>>,
+    pub icmp_packets: Arc<Vec<(DateTime<Local>, PacketsInfoTypesEnum)>>,
+    pub icmp6_packets: Arc<Vec<(DateTime<Local>, PacketsInfoTypesEnum)>>,
+}
+
+// Manual PartialEq implementation for ExportData
+// Compares the actual data inside the Arcs, not the Arc pointers themselves
+impl PartialEq for ExportData {
+    fn eq(&self, other: &Self) -> bool {
+        self.scanned_ips.as_ref() == other.scanned_ips.as_ref()
+            && self.scanned_ports.as_ref() == other.scanned_ports.as_ref()
+            && self.arp_packets.as_ref() == other.arp_packets.as_ref()
+            && self.udp_packets.as_ref() == other.udp_packets.as_ref()
+            && self.tcp_packets.as_ref() == other.tcp_packets.as_ref()
+            && self.icmp_packets.as_ref() == other.icmp_packets.as_ref()
+            && self.icmp6_packets.as_ref() == other.icmp6_packets.as_ref()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -2,6 +2,7 @@ use chrono::{DateTime, Local};
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
 use ratatui::prelude::Rect;
+use std::sync::Arc;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use crate::{
@@ -159,27 +160,28 @@ impl App {
                     }
 
                     Action::Export => {
-                        // get data from specific components by downcasting them and then try to
-                        // comvert into specific struct
-                        let mut scanned_ips: Vec<ScannedIp> = Vec::new();
-                        let mut scanned_ports: Vec<ScannedIpPorts> = Vec::new();
-                        let mut arp_packets: Vec<(DateTime<Local>, PacketsInfoTypesEnum)> = Vec::new();
-                        let mut udp_packets = Vec::new();
-                        let mut tcp_packets = Vec::new();
-                        let mut icmp_packets = Vec::new();
-                        let mut icmp6_packets = Vec::new();
+                        // Collect data from components using Arc for memory-efficient sharing.
+                        // Only Arc pointers are cloned, not the actual data, significantly
+                        // reducing memory usage during export operations.
+                        let mut scanned_ips: Arc<Vec<ScannedIp>> = Arc::new(Vec::new());
+                        let mut scanned_ports: Arc<Vec<ScannedIpPorts>> = Arc::new(Vec::new());
+                        let mut arp_packets: Arc<Vec<(DateTime<Local>, PacketsInfoTypesEnum)>> = Arc::new(Vec::new());
+                        let mut udp_packets = Arc::new(Vec::new());
+                        let mut tcp_packets = Arc::new(Vec::new());
+                        let mut icmp_packets = Arc::new(Vec::new());
+                        let mut icmp6_packets = Arc::new(Vec::new());
 
                         for component in &self.components {
                             if let Some(d) = component.as_any().downcast_ref::<Discovery>() {
-                                scanned_ips = d.get_scanned_ips().to_vec();
+                                scanned_ips = Arc::new(d.get_scanned_ips().to_vec());
                             } else if let Some(pd) = component.as_any().downcast_ref::<PacketDump>() {
-                                arp_packets = pd.clone_array_by_packet_type(PacketTypeEnum::Arp);
-                                udp_packets = pd.clone_array_by_packet_type(PacketTypeEnum::Udp);
-                                tcp_packets = pd.clone_array_by_packet_type(PacketTypeEnum::Tcp);
-                                icmp_packets = pd.clone_array_by_packet_type(PacketTypeEnum::Icmp);
-                                icmp6_packets = pd.clone_array_by_packet_type(PacketTypeEnum::Icmp6);
+                                arp_packets = Arc::new(pd.clone_array_by_packet_type(PacketTypeEnum::Arp));
+                                udp_packets = Arc::new(pd.clone_array_by_packet_type(PacketTypeEnum::Udp));
+                                tcp_packets = Arc::new(pd.clone_array_by_packet_type(PacketTypeEnum::Tcp));
+                                icmp_packets = Arc::new(pd.clone_array_by_packet_type(PacketTypeEnum::Icmp));
+                                icmp6_packets = Arc::new(pd.clone_array_by_packet_type(PacketTypeEnum::Icmp6));
                             } else if let Some(p) = component.as_any().downcast_ref::<Ports>() {
-                                scanned_ports = p.get_scanned_ports().to_vec();
+                                scanned_ports = Arc::new(p.get_scanned_ports().to_vec());
                             }
                         }
                         action_tx
