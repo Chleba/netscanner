@@ -76,7 +76,7 @@ impl WifiChart {
         self.signal_tick[1] += 1.0;
     }
 
-    pub fn make_chart(&self) -> Chart {
+    pub fn make_chart(&self) -> Chart<'_> {
         let mut datasets = Vec::new();
         for d in &self.wifi_datasets {
             let d_data = &d.data.get_vec();

@@ -999,7 +999,7 @@ impl PacketDump {
         scrollbar
     }
 
-    fn make_input(&self, scroll: usize) -> Paragraph {
+    fn make_input(&self, scroll: usize) -> Paragraph<'_> {
         let input = Paragraph::new(self.input.value())
             .style(Style::default().fg(Color::Green))
             .scroll((0, scroll as u16))
