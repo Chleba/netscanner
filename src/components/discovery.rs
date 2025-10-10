@@ -321,16 +321,20 @@ impl Discovery {
             n.ip = ip.to_string();
             n.ip_addr = ip_v4;
         } else {
-            self.scanned_ips.push(ScannedIp {
+            let new_ip = ScannedIp {
                 ip: ip.to_string(),
                 ip_addr: ip_v4,
                 mac: String::new(),
                 hostname: String::new(), // Will be filled asynchronously
                 vendor: String::new(),
-            });
+            };
 
-            // Sort IPs numerically using cached parsed IP addresses
-            self.scanned_ips.sort_by(|a, b| a.ip_addr.cmp(&b.ip_addr));
+            // Use binary search to find the correct insertion position
+            // This maintains sorted order in O(n) time instead of O(n log n) for full sort
+            let insert_pos = self.scanned_ips
+                .binary_search_by(|probe| probe.ip_addr.cmp(&ip_v4))
+                .unwrap_or_else(|pos| pos);
+            self.scanned_ips.insert(insert_pos, new_ip);
         }
 
         self.set_scrollbar_height();
