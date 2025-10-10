@@ -53,8 +53,9 @@ const INPUT_SIZE: usize = 30;
 
 // Network packet capture buffer size
 // Standard Ethernet MTU is 1500 bytes + 14 bytes Ethernet header = 1514 bytes
-// We use 1600 to provide some overhead for VLAN tags and other extensions
-const MAX_PACKET_BUFFER_SIZE: usize = 1600;
+// Jumbo frames can be up to 9000 bytes + headers = 9018 bytes
+// We use 9100 to support jumbo frames with overhead for VLAN tags and extensions
+const MAX_PACKET_BUFFER_SIZE: usize = 9100;
 
 // Maximum number of packets to keep in history per packet type
 // Limits memory usage to approximately 1000 packets * average packet size
@@ -466,6 +467,17 @@ impl PacketDump {
 
             match receiver.next() {
                 Ok(packet) => {
+                    // Log warning if packet exceeds buffer size (indicates potential data loss)
+                    if packet.len() > MAX_PACKET_BUFFER_SIZE {
+                        log::warn!(
+                            "Packet size ({} bytes) exceeds buffer capacity ({} bytes) on interface {}. \
+                            Packet may be truncated.",
+                            packet.len(),
+                            MAX_PACKET_BUFFER_SIZE,
+                            interface.name
+                        );
+                    }
+
                     let payload_offset;
                     if cfg!(any(target_os = "macos", target_os = "ios"))
                         && interface.is_up()
@@ -481,6 +493,16 @@ impl PacketDump {
                             payload_offset = 0;
                         }
                         if packet.len() > payload_offset {
+                            // Check if payload would exceed buffer after offset
+                            let payload_size = packet.len() - payload_offset;
+                            if payload_size > MAX_PACKET_BUFFER_SIZE - 14 {
+                                log::warn!(
+                                    "Payload size ({} bytes) after offset may exceed buffer on interface {}",
+                                    payload_size,
+                                    interface.name
+                                );
+                            }
+
                             // Try to parse as IPv4 packet to determine version
                             let version = match Ipv4Packet::new(&packet[payload_offset..]) {
                                 Some(ipv4_packet) => ipv4_packet.get_version(),
