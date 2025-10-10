@@ -44,6 +44,7 @@ const SPINNER_SYMBOLS: [&str; 6] = ["⠷", "⠯", "⠟", "⠻", "⠽", "⠾"];
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScannedIp {
     pub ip: String,
+    pub ip_addr: Ipv4Addr, // Cached parsed IP for efficient sorting
     pub mac: String,
     pub hostname: String,
     pub vendor: String,
@@ -264,27 +265,27 @@ impl Discovery {
             return;
         };
 
+        // Extract Ipv4Addr for storage
+        let ip_v4 = match hip {
+            IpAddr::V4(v4) => v4,
+            IpAddr::V6(_) => return, // Skip IPv6 for now
+        };
+
         // Add IP immediately without hostname (will be updated asynchronously)
         if let Some(n) = self.scanned_ips.iter_mut().find(|item| item.ip == ip) {
             n.ip = ip.to_string();
+            n.ip_addr = ip_v4;
         } else {
             self.scanned_ips.push(ScannedIp {
                 ip: ip.to_string(),
+                ip_addr: ip_v4,
                 mac: String::new(),
                 hostname: String::new(), // Will be filled asynchronously
                 vendor: String::new(),
             });
 
-            // Sort IPs numerically - skip entries that can't be parsed
-            self.scanned_ips.sort_by(|a, b| {
-                match (a.ip.parse::<Ipv4Addr>(), b.ip.parse::<Ipv4Addr>()) {
-                    (Ok(a_ip), Ok(b_ip)) => a_ip.cmp(&b_ip),
-                    // If parsing fails, maintain current order
-                    (Ok(_), Err(_)) => std::cmp::Ordering::Less,
-                    (Err(_), Ok(_)) => std::cmp::Ordering::Greater,
-                    (Err(_), Err(_)) => std::cmp::Ordering::Equal,
-                }
-            });
+            // Sort IPs numerically using cached parsed IP addresses
+            self.scanned_ips.sort_by(|a, b| a.ip_addr.cmp(&b.ip_addr));
         }
 
         self.set_scrollbar_height();
