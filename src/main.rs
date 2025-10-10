@@ -5,6 +5,7 @@ pub mod components;
 pub mod config;
 pub mod dns_cache;
 pub mod mode;
+pub mod privilege;
 pub mod tui;
 pub mod utils;
 pub mod enums;
@@ -24,6 +25,14 @@ async fn tokio_main() -> Result<()> {
   initialize_logging()?;
 
   initialize_panic_handler()?;
+
+  // Warn if not running with privileges (non-fatal, operations will fail with better errors)
+  if !privilege::has_network_privileges() {
+    eprintln!("WARNING: Running without elevated privileges.");
+    eprintln!("Some network operations may fail.");
+    eprintln!("For full functionality, run with sudo or set appropriate capabilities.");
+    eprintln!();
+  }
 
   let args = Cli::parse();
   let mut app = App::new(args.tick_rate, args.frame_rate)?;

@@ -44,6 +44,7 @@ use crate::{
     },
     layout::get_vertical_layout,
     mode::Mode,
+    privilege,
     utils::MaxSizeVec,
 };
 use strum::{EnumCount, IntoEnumIterator};
@@ -424,13 +425,17 @@ impl PacketDump {
         ) {
             Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
             Ok(_) => {
-                let _ = tx.send(Action::Error("Unknown or unsupported channel type".into()));
+                let _ = tx.send(Action::Error(
+                    "Unknown or unsupported channel type.\n\
+                    \n\
+                    The network interface does not support the required packet capture mode.\n\
+                    Please try a different interface.".into()
+                ));
                 return;
             }
             Err(e) => {
-                let _ = tx.send(Action::Error(format!(
-                    "Unable to create datalink channel: {e}"
-                )));
+                let error_msg = privilege::get_datalink_error_message(&e, &interface.name);
+                let _ = tx.send(Action::Error(error_msg));
                 return;
             }
         };
