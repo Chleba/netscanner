@@ -349,8 +349,8 @@ impl Discovery {
         }
     }
 
-    fn set_active_subnet(&mut self, intf: &NetworkInterface) {
-        let a_ip = intf.ips[0].ip().to_string();
+    fn set_active_subnet(&mut self, interface: &NetworkInterface) {
+        let a_ip = interface.ips[0].ip().to_string();
         let ip: Vec<&str> = a_ip.split('.').collect();
         if ip.len() > 1 {
             let new_a_ip = format!("{}.{}.{}.0/24", ip[0], ip[1], ip[2]);
@@ -599,8 +599,8 @@ impl Component for Discovery {
         self
     }
 
-    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
-        self.action_tx = Some(tx);
+    fn register_action_handler(&mut self, action_tx: Sender<Action>) -> Result<()> {
+        self.action_tx = Some(action_tx);
         Ok(())
     }
 
@@ -685,12 +685,11 @@ impl Component for Discovery {
         }
         // -- active interface
         if let Action::ActiveInterface(ref interface) = action {
-            let intf = interface.clone();
             // -- first time scan after setting of interface
             if self.active_interface.is_none() {
-                self.set_active_subnet(&intf);
+                self.set_active_subnet(interface);
             }
-            self.active_interface = Some(intf);
+            self.active_interface = Some(interface.clone());
         }
 
         if self.active_tab == TabsEnum::Discovery {

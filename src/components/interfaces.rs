@@ -47,21 +47,21 @@ impl Interfaces {
         self.active_interfaces.clear();
     
         let interfaces = datalink::interfaces();
-        for intf in &interfaces {
+        for interface in &interfaces {
             // -- get active interface with non-local IP
-            if (cfg!(windows) || intf.is_up()) && !intf.ips.is_empty() {
+            if (cfg!(windows) || interface.is_up()) && !interface.ips.is_empty() {
                 // Windows doesn't have the is_up() method
-                for ip in &intf.ips {
+                for ip in &interface.ips {
                     if let IpAddr::V4(ipv4) = ip.ip() {
                         if ipv4.is_private() && !ipv4.is_loopback() && !ipv4.is_unspecified() {
-                            self.active_interfaces.push(intf.clone());
+                            self.active_interfaces.push(interface.clone());
                             break;
                         }
                     }
                 }
             }
             // -- store interfaces into a vec
-            self.interfaces.push(intf.clone());
+            self.interfaces.push(interface.clone());
         }
         // -- sort interfaces
         self.interfaces.sort_by(|a, b| a.name.cmp(&b.name));
@@ -200,8 +200,8 @@ impl Component for Interfaces {
         self
     }
 
-    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
-        self.action_tx = Some(tx);
+    fn register_action_handler(&mut self, action_tx: Sender<Action>) -> Result<()> {
+        self.action_tx = Some(action_tx);
         Ok(())
     }
 
