@@ -35,12 +35,15 @@ pub struct Config {
 
 impl Config {
   pub fn new() -> Result<Self, config::ConfigError> {
-    let default_config: Config = json5::from_str(CONFIG).unwrap();
+    let default_config: Config = json5::from_str(CONFIG)
+      .expect("embedded default config should be valid JSON5");
     let data_dir = crate::utils::get_data_dir();
     let config_dir = crate::utils::get_config_dir();
     let mut builder = config::Config::builder()
-      .set_default("_data_dir", data_dir.to_str().unwrap())?
-      .set_default("_config_dir", config_dir.to_str().unwrap())?;
+      .set_default("_data_dir", data_dir.to_str()
+        .ok_or_else(|| config::ConfigError::Message("data directory path is not valid UTF-8".to_string()))?)?
+      .set_default("_config_dir", config_dir.to_str()
+        .ok_or_else(|| config::ConfigError::Message("config directory path is not valid UTF-8".to_string()))?)?;
 
     let config_files = [
       ("config.json5", config::FileFormat::Json5),
@@ -96,8 +99,18 @@ impl<'de> Deserialize<'de> for KeyBindings {
     let keybindings = parsed_map
       .into_iter()
       .map(|(mode, inner_map)| {
-        let converted_inner_map =
-          inner_map.into_iter().map(|(key_str, cmd)| (parse_key_sequence(&key_str).unwrap(), cmd)).collect();
+        let converted_inner_map = inner_map
+          .into_iter()
+          .filter_map(|(key_str, cmd)| {
+            match parse_key_sequence(&key_str) {
+              Ok(keys) => Some((keys, cmd)),
+              Err(e) => {
+                log::warn!("Invalid key binding '{}' in config: {}", key_str, e);
+                None
+              }
+            }
+          })
+          .collect();
         (mode, converted_inner_map)
       })
       .collect();
@@ -173,7 +186,8 @@ fn parse_key_code_with_modifiers(raw: &str, mut modifiers: KeyModifiers) -> Resu
     "minus" => KeyCode::Char('-'),
     "tab" => KeyCode::Tab,
     c if c.len() == 1 => {
-      let mut c = c.chars().next().unwrap();
+      // Safe: we checked c.len() == 1
+      let mut c = c.chars().next().expect("single character string");
       if modifiers.contains(KeyModifiers::SHIFT) {
         c = c.to_ascii_uppercase();
       }
