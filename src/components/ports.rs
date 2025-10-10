@@ -124,9 +124,10 @@ impl Ports {
             });
 
             self.ip_ports.sort_by(|a, b| {
-                let a_ip: Ipv4Addr = a.ip.parse::<Ipv4Addr>().unwrap();
-                let b_ip: Ipv4Addr = b.ip.parse::<Ipv4Addr>().unwrap();
-                a_ip.partial_cmp(&b_ip).unwrap()
+                // Safe: IPs were validated during insertion
+                let a_ip: Ipv4Addr = a.ip.parse().expect("validated IP");
+                let b_ip: Ipv4Addr = b.ip.parse().expect("validated IP");
+                a_ip.cmp(&b_ip)
             });
         }
 
@@ -208,8 +209,12 @@ impl Ports {
 
         self.ip_ports[index].state = PortsScanState::Scanning;
 
-        let tx = self.action_tx.clone().unwrap();
-        let ip: IpAddr = self.ip_ports[index].ip.parse().unwrap();
+        let Some(tx) = self.action_tx.clone() else {
+            log::error!("Cannot scan ports: action channel not initialized");
+            return;
+        };
+        // Safe: IP was validated during insertion
+        let ip: IpAddr = self.ip_ports[index].ip.parse().expect("validated IP");
         let ports_box = Box::new(COMMON_PORTS.iter());
 
         // Calculate optimal pool size based on system resources
@@ -340,8 +345,9 @@ impl Ports {
                     .title(
                         ratatui::widgets::block::Title::from(Line::from(vec![
                             Span::styled("|", Style::default().fg(Color::Yellow)),
-                            String::from(char::from_u32(0x25b2).unwrap_or('>')).red(),
-                            String::from(char::from_u32(0x25bc).unwrap_or('>')).red(),
+                            // Unicode up/down triangle characters (▲▼)
+                            String::from(char::from_u32(0x25b2).unwrap_or('▲')).red(),
+                            String::from(char::from_u32(0x25bc).unwrap_or('▼')).red(),
                             Span::styled("select|", Style::default().fg(Color::Yellow)),
                         ]))
                         .position(ratatui::widgets::block::Position::Bottom)
@@ -389,7 +395,7 @@ impl Component for Ports {
 
         // -- tab change
         if let Action::TabChange(tab) = action {
-            self.tab_changed(tab).unwrap();
+            self.tab_changed(tab)?;
         }
 
         if self.active_tab == TabsEnum::Ports {
