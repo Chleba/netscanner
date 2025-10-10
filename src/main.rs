@@ -3,6 +3,7 @@ pub mod app;
 pub mod cli;
 pub mod components;
 pub mod config;
+pub mod dns_cache;
 pub mod mode;
 pub mod tui;
 pub mod utils;

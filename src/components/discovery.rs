@@ -1,7 +1,6 @@
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use dns_lookup::lookup_addr;
 
 use pnet::datalink::NetworkInterface;
 use tokio::sync::Semaphore;
@@ -23,6 +22,7 @@ use crate::{
     action::Action,
     components::packetdump::ArpPacketData,
     config::DEFAULT_BORDER_STYLE,
+    dns_cache::DnsCache,
     enums::TabsEnum,
     layout::get_vertical_layout,
     mode::Mode,
@@ -65,6 +65,7 @@ pub struct Discovery {
     table_state: TableState,
     scrollbar_state: ScrollbarState,
     spinner_index: usize,
+    dns_cache: DnsCache,
 }
 
 impl Default for Discovery {
@@ -91,6 +92,7 @@ impl Discovery {
             table_state: TableState::default().with_selected(0),
             scrollbar_state: ScrollbarState::new(0),
             spinner_index: 0,
+            dns_cache: DnsCache::new(),
         }
     }
 
@@ -246,16 +248,14 @@ impl Discovery {
             return;
         };
 
-        let host = lookup_addr(&hip).unwrap_or_default();
-
+        // Add IP immediately without hostname (will be updated asynchronously)
         if let Some(n) = self.scanned_ips.iter_mut().find(|item| item.ip == ip) {
-            n.hostname = host;
             n.ip = ip.to_string();
         } else {
             self.scanned_ips.push(ScannedIp {
                 ip: ip.to_string(),
                 mac: String::new(),
-                hostname: host,
+                hostname: String::new(), // Will be filled asynchronously
                 vendor: String::new(),
             });
 
@@ -272,6 +272,18 @@ impl Discovery {
         }
 
         self.set_scrollbar_height();
+
+        // Perform DNS lookup asynchronously in background
+        if let Some(tx) = self.action_tx.clone() {
+            let dns_cache = self.dns_cache.clone();
+            let ip_string = ip.to_string();
+            tokio::spawn(async move {
+                let hostname = dns_cache.lookup_with_timeout(hip).await;
+                if !hostname.is_empty() {
+                    let _ = tx.send(Action::DnsResolved(ip_string, hostname));
+                }
+            });
+        }
     }
 
     fn set_active_subnet(&mut self, intf: &NetworkInterface) {
@@ -564,6 +576,12 @@ impl Component for Discovery {
         // -- custom actions
         if let Action::PingIp(ref ip) = action {
             self.process_ip(ip);
+        }
+        // -- DNS resolved
+        if let Action::DnsResolved(ref ip, ref hostname) = action {
+            if let Some(entry) = self.scanned_ips.iter_mut().find(|item| item.ip == *ip) {
+                entry.hostname = hostname.clone();
+            }
         }
         // -- count IPs
         if let Action::CountIp = action {
