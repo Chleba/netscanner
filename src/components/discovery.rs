@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence};
 use tokio::{
-    sync::mpsc::UnboundedSender,
+    sync::mpsc::Sender,
     task::JoinHandle,
 };
 
@@ -52,7 +52,7 @@ pub struct ScannedIp {
 pub struct Discovery {
     active_tab: TabsEnum,
     active_interface: Option<NetworkInterface>,
-    action_tx: Option<UnboundedSender<Action>>,
+    action_tx: Option<Sender<Action>>,
     scanned_ips: Vec<ScannedIp>,
     ip_num: i32,
     input: Input,
@@ -105,7 +105,7 @@ impl Discovery {
         let trimmed = cidr_str.trim();
         if trimmed.is_empty() {
             if let Some(tx) = &self.action_tx {
-                let _ = tx.clone().send(Action::CidrError);
+                let _ = tx.clone().try_send(Action::CidrError);
             }
             return;
         }
@@ -113,7 +113,7 @@ impl Discovery {
         // Basic format validation before parsing
         if !trimmed.contains('/') {
             if let Some(tx) = &self.action_tx {
-                let _ = tx.clone().send(Action::CidrError);
+                let _ = tx.clone().try_send(Action::CidrError);
             }
             return;
         }
@@ -130,7 +130,7 @@ impl Discovery {
                 if network_length < 16 {
                     // Network too large - prevent scanning millions of IPs
                     if let Some(tx) = &self.action_tx {
-                        let _ = tx.clone().send(Action::CidrError);
+                        let _ = tx.clone().try_send(Action::CidrError);
                     }
                     return;
                 }
@@ -141,7 +141,7 @@ impl Discovery {
                 // Reject loopback (127.0.0.0/8), multicast (224.0.0.0/4), and reserved ranges
                 if first_octet == 127 || first_octet >= 224 {
                     if let Some(tx) = &self.action_tx {
-                        let _ = tx.clone().send(Action::CidrError);
+                        let _ = tx.clone().try_send(Action::CidrError);
                     }
                     return;
                 }
@@ -153,7 +153,7 @@ impl Discovery {
             }
             Err(_) => {
                 if let Some(tx) = &self.action_tx {
-                    let _ = tx.clone().send(Action::CidrError);
+                    let _ = tx.clone().try_send(Action::CidrError);
                 }
             }
         }
@@ -188,7 +188,7 @@ impl Discovery {
                             // Semaphore acquire should not fail in normal operation
                             // If it does, we skip this IP and continue
                             let Ok(_permit) = s.acquire().await else {
-                                let _ = tx.send(Action::CountIp);
+                                let _ = tx.try_send(Action::CountIp);
                                 return;
                             };
                             let client =
@@ -201,15 +201,15 @@ impl Discovery {
 
                             match pinger.ping(PingSequence(2), &payload).await {
                                 Ok((IcmpPacket::V4(packet), dur)) => {
-                                    tx.send(Action::PingIp(packet.get_real_dest().to_string()))
+                                    tx.try_send(Action::PingIp(packet.get_real_dest().to_string()))
                                         .unwrap_or_default();
-                                    tx.send(Action::CountIp).unwrap_or_default();
+                                    tx.try_send(Action::CountIp).unwrap_or_default();
                                 }
                                 Ok(_) => {
-                                    tx.send(Action::CountIp).unwrap_or_default();
+                                    tx.try_send(Action::CountIp).unwrap_or_default();
                                 }
                                 Err(_) => {
-                                    tx.send(Action::CountIp).unwrap_or_default();
+                                    tx.try_send(Action::CountIp).unwrap_or_default();
                                 }
                             }
                         };
@@ -280,7 +280,7 @@ impl Discovery {
             tokio::spawn(async move {
                 let hostname = dns_cache.lookup_with_timeout(hip).await;
                 if !hostname.is_empty() {
-                    let _ = tx.send(Action::DnsResolved(ip_string, hostname));
+                    let _ = tx.try_send(Action::DnsResolved(ip_string, hostname));
                 }
             });
         }
@@ -536,7 +536,7 @@ impl Component for Discovery {
         self
     }
 
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
     }
@@ -637,7 +637,7 @@ impl Component for Discovery {
                 // -- when scanning don't switch to input mode
                 if self.is_scanning && mode == Mode::Input {
                     if let Some(tx) = &self.action_tx {
-                        let _ = tx.clone().send(Action::ModeChange(Mode::Normal));
+                        let _ = tx.clone().try_send(Action::ModeChange(Mode::Normal));
                     }
                     return Ok(None);
                 }
@@ -647,7 +647,7 @@ impl Component for Discovery {
                     self.cidr_error = false;
                 }
                 if let Some(tx) = &self.action_tx {
-                    let _ = tx.clone().send(Action::AppModeChange(mode));
+                    let _ = tx.clone().try_send(Action::AppModeChange(mode));
                 }
                 self.mode = mode;
             }

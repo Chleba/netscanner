@@ -7,7 +7,7 @@ use ratatui::{
     widgets::{block::Title, Paragraph},
 };
 use strum::{EnumCount, IntoEnumIterator};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 use super::{Component, Frame};
 use crate::{
@@ -20,7 +20,7 @@ use crate::{
 
 #[derive(Default)]
 pub struct Tabs {
-    action_tx: Option<UnboundedSender<Action>>,
+    action_tx: Option<Sender<Action>>,
     config: Config,
     tab_index: usize,
 }
@@ -83,13 +83,13 @@ impl Tabs {
         self.tab_index = (self.tab_index + 1) % TabsEnum::COUNT;
         if let Some(ref action_tx) = self.action_tx {
             let tab_enum = TabsEnum::iter().nth(self.tab_index).unwrap();
-            action_tx.send(Action::TabChange(tab_enum)).unwrap();
+            action_tx.try_send(Action::TabChange(tab_enum)).unwrap();
         }
     }
 }
 
 impl Component for Tabs {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
     }

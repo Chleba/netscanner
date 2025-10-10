@@ -1,7 +1,7 @@
 
 use color_eyre::eyre::Result;
 use ratatui::{prelude::*, widgets::*};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 use super::{Component, Frame};
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
 
 #[derive(Default)]
 pub struct Title {
-    command_tx: Option<UnboundedSender<Action>>,
+    command_tx: Option<Sender<Action>>,
     config: Config,
 }
 
@@ -25,7 +25,7 @@ impl Title {
 }
 
 impl Component for Title {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
         self.command_tx = Some(tx);
         Ok(())
     }

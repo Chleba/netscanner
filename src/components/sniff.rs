@@ -7,7 +7,7 @@ use ratatui::style::Stylize;
 use ratatui::{prelude::*, widgets::*};
 use std::collections::HashMap;
 use std::net::IpAddr;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 use tui_scrollview::ScrollViewState;
 
 use super::Component;
@@ -31,7 +31,7 @@ pub struct IPTraffic {
 
 pub struct Sniffer {
     active_tab: TabsEnum,
-    action_tx: Option<UnboundedSender<Action>>,
+    action_tx: Option<Sender<Action>>,
     _list_state: ListState,
     _scrollbar_state: ScrollbarState,
     traffic_map: HashMap<IpAddr, IPTraffic>,
@@ -121,7 +121,7 @@ impl Sniffer {
             tokio::spawn(async move {
                 let hostname = dns_cache.lookup_with_timeout(ip).await;
                 if !hostname.is_empty() {
-                    let _ = tx.send(Action::DnsResolved(ip_string, hostname));
+                    let _ = tx.try_send(Action::DnsResolved(ip_string, hostname));
                 }
             });
         }
@@ -352,7 +352,7 @@ impl Component for Sniffer {
         self
     }
 
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
     }

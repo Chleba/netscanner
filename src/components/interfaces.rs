@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use color_eyre::eyre::Result;
 use ratatui::{prelude::*, widgets::*};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 use super::Component;
 use crate::{
@@ -18,7 +18,7 @@ use crate::{
 };
 
 pub struct Interfaces {
-    action_tx: Option<UnboundedSender<Action>>,
+    action_tx: Option<Sender<Action>>,
     interfaces: Vec<NetworkInterface>,
     last_update_time: Instant,
     active_interfaces: Vec<NetworkInterface>,
@@ -82,7 +82,7 @@ impl Interfaces {
         if !self.active_interfaces.is_empty() {
             let tx = self.action_tx.clone().unwrap();
             let active_interface = &self.active_interfaces[self.active_interface_index];
-            tx.send(Action::ActiveInterface(active_interface.clone()))
+            tx.try_send(Action::ActiveInterface(active_interface.clone()))
                 .unwrap();
         }
     }
@@ -200,7 +200,7 @@ impl Component for Interfaces {
         self
     }
 
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
     }

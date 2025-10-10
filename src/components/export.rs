@@ -3,14 +3,14 @@ use color_eyre::{eyre::Result, owo_colors::OwoColorize};
 use csv::Writer;
 use ratatui::prelude::*;
 use std::env;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 use super::{discovery::ScannedIp, ports::ScannedIpPorts, Component, Frame};
 use crate::{action::Action, enums::PacketsInfoTypesEnum};
 
 #[derive(Default)]
 pub struct Export {
-    action_tx: Option<UnboundedSender<Action>>,
+    action_tx: Option<Sender<Action>>,
     home_dir: String,
     export_done: bool,
     _export_failed: bool,
@@ -152,7 +152,7 @@ impl Component for Export {
         Ok(())
     }
 
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
     }

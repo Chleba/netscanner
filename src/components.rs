@@ -2,7 +2,7 @@ use color_eyre::eyre::Result;
 use crossterm::event::{KeyEvent, MouseEvent};
 use ratatui::layout::{Rect, Size};
 use std::any::Any;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 use crate::{
     action::Action,
@@ -29,11 +29,11 @@ pub mod wifi_scan;
 pub trait Component: Any {
     /// Register an action handler that can send actions for processing if necessary.
     /// # Arguments
-    /// * `tx` - An unbounded sender that can send actions.
+    /// * `tx` - A bounded sender that can send actions.
     /// # Returns
     /// * `Result<()>` - An Ok result or an error.
     #[allow(unused_variables)]
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
         Ok(())
     }
 

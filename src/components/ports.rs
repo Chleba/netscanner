@@ -12,7 +12,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 use tokio::{
     net::TcpStream,
-    sync::mpsc::UnboundedSender,
+    sync::mpsc::Sender,
 };
 
 use super::Component;
@@ -39,7 +39,7 @@ pub struct ScannedIpPorts {
 
 pub struct Ports {
     active_tab: TabsEnum,
-    action_tx: Option<UnboundedSender<Action>>,
+    action_tx: Option<Sender<Action>>,
     ip_ports: Vec<ScannedIpPorts>,
     list_state: ListState,
     scrollbar_state: ScrollbarState,
@@ -109,7 +109,7 @@ impl Ports {
             tokio::spawn(async move {
                 let hostname = dns_cache.lookup_with_timeout(ip_addr).await;
                 if !hostname.is_empty() {
-                    let _ = tx.send(Action::DnsResolved(ip_string, hostname));
+                    let _ = tx.try_send(Action::DnsResolved(ip_string, hostname));
                 }
             });
         }
@@ -188,15 +188,15 @@ impl Ports {
                     Self::scan(tx.clone(), index, ip, port.to_owned(), 2)
                 })
                 .await;
-            tx.send(Action::PortScanDone(index)).unwrap();
+            tx.try_send(Action::PortScanDone(index)).unwrap();
         });
     }
 
-    async fn scan(tx: UnboundedSender<Action>, index: usize, ip: IpAddr, port: u16, timeout: u64) {
+    async fn scan(tx: Sender<Action>, index: usize, ip: IpAddr, port: u16, timeout: u64) {
         let timeout = Duration::from_secs(2);
         let soc_addr = SocketAddr::new(ip, port);
         if let Ok(Ok(_)) = tokio::time::timeout(timeout, TcpStream::connect(&soc_addr)).await {
-            tx.send(Action::PortScan(index, port)).unwrap();
+            tx.try_send(Action::PortScan(index, port)).unwrap();
         }
     }
 
@@ -321,7 +321,7 @@ impl Component for Ports {
         self
     }
 
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
     }

@@ -4,7 +4,7 @@ use chrono::Timelike;
 use color_eyre::eyre::Result;
 use ratatui::{prelude::*, widgets::*};
 use std::time::Instant;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 use super::Component;
 use crate::{
@@ -24,7 +24,7 @@ pub struct WifiDataset {
 }
 
 pub struct WifiChart {
-    action_tx: Option<UnboundedSender<Action>>,
+    action_tx: Option<Sender<Action>>,
     _last_update_time: Instant,
     wifi_datasets: Vec<WifiDataset>,
     signal_tick: [f64; 2],
@@ -152,7 +152,7 @@ impl WifiChart {
 }
 
 impl Component for WifiChart {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(&mut self, tx: Sender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
     }
