@@ -111,7 +111,7 @@ fn download_windows_npcap_sdk() -> anyhow::Result<()> {
     } else if cfg!(target_arch = "x86") {
         "Lib/Packet.lib"
     } else {
-        panic!("Unsupported target!")
+        return Err(anyhow!("Unsupported target architecture. Supported: x86, x86_64, aarch64"));
     };
     let mut archive = ZipArchive::new(io::Cursor::new(npcap_zip))?;
     let mut npcap_lib = archive.by_name(lib_path)?;
