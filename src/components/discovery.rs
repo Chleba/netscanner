@@ -99,16 +99,59 @@ impl Discovery {
     }
 
     fn set_cidr(&mut self, cidr_str: String, scan: bool) {
-        match cidr_str.parse::<Ipv4Cidr>() {
+        // Validate input is not empty and doesn't contain suspicious characters
+        let trimmed = cidr_str.trim();
+        if trimmed.is_empty() {
+            if let Some(tx) = &self.action_tx {
+                let _ = tx.clone().send(Action::CidrError);
+            }
+            return;
+        }
+
+        // Basic format validation before parsing
+        if !trimmed.contains('/') {
+            if let Some(tx) = &self.action_tx {
+                let _ = tx.clone().send(Action::CidrError);
+            }
+            return;
+        }
+
+        match trimmed.parse::<Ipv4Cidr>() {
             Ok(ip_cidr) => {
+                // Validate CIDR range is reasonable (prevent scanning entire internet)
+                // Minimum network length /8 (16,777,216 hosts) - too large
+                // Maximum network length /32 (1 host) - pointless but allowed
+                // Recommended minimum: /16 (65,536 hosts)
+                // For safety, we'll enforce a minimum of /16
+                let network_length = ip_cidr.network_length();
+
+                if network_length < 16 {
+                    // Network too large - prevent scanning millions of IPs
+                    if let Some(tx) = &self.action_tx {
+                        let _ = tx.clone().send(Action::CidrError);
+                    }
+                    return;
+                }
+
+                // Validate it's not a special-purpose network
+                let first_octet = ip_cidr.first_address().octets()[0];
+
+                // Reject loopback (127.0.0.0/8), multicast (224.0.0.0/4), and reserved ranges
+                if first_octet == 127 || first_octet >= 224 {
+                    if let Some(tx) = &self.action_tx {
+                        let _ = tx.clone().send(Action::CidrError);
+                    }
+                    return;
+                }
+
                 self.cidr = Some(ip_cidr);
                 if scan {
                     self.scan();
                 }
             }
-            Err(e) => {
+            Err(_) => {
                 if let Some(tx) = &self.action_tx {
-                    tx.clone().send(Action::CidrError).unwrap();
+                    let _ = tx.clone().send(Action::CidrError);
                 }
             }
         }
