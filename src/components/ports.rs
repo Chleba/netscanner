@@ -1,6 +1,5 @@
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use dns_lookup::lookup_addr;
 use futures::StreamExt;
 use futures::stream;
 
@@ -21,6 +20,7 @@ use crate::enums::COMMON_PORTS;
 use crate::{
     action::Action,
     config::DEFAULT_BORDER_STYLE,
+    dns_cache::DnsCache,
     enums::{PortsScanState, TabsEnum},
     layout::get_vertical_layout,
     tui::Frame,
@@ -45,6 +45,7 @@ pub struct Ports {
     scrollbar_state: ScrollbarState,
     spinner_index: usize,
     port_desc: Option<PortDescription>,
+    dns_cache: DnsCache,
 }
 
 impl Default for Ports {
@@ -68,6 +69,7 @@ impl Ports {
             scrollbar_state: ScrollbarState::new(0),
             spinner_index: 0,
             port_desc,
+            dns_cache: DnsCache::new(),
         }
     }
 
@@ -76,15 +78,16 @@ impl Ports {
     }
 
     fn process_ip(&mut self, ip: &str) {
-        let ipv4: Ipv4Addr = ip.parse().unwrap();
-        let hostname = lookup_addr(&ipv4.into()).unwrap_or_default();
+        let Ok(ipv4) = ip.parse::<Ipv4Addr>() else {
+            return;
+        };
 
         if let Some(n) = self.ip_ports.iter_mut().find(|item| item.ip == ip) {
             n.ip = ip.to_string();
         } else {
             self.ip_ports.push(ScannedIpPorts {
                 ip: ip.to_string(),
-                hostname,
+                hostname: String::new(), // Will be filled asynchronously
                 state: PortsScanState::Waiting,
                 ports: Vec::new(),
             });
@@ -97,6 +100,19 @@ impl Ports {
         }
 
         self.set_scrollbar_height();
+
+        // Perform DNS lookup asynchronously in background
+        if let Some(tx) = self.action_tx.clone() {
+            let dns_cache = self.dns_cache.clone();
+            let ip_string = ip.to_string();
+            let ip_addr: IpAddr = ipv4.into();
+            tokio::spawn(async move {
+                let hostname = dns_cache.lookup_with_timeout(ip_addr).await;
+                if !hostname.is_empty() {
+                    let _ = tx.send(Action::DnsResolved(ip_string, hostname));
+                }
+            });
+        }
     }
 
     fn set_scrollbar_height(&mut self) {
@@ -352,6 +368,13 @@ impl Component for Ports {
         // -- PING IP
         if let Action::PingIp(ref ip) = action {
             self.process_ip(ip);
+        }
+
+        // -- DNS resolved
+        if let Action::DnsResolved(ref ip, ref hostname) = action {
+            if let Some(entry) = self.ip_ports.iter_mut().find(|item| item.ip == *ip) {
+                entry.hostname = hostname.clone();
+            }
         }
 
         Ok(None)

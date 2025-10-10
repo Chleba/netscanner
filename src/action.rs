@@ -43,6 +43,7 @@ pub enum Action {
     PingIp(String),
     CountIp,
     CidrError,
+    DnsResolved(String, String), // (IP, Hostname)
     PacketDump(DateTime<Local>, PacketsInfoTypesEnum, PacketTypeEnum),
     PortScan(usize, u16),
     PortScanDone(usize),

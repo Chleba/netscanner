@@ -1,6 +1,5 @@
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use dns_lookup::lookup_addr;
 
 use ipnetwork::IpNetwork;
 use ratatui::style::Stylize;
@@ -13,6 +12,7 @@ use tui_scrollview::ScrollViewState;
 use super::Component;
 use crate::{
     action::Action,
+    dns_cache::DnsCache,
     enums::{PacketTypeEnum, PacketsInfoTypesEnum, TabsEnum},
     layout::{get_vertical_layout, HORIZONTAL_CONSTRAINTS},
     tui::Frame,
@@ -38,6 +38,7 @@ pub struct Sniffer {
     udp_sum: f64,
     tcp_sum: f64,
     active_inft_ips: Vec<IpNetwork>,
+    dns_cache: DnsCache,
 }
 
 impl Default for Sniffer {
@@ -58,6 +59,7 @@ impl Sniffer {
             udp_sum: 0.0,
             tcp_sum: 0.0,
             active_inft_ips: Vec::new(),
+            dns_cache: DnsCache::new(),
         }
     }
 
@@ -86,8 +88,10 @@ impl Sniffer {
                 ip: destination,
                 download: length as f64,
                 upload: 0.0,
-                hostname: lookup_addr(&destination).unwrap_or(String::from("unknown")),
+                hostname: String::new(), // Will be filled asynchronously
             });
+            // Trigger background DNS lookup
+            self.lookup_hostname_async(destination);
         }
 
         // -- source
@@ -100,8 +104,10 @@ impl Sniffer {
                 ip: source,
                 download: 0.0,
                 upload: length as f64,
-                hostname: lookup_addr(&source).unwrap_or(String::from("unknown")),
+                hostname: String::new(), // Will be filled asynchronously
             });
+            // Trigger background DNS lookup
+            self.lookup_hostname_async(source);
         }
 
         self.traffic_ips.sort_by(|a, b| {
@@ -109,6 +115,19 @@ impl Sniffer {
             let b_sum = b.download + b.upload;
             b_sum.partial_cmp(&a_sum).unwrap()
         });
+    }
+
+    fn lookup_hostname_async(&self, ip: IpAddr) {
+        if let Some(tx) = self.action_tx.clone() {
+            let dns_cache = self.dns_cache.clone();
+            let ip_string = ip.to_string();
+            tokio::spawn(async move {
+                let hostname = dns_cache.lookup_with_timeout(ip).await;
+                if !hostname.is_empty() {
+                    let _ = tx.send(Action::DnsResolved(ip_string, hostname));
+                }
+            });
+        }
     }
 
     fn process_packet(&mut self, packet: PacketsInfoTypesEnum) {
@@ -348,11 +367,20 @@ impl Component for Sniffer {
             self.active_inft_ips = interface.ips.clone();
         }
 
-        if let Action::PacketDump(time, packet, packet_type) = action {
+        if let Action::PacketDump(_time, ref packet, ref packet_type) = action {
             match packet_type {
-                PacketTypeEnum::Tcp => self.process_packet(packet),
-                PacketTypeEnum::Udp => self.process_packet(packet),
+                PacketTypeEnum::Tcp => self.process_packet(packet.clone()),
+                PacketTypeEnum::Udp => self.process_packet(packet.clone()),
                 _ => {}
+            }
+        }
+
+        // -- DNS resolved
+        if let Action::DnsResolved(ref ip_str, ref hostname) = action {
+            if let Ok(ip) = ip_str.parse::<IpAddr>() {
+                if let Some(entry) = self.traffic_ips.iter_mut().find(|item| item.ip == ip) {
+                    entry.hostname = hostname.clone();
+                }
             }
         }
 
