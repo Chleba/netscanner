@@ -181,22 +181,31 @@ impl Ports {
         let ip: IpAddr = self.ip_ports[index].ip.parse().unwrap();
         let ports_box = Box::new(COMMON_PORTS.iter());
 
-        let h = tokio::spawn(async move {
+        tokio::spawn(async move {
+            log::debug!("Starting port scan for IP: {}", ip);
             let ports = stream::iter(ports_box);
             ports
                 .for_each_concurrent(POOL_SIZE, |port| {
-                    Self::scan(tx.clone(), index, ip, port.to_owned(), 2)
+                    Self::scan(tx.clone(), index, ip, port.to_owned())
                 })
                 .await;
-            tx.try_send(Action::PortScanDone(index)).unwrap();
+
+            // Report scan completion
+            if let Err(e) = tx.try_send(Action::PortScanDone(index)) {
+                log::error!("Failed to send port scan completion: {:?}", e);
+            }
+            log::debug!("Port scan completed for IP: {}", ip);
         });
     }
 
-    async fn scan(tx: Sender<Action>, index: usize, ip: IpAddr, port: u16, timeout: u64) {
+    async fn scan(tx: Sender<Action>, index: usize, ip: IpAddr, port: u16) {
         let timeout = Duration::from_secs(2);
         let soc_addr = SocketAddr::new(ip, port);
         if let Ok(Ok(_)) = tokio::time::timeout(timeout, TcpStream::connect(&soc_addr)).await {
-            tx.try_send(Action::PortScan(index, port)).unwrap();
+            // Successfully connected to port
+            if let Err(e) = tx.try_send(Action::PortScan(index, port)) {
+                log::error!("Failed to send open port notification for {}:{}: {:?}", ip, port, e);
+            }
         }
     }
 

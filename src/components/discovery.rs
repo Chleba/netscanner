@@ -178,6 +178,7 @@ impl Discovery {
             let semaphore = Arc::new(Semaphore::new(POOL_SIZE));
 
             self.task = tokio::spawn(async move {
+                log::debug!("Starting CIDR scan task");
                 let ips = get_ips4_from_cidr(cidr);
                 let tasks: Vec<_> = ips
                     .iter()
@@ -200,8 +201,8 @@ impl Discovery {
                             pinger.timeout(Duration::from_secs(2));
 
                             match pinger.ping(PingSequence(2), &payload).await {
-                                Ok((IcmpPacket::V4(packet), dur)) => {
-                                    tx.try_send(Action::PingIp(packet.get_real_dest().to_string()))
+                                Ok((IcmpPacket::V4(_packet), _dur)) => {
+                                    tx.try_send(Action::PingIp(_packet.get_real_dest().to_string()))
                                         .unwrap_or_default();
                                     tx.try_send(Action::CountIp).unwrap_or_default();
                                 }
@@ -217,8 +218,23 @@ impl Discovery {
                     })
                     .collect();
                 for t in tasks {
-                    let _ = t.await;
+                    // Check if task panicked or was aborted
+                    match t.await {
+                        Ok(_) => {
+                            // Task completed successfully
+                        }
+                        Err(e) if e.is_cancelled() => {
+                            log::debug!("Scan task was cancelled");
+                        }
+                        Err(e) if e.is_panic() => {
+                            log::error!("Scan task panicked: {:?}", e);
+                        }
+                        Err(e) => {
+                            log::error!("Scan task failed: {:?}", e);
+                        }
+                    }
                 }
+                log::debug!("CIDR scan task completed");
             });
         };
     }
@@ -565,6 +581,13 @@ impl Component for Discovery {
     }
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
+        // Monitor task health
+        if self.is_scanning && self.task.is_finished() {
+            // Task finished unexpectedly while still marked as scanning
+            log::warn!("Scan task finished unexpectedly, checking for errors");
+            self.is_scanning = false;
+        }
+
         if self.is_scanning {
             if let Action::Tick = action {
                 let mut s_index = self.spinner_index + 1;
