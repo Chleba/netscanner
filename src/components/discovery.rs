@@ -36,9 +36,9 @@ use rand::random;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
-static POOL_SIZE: usize = 32;
-static INPUT_SIZE: usize = 30;
-static DEFAULT_IP: &str = "192.168.1.0/24";
+const POOL_SIZE: usize = 32;
+const INPUT_SIZE: usize = 30;
+const DEFAULT_IP: &str = "192.168.1.0/24";
 const SPINNER_SYMBOLS: [&str; 6] = ["⠷", "⠯", "⠟", "⠻", "⠽", "⠾"];
 
 #[derive(Clone, Debug, PartialEq)]

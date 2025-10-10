@@ -48,7 +48,7 @@ use crate::{
 };
 use strum::{EnumCount, IntoEnumIterator};
 
-static INPUT_SIZE: usize = 30;
+const INPUT_SIZE: usize = 30;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArpPacketData {
