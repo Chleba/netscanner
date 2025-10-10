@@ -26,7 +26,7 @@ use crate::{
     tui::Frame,
 };
 
-static POOL_SIZE: usize = 64;
+const POOL_SIZE: usize = 64;
 const SPINNER_SYMBOLS: [&str; 6] = ["⠷", "⠯", "⠟", "⠻", "⠽", "⠾"];
 
 #[derive(Debug, Clone, PartialEq)]
