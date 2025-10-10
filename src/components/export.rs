@@ -31,10 +31,14 @@ impl Export {
     fn get_user_home_dir(&mut self) {
         let mut home_dir = String::from("/root");
         if let Some(h_dir) = env::var_os("HOME") {
-            home_dir = String::from(h_dir.to_str().unwrap());
+            if let Some(dir_str) = h_dir.to_str() {
+                home_dir = String::from(dir_str);
+            }
         }
         if let Some(sudo_user) = env::var_os("SUDO_USER") {
-            home_dir = format!("/home/{}", sudo_user.to_str().unwrap());
+            if let Some(user_str) = sudo_user.to_str() {
+                home_dir = format!("/home/{}", user_str);
+            }
         }
         self.home_dir = format!("{}/.netscanner", home_dir);
 
@@ -50,17 +54,21 @@ impl Export {
     fn get_user_home_dir(&mut self) {
         let mut home_dir = String::from("/root");
         if let Some(h_dir) = env::var_os("HOME") {
-            home_dir = String::from(h_dir.to_str().unwrap());
+            if let Some(dir_str) = h_dir.to_str() {
+                home_dir = String::from(dir_str);
+            }
         }
         if let Some(sudo_user) = env::var_os("SUDO_USER") {
-            home_dir = format!("/Users/{}", sudo_user.to_str().unwrap());
+            if let Some(user_str) = sudo_user.to_str() {
+                home_dir = format!("/Users/{}", user_str);
+            }
         }
         self.home_dir = format!("{}/.netscanner", home_dir);
 
         // -- create dot folder
         if std::fs::metadata(&self.home_dir).is_err() {
             if std::fs::create_dir_all(&self.home_dir).is_err() {
-                println!("Failed to create export dir");
+                log::error!("Failed to create export directory: {}", self.home_dir);
             }
         }
     }
@@ -69,10 +77,14 @@ impl Export {
     fn get_user_home_dir(&mut self) {
         let mut home_dir = String::from("C:\\Users\\Administrator");
         if let Some(h_dir) = env::var_os("USERPROFILE") {
-            home_dir = String::from(h_dir.to_str().unwrap());
+            if let Some(dir_str) = h_dir.to_str() {
+                home_dir = String::from(dir_str);
+            }
         }
         if let Some(sudo_user) = env::var_os("SUDO_USER") {
-            home_dir = format!("C:\\Users\\{}", sudo_user.to_str().unwrap());
+            if let Some(user_str) = sudo_user.to_str() {
+                home_dir = format!("C:\\Users\\{}", user_str);
+            }
         }
         self.home_dir = format!("{}\\.netscanner", home_dir);
 
