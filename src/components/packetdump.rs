@@ -674,269 +674,275 @@ impl PacketDump {
         self.scrollbar_state = self.scrollbar_state.position(index);
     }
 
+    /// Formats an ICMP packet into styled spans for table display
+    fn format_icmp_packet_row(icmp: &ICMPPacketInfo) -> Vec<Span<'static>> {
+        let mut spans = vec![];
+
+        spans.push(Span::styled(
+            format!("[{}] ", icmp.interface_name.clone()),
+            Style::default().fg(Color::Green),
+        ));
+        spans.push(Span::styled(
+            "ICMP",
+            Style::default().fg(Color::Black).bg(Color::White),
+        ));
+
+        match icmp.icmp_type {
+            IcmpTypes::EchoRequest => {
+                spans.push(Span::styled(
+                    " echo request ",
+                    Style::default().fg(Color::Yellow),
+                ));
+            }
+            IcmpTypes::EchoReply => {
+                spans.push(Span::styled(
+                    " echo reply ",
+                    Style::default().fg(Color::Yellow),
+                ));
+            }
+            _ => {}
+        }
+
+        spans.push(Span::styled(
+            icmp.source.to_string(),
+            Style::default().fg(Color::Blue),
+        ));
+        spans.push(Span::styled(" -> ", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(
+            icmp.destination.to_string(),
+            Style::default().fg(Color::Blue),
+        ));
+        spans.push(Span::styled("(seq=", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(
+            format!("{:?}", icmp.seq.to_string()),
+            Style::default().fg(Color::Green),
+        ));
+        spans.push(Span::styled(", ", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled("id=", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(
+            format!("{:?}", icmp.id.to_string()),
+            Style::default().fg(Color::Green),
+        ));
+        spans.push(Span::styled(")", Style::default().fg(Color::Yellow)));
+
+        spans
+    }
+
+    /// Formats an ICMPv6 packet into styled spans for table display
+    fn format_icmp6_packet_row(icmp: &ICMP6PacketInfo) -> Vec<Span<'static>> {
+        let mut spans = vec![];
+
+        spans.push(Span::styled(
+            format!("[{}] ", icmp.interface_name.clone()),
+            Style::default().fg(Color::Green),
+        ));
+        spans.push(Span::styled(
+            "ICMP6",
+            Style::default().fg(Color::Red).bg(Color::Black),
+        ));
+
+        let icmp_type_str = match icmp.icmp_type {
+            Icmpv6Types::EchoRequest => " echo request ",
+            Icmpv6Types::EchoReply => " echo reply ",
+            Icmpv6Types::NeighborAdvert => " neighbor advert ",
+            Icmpv6Types::NeighborSolicit => " neighbor solicit ",
+            Icmpv6Types::Redirect => " redirect ",
+            _ => " unknown ",
+        };
+        spans.push(Span::styled(
+            icmp_type_str,
+            Style::default().fg(Color::Yellow),
+        ));
+
+        spans.push(Span::styled(
+            icmp.source.to_string(),
+            Style::default().fg(Color::Blue),
+        ));
+        spans.push(Span::styled(" -> ", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(
+            icmp.destination.to_string(),
+            Style::default().fg(Color::Blue),
+        ));
+        spans.push(Span::styled(", ", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(")", Style::default().fg(Color::Yellow)));
+
+        spans
+    }
+
+    /// Formats a UDP packet into styled spans for table display
+    fn format_udp_packet_row(udp: &UDPPacketInfo) -> Vec<Span<'static>> {
+        let mut spans = vec![];
+
+        spans.push(Span::styled(
+            format!("[{}] ", udp.interface_name.clone()),
+            Style::default().fg(Color::Green),
+        ));
+        spans.push(Span::styled(
+            "UDP",
+            Style::default().fg(Color::Yellow).bg(Color::Blue),
+        ));
+        spans.push(Span::styled(
+            " Packet: ",
+            Style::default().fg(Color::Yellow),
+        ));
+        spans.push(Span::styled(
+            udp.source.to_string(),
+            Style::default().fg(Color::Blue),
+        ));
+        spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(
+            udp.source_port.to_string(),
+            Style::default().fg(Color::Green),
+        ));
+        spans.push(Span::styled(" > ", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(
+            udp.destination.to_string(),
+            Style::default().fg(Color::Blue),
+        ));
+        spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(
+            udp.destination_port.to_string(),
+            Style::default().fg(Color::Green),
+        ));
+        spans.push(Span::styled(";", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(
+            " length: ",
+            Style::default().fg(Color::Yellow),
+        ));
+        spans.push(Span::styled(
+            format!("{}", udp.length),
+            Style::default().fg(Color::Red),
+        ));
+
+        spans
+    }
+
+    /// Formats a TCP packet into styled spans for table display
+    fn format_tcp_packet_row(tcp: &TCPPacketInfo) -> Vec<Span<'static>> {
+        let mut spans = vec![];
+
+        spans.push(Span::styled(
+            format!("[{}] ", tcp.interface_name.clone()),
+            Style::default().fg(Color::Green),
+        ));
+        spans.push(Span::styled(
+            "TCP",
+            Style::default().fg(Color::Black).bg(Color::Green),
+        ));
+        spans.push(Span::styled(
+            " Packet: ",
+            Style::default().fg(Color::Yellow),
+        ));
+        spans.push(Span::styled(
+            tcp.source.to_string(),
+            Style::default().fg(Color::Blue),
+        ));
+        spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(
+            tcp.source_port.to_string(),
+            Style::default().fg(Color::Green),
+        ));
+        spans.push(Span::styled(" > ", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(
+            tcp.destination.to_string(),
+            Style::default().fg(Color::Blue),
+        ));
+        spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(
+            tcp.destination_port.to_string(),
+            Style::default().fg(Color::Green),
+        ));
+        spans.push(Span::styled(";", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(
+            " length: ",
+            Style::default().fg(Color::Yellow),
+        ));
+        spans.push(Span::styled(
+            format!("{}", tcp.length),
+            Style::default().fg(Color::Red),
+        ));
+
+        spans
+    }
+
+    /// Formats an ARP packet into styled spans for table display
+    fn format_arp_packet_row(arp: &ARPPacketInfo) -> Vec<Span<'static>> {
+        let mut spans = vec![];
+
+        spans.push(Span::styled(
+            format!("[{}] ", arp.interface_name.clone()),
+            Style::default().fg(Color::Green),
+        ));
+        spans.push(Span::styled(
+            "ARP",
+            Style::default().fg(Color::Yellow).bg(Color::Red),
+        ));
+        spans.push(Span::styled(
+            " Packet: ",
+            Style::default().fg(Color::Yellow),
+        ));
+        spans.push(Span::styled(
+            arp.source_mac.to_string(),
+            Style::default().fg(Color::Green),
+        ));
+        spans.push(Span::styled(
+            arp.source_ip.to_string(),
+            Style::default().fg(Color::Blue),
+        ));
+        spans.push(Span::styled(" > ", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(
+            arp.destination_mac.to_string(),
+            Style::default().fg(Color::Green),
+        ));
+        spans.push(Span::styled(
+            arp.destination_ip.to_string(),
+            Style::default().fg(Color::Blue),
+        ));
+        spans.push(Span::styled(";", Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(
+            format!(" {:?}", arp.operation),
+            Style::default().fg(Color::Red),
+        ));
+
+        spans
+    }
+
+    /// Retrieves and filters packet data based on packet type and filter string,
+    /// then formats each packet into a table row with styled spans
     fn get_table_rows_by_packet_type<'a>(&mut self, packet_type: PacketTypeEnum) -> Vec<Row<'a>> {
         let f_str = self.filter_str.clone();
         let logs_data = self.get_array_by_packet_type(packet_type);
+
+        // Filter packets based on filter string
         let mut logs: Vec<(DateTime<Local>, PacketsInfoTypesEnum)> = vec![];
         for (d, p) in logs_data {
-            match p {
-                PacketsInfoTypesEnum::Icmp(log) => {
-                    if log.raw_str.contains(f_str.as_str()) {
-                        logs.push((d.to_owned(), p.to_owned()));
-                    }
-                }
-                PacketsInfoTypesEnum::Arp(log) => {
-                    if log.raw_str.contains(f_str.as_str()) {
-                        logs.push((d.to_owned(), p.to_owned()));
-                    }
-                }
-                PacketsInfoTypesEnum::Icmp6(log) => {
-                    if log.raw_str.contains(f_str.as_str()) {
-                        logs.push((d.to_owned(), p.to_owned()));
-                    }
-                }
-                PacketsInfoTypesEnum::Udp(log) => {
-                    if log.raw_str.contains(f_str.as_str()) {
-                        logs.push((d.to_owned(), p.to_owned()));
-                    }
-                }
-                PacketsInfoTypesEnum::Tcp(log) => {
-                    if log.raw_str.contains(f_str.as_str()) {
-                        logs.push((d.to_owned(), p.to_owned()));
-                    }
-                }
+            let matches_filter = match p {
+                PacketsInfoTypesEnum::Icmp(log) => log.raw_str.contains(f_str.as_str()),
+                PacketsInfoTypesEnum::Arp(log) => log.raw_str.contains(f_str.as_str()),
+                PacketsInfoTypesEnum::Icmp6(log) => log.raw_str.contains(f_str.as_str()),
+                PacketsInfoTypesEnum::Udp(log) => log.raw_str.contains(f_str.as_str()),
+                PacketsInfoTypesEnum::Tcp(log) => log.raw_str.contains(f_str.as_str()),
+            };
+
+            if matches_filter {
+                logs.push((d.to_owned(), p.to_owned()));
             }
         }
 
+        // Format each packet into a table row
         let rows: Vec<Row> = logs
             .iter()
             .map(|(time, log)| {
                 let t = time.format("%H:%M:%S").to_string();
-                let mut spans = vec![];
-                match log {
-                    // -----------------------------
-                    // -- ICMP
-                    PacketsInfoTypesEnum::Icmp(icmp) => {
-                        spans.push(Span::styled(
-                            format!("[{}] ", icmp.interface_name.clone()),
-                            Style::default().fg(Color::Green),
-                        ));
-                        spans.push(Span::styled(
-                            "ICMP",
-                            Style::default().fg(Color::Black).bg(Color::White),
-                        ));
-                        match icmp.icmp_type {
-                            IcmpTypes::EchoRequest => {
-                                spans.push(Span::styled(
-                                    " echo request ",
-                                    Style::default().fg(Color::Yellow),
-                                ));
-                            }
-                            IcmpTypes::EchoReply => {
-                                spans.push(Span::styled(
-                                    " echo reply ",
-                                    Style::default().fg(Color::Yellow),
-                                ));
-                            }
-                            _ => {}
-                        }
-                        spans.push(Span::styled(
-                            icmp.source.to_string(),
-                            Style::default().fg(Color::Blue),
-                        ));
-                        spans.push(Span::styled(" -> ", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(
-                            icmp.destination.to_string(),
-                            Style::default().fg(Color::Blue),
-                        ));
-                        spans.push(Span::styled("(seq=", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(
-                            format!("{:?}", icmp.seq.to_string()),
-                            Style::default().fg(Color::Green),
-                        ));
-                        spans.push(Span::styled(", ", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled("id=", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(
-                            format!("{:?}", icmp.id.to_string()),
-                            Style::default().fg(Color::Green),
-                        ));
-                        spans.push(Span::styled(")", Style::default().fg(Color::Yellow)));
-                    }
-                    // -----------------------------
-                    // -- ICMP6
-                    PacketsInfoTypesEnum::Icmp6(icmp) => {
-                        spans.push(Span::styled(
-                            format!("[{}] ", icmp.interface_name.clone()),
-                            Style::default().fg(Color::Green),
-                        ));
-                        spans.push(Span::styled(
-                            "ICMP6",
-                            Style::default().fg(Color::Red).bg(Color::Black),
-                        ));
 
-                        let mut icmp_type_str = " unknown ";
-                        match icmp.icmp_type {
-                            Icmpv6Types::EchoRequest => {
-                                icmp_type_str = " echo request ";
-                            }
-                            Icmpv6Types::EchoReply => {
-                                icmp_type_str = " echo reply ";
-                            }
-                            Icmpv6Types::NeighborAdvert => {
-                                icmp_type_str = " neighbor advert ";
-                            }
-                            Icmpv6Types::NeighborSolicit => {
-                                icmp_type_str = " neighbor solicit ";
-                            }
-                            Icmpv6Types::Redirect => {
-                                icmp_type_str = " redirect ";
-                            }
-                            _ => {}
-                        }
-                        spans.push(Span::styled(
-                            icmp_type_str,
-                            Style::default().fg(Color::Yellow),
-                        ));
+                let spans = match log {
+                    PacketsInfoTypesEnum::Icmp(icmp) => Self::format_icmp_packet_row(icmp),
+                    PacketsInfoTypesEnum::Icmp6(icmp6) => Self::format_icmp6_packet_row(icmp6),
+                    PacketsInfoTypesEnum::Udp(udp) => Self::format_udp_packet_row(udp),
+                    PacketsInfoTypesEnum::Tcp(tcp) => Self::format_tcp_packet_row(tcp),
+                    PacketsInfoTypesEnum::Arp(arp) => Self::format_arp_packet_row(arp),
+                };
 
-                        spans.push(Span::styled(
-                            icmp.source.to_string(),
-                            Style::default().fg(Color::Blue),
-                        ));
-                        spans.push(Span::styled(" -> ", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(
-                            icmp.destination.to_string(),
-                            Style::default().fg(Color::Blue),
-                        ));
-                        spans.push(Span::styled(", ", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(")", Style::default().fg(Color::Yellow)));
-                    }
-                    // -----------------------------
-                    // -- UDP
-                    PacketsInfoTypesEnum::Udp(udp) => {
-                        spans.push(Span::styled(
-                            format!("[{}] ", udp.interface_name.clone()),
-                            Style::default().fg(Color::Green),
-                        ));
-                        spans.push(Span::styled(
-                            "UDP",
-                            Style::default().fg(Color::Yellow).bg(Color::Blue),
-                        ));
-                        spans.push(Span::styled(
-                            " Packet: ",
-                            Style::default().fg(Color::Yellow),
-                        ));
-                        spans.push(Span::styled(
-                            udp.source.to_string(),
-                            Style::default().fg(Color::Blue),
-                        ));
-                        spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(
-                            udp.source_port.to_string(),
-                            Style::default().fg(Color::Green),
-                        ));
-                        spans.push(Span::styled(" > ", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(
-                            udp.destination.to_string(),
-                            Style::default().fg(Color::Blue),
-                        ));
-                        spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(
-                            udp.destination_port.to_string(),
-                            Style::default().fg(Color::Green),
-                        ));
-                        spans.push(Span::styled(";", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(
-                            " length: ",
-                            Style::default().fg(Color::Yellow),
-                        ));
-                        spans.push(Span::styled(
-                            format!("{}", udp.length),
-                            Style::default().fg(Color::Red),
-                        ));
-                    }
-                    // -----------------------------
-                    // -- TCP
-                    PacketsInfoTypesEnum::Tcp(tcp) => {
-                        spans.push(Span::styled(
-                            format!("[{}] ", tcp.interface_name.clone()),
-                            Style::default().fg(Color::Green),
-                        ));
-                        spans.push(Span::styled(
-                            "TCP",
-                            Style::default().fg(Color::Black).bg(Color::Green),
-                        ));
-                        spans.push(Span::styled(
-                            " Packet: ",
-                            Style::default().fg(Color::Yellow),
-                        ));
-                        spans.push(Span::styled(
-                            tcp.source.to_string(),
-                            Style::default().fg(Color::Blue),
-                        ));
-                        spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(
-                            tcp.source_port.to_string(),
-                            Style::default().fg(Color::Green),
-                        ));
-                        spans.push(Span::styled(" > ", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(
-                            tcp.destination.to_string(),
-                            Style::default().fg(Color::Blue),
-                        ));
-                        spans.push(Span::styled(":", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(
-                            tcp.destination_port.to_string(),
-                            Style::default().fg(Color::Green),
-                        ));
-                        spans.push(Span::styled(";", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(
-                            " length: ",
-                            Style::default().fg(Color::Yellow),
-                        ));
-                        spans.push(Span::styled(
-                            format!("{}", tcp.length),
-                            Style::default().fg(Color::Red),
-                        ));
-                    }
-                    // -----------------------------
-                    // -- ARP
-                    PacketsInfoTypesEnum::Arp(arp) => {
-                        spans.push(Span::styled(
-                            format!("[{}] ", arp.interface_name.clone()),
-                            Style::default().fg(Color::Green),
-                        ));
-                        spans.push(Span::styled(
-                            "ARP",
-                            Style::default().fg(Color::Yellow).bg(Color::Red),
-                        ));
-                        spans.push(Span::styled(
-                            " Packet: ",
-                            Style::default().fg(Color::Yellow),
-                        ));
-                        spans.push(Span::styled(
-                            arp.source_mac.to_string(),
-                            Style::default().fg(Color::Green),
-                        ));
-                        spans.push(Span::styled(
-                            arp.source_ip.to_string(),
-                            Style::default().fg(Color::Blue),
-                        ));
-                        spans.push(Span::styled(" > ", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(
-                            arp.destination_mac.to_string(),
-                            Style::default().fg(Color::Green),
-                        ));
-                        spans.push(Span::styled(
-                            arp.destination_ip.to_string(),
-                            Style::default().fg(Color::Blue),
-                        ));
-                        spans.push(Span::styled(";", Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(
-                            format!(" {:?}", arp.operation),
-                            Style::default().fg(Color::Red),
-                        ));
-                    }
-                }
                 let line = Line::from(spans);
                 Row::new(vec![
                     Cell::from(Span::styled(t, Style::default().fg(Color::Cyan))),

@@ -136,7 +136,7 @@ pub fn initialize_panic_handler() -> Result<()> {
 
         #[cfg(not(debug_assertions))]
         {
-            use human_panic::{handle_dump, print_msg, Metadata};
+            use human_panic::{handle_dump, print_msg, metadata, Metadata};
             let meta = metadata!()
                 .authors("Chleba <chlebik@gmail.com>")
                 .homepage("https://github.com/Chleba/netscanner")
