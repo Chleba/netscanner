@@ -168,7 +168,11 @@ impl Discovery {
         if let Some(cidr) = self.cidr {
             self.is_scanning = true;
 
-            let tx = self.action_tx.clone().unwrap();
+            // Early return if action_tx is not available
+            let Some(tx) = self.action_tx.clone() else {
+                self.is_scanning = false;
+                return;
+            };
             let semaphore = Arc::new(Semaphore::new(POOL_SIZE));
 
             self.task = tokio::spawn(async move {
@@ -179,7 +183,12 @@ impl Discovery {
                         let s = semaphore.clone();
                         let tx = tx.clone();
                         let c = || async move {
-                            let _permit = s.acquire().await.unwrap();
+                            // Semaphore acquire should not fail in normal operation
+                            // If it does, we skip this IP and continue
+                            let Ok(_permit) = s.acquire().await else {
+                                let _ = tx.send(Action::CountIp);
+                                return;
+                            };
                             let client =
                                 Client::new(&Config::default()).expect("Cannot create client");
                             let payload = [0; 56];
@@ -231,14 +240,18 @@ impl Discovery {
     }
 
     fn process_ip(&mut self, ip: &str) {
+        // Parse IP address - should always succeed as it comes from successful ping
+        let Ok(hip) = ip.parse::<IpAddr>() else {
+            // If parsing fails, skip this IP
+            return;
+        };
+
+        let host = lookup_addr(&hip).unwrap_or_default();
+
         if let Some(n) = self.scanned_ips.iter_mut().find(|item| item.ip == ip) {
-            let hip: IpAddr = ip.parse().unwrap();
-            let host = lookup_addr(&hip).unwrap_or_default();
             n.hostname = host;
             n.ip = ip.to_string();
         } else {
-            let hip: IpAddr = ip.parse().unwrap();
-            let host = lookup_addr(&hip).unwrap_or_default();
             self.scanned_ips.push(ScannedIp {
                 ip: ip.to_string(),
                 mac: String::new(),
@@ -246,10 +259,15 @@ impl Discovery {
                 vendor: String::new(),
             });
 
+            // Sort IPs numerically - skip entries that can't be parsed
             self.scanned_ips.sort_by(|a, b| {
-                let a_ip: Ipv4Addr = a.ip.parse::<Ipv4Addr>().unwrap();
-                let b_ip: Ipv4Addr = b.ip.parse::<Ipv4Addr>().unwrap();
-                a_ip.partial_cmp(&b_ip).unwrap()
+                match (a.ip.parse::<Ipv4Addr>(), b.ip.parse::<Ipv4Addr>()) {
+                    (Ok(a_ip), Ok(b_ip)) => a_ip.cmp(&b_ip),
+                    // If parsing fails, maintain current order
+                    (Ok(_), Err(_)) => std::cmp::Ordering::Less,
+                    (Err(_), Ok(_)) => std::cmp::Ordering::Greater,
+                    (Err(_), Err(_)) => std::cmp::Ordering::Equal,
+                }
             });
         }
 
@@ -600,11 +618,9 @@ impl Component for Discovery {
             if let Action::ModeChange(mode) = action {
                 // -- when scanning don't switch to input mode
                 if self.is_scanning && mode == Mode::Input {
-                    self.action_tx
-                        .clone()
-                        .unwrap()
-                        .send(Action::ModeChange(Mode::Normal))
-                        .unwrap();
+                    if let Some(tx) = &self.action_tx {
+                        let _ = tx.clone().send(Action::ModeChange(Mode::Normal));
+                    }
                     return Ok(None);
                 }
 
@@ -612,18 +628,16 @@ impl Component for Discovery {
                     // self.input.reset();
                     self.cidr_error = false;
                 }
-                self.action_tx
-                    .clone()
-                    .unwrap()
-                    .send(Action::AppModeChange(mode))
-                    .unwrap();
+                if let Some(tx) = &self.action_tx {
+                    let _ = tx.clone().send(Action::AppModeChange(mode));
+                }
                 self.mode = mode;
             }
         }
 
         // -- tab change
         if let Action::TabChange(tab) = action {
-            self.tab_changed(tab).unwrap();
+            let _ = self.tab_changed(tab);
         }
 
         Ok(None)
