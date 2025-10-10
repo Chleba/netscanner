@@ -36,10 +36,15 @@ use rand::random;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
-// Concurrent ping scan pool size
-// Limits the number of concurrent ping operations to avoid overwhelming the network
-// or exhausting system resources. 32 provides good throughput while remaining conservative.
-const POOL_SIZE: usize = 32;
+// Default concurrent ping scan pool size
+// Used as fallback if CPU detection fails or for single-core systems
+const DEFAULT_POOL_SIZE: usize = 32;
+
+// Minimum concurrent operations to maintain reasonable performance
+const MIN_POOL_SIZE: usize = 16;
+
+// Maximum concurrent operations to prevent resource exhaustion
+const MAX_POOL_SIZE: usize = 64;
 
 // Ping timeout in seconds
 // Time to wait for ICMP echo reply before considering host unreachable
@@ -109,6 +114,21 @@ impl Discovery {
             spinner_index: 0,
             dns_cache: DnsCache::new(),
         }
+    }
+
+    // Calculate optimal pool size based on available CPU cores
+    // Returns a value between MIN_POOL_SIZE and MAX_POOL_SIZE
+    fn get_pool_size() -> usize {
+        // Try to detect number of CPU cores
+        let num_cpus = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4); // Default to 4 if detection fails
+
+        // Use 2x CPU cores as starting point for I/O-bound operations
+        let calculated = num_cpus * 2;
+
+        // Clamp to min/max bounds
+        calculated.clamp(MIN_POOL_SIZE, MAX_POOL_SIZE)
     }
 
     pub fn get_scanned_ips(&self) -> &Vec<ScannedIp> {
@@ -190,7 +210,11 @@ impl Discovery {
                 self.is_scanning = false;
                 return;
             };
-            let semaphore = Arc::new(Semaphore::new(POOL_SIZE));
+
+            // Calculate optimal pool size based on system resources
+            let pool_size = Self::get_pool_size();
+            log::debug!("Using pool size of {} for discovery scan", pool_size);
+            let semaphore = Arc::new(Semaphore::new(pool_size));
 
             self.task = tokio::spawn(async move {
                 log::debug!("Starting CIDR scan task");
