@@ -436,12 +436,17 @@ impl PacketDump {
         ) {
             Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
             Ok(_) => {
-                let _ = tx.try_send(Action::Error(
-                    "Unknown or unsupported channel type.\n\
+                let _ = tx.try_send(Action::Error(format!(
+                    "Failed to create packet capture channel on interface '{}'.\n\
                     \n\
-                    The network interface does not support the required packet capture mode.\n\
-                    Please try a different interface.".into()
-                ));
+                    The network interface does not support the required Ethernet packet capture mode.\n\
+                    This usually indicates:\n\
+                    - Interface is not a standard Ethernet adapter (e.g., may be a tunnel, loopback, or wireless)\n\
+                    - Interface does not support Layer 2 packet capture\n\
+                    \n\
+                    Please try selecting a different network interface.",
+                    interface.name
+                )));
                 return;
             }
             Err(e) => {

@@ -163,7 +163,10 @@ impl Tui {
         self.task.abort();
       }
       if counter > 100 {
-        log::error!("Failed to abort task in 100 milliseconds for unknown reason");
+        log::error!(
+          "TUI event task did not stop gracefully within 100ms timeout. \
+          This may indicate the event loop is blocked or unresponsive."
+        );
         break;
       }
     }

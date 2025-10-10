@@ -57,7 +57,11 @@ impl Config {
       }
     }
     if !found_config {
-      log::error!("No configuration file found. Application may not behave as expected");
+      log::warn!(
+        "No configuration file found in {:?}. Using default configuration. \
+        Supported formats: config.json5, config.json, config.yaml, config.toml, config.ini",
+        config_dir
+      );
     }
 
     let mut cfg: Self = builder.build()?.try_deserialize()?;

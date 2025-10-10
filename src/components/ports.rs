@@ -226,7 +226,10 @@ impl Ports {
 
             // Report scan completion
             if let Err(e) = tx.try_send(Action::PortScanDone(index)) {
-                log::error!("Failed to send port scan completion: {:?}", e);
+                log::error!(
+                    "Failed to send port scan completion notification for {}: {:?}",
+                    ip, e
+                );
             }
             log::debug!("Port scan completed for IP: {}", ip);
         });
@@ -238,7 +241,10 @@ impl Ports {
         if let Ok(Ok(_)) = tokio::time::timeout(timeout, TcpStream::connect(&soc_addr)).await {
             // Successfully connected to port
             if let Err(e) = tx.try_send(Action::PortScan(index, port)) {
-                log::error!("Failed to send open port notification for {}:{}: {:?}", ip, port, e);
+                log::error!(
+                    "Failed to send open port notification for {}:{} - action channel may be full or closed: {:?}",
+                    ip, port, e
+                );
             }
         }
     }

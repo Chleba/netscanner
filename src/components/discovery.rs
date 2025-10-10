@@ -263,13 +263,19 @@ impl Discovery {
                             // Task completed successfully
                         }
                         Err(e) if e.is_cancelled() => {
-                            log::debug!("Scan task was cancelled");
+                            log::debug!("Discovery scan task was cancelled for CIDR range");
                         }
                         Err(e) if e.is_panic() => {
-                            log::error!("Scan task panicked: {:?}", e);
+                            log::error!(
+                                "Discovery scan task panicked while scanning CIDR range: {:?}",
+                                e
+                            );
                         }
                         Err(e) => {
-                            log::error!("Scan task failed: {:?}", e);
+                            log::error!(
+                                "Discovery scan task failed while scanning CIDR range: {:?}",
+                                e
+                            );
                         }
                     }
                 }
