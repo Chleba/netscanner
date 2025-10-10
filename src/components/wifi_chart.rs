@@ -18,6 +18,8 @@ use crate::{
 pub struct WifiDataset {
     ssid: String,
     data: MaxSizeVec<(f64, f64)>,
+    // Cache for rendering - converted from VecDeque to Vec
+    cached_data: Vec<(f64, f64)>,
     color: Color,
 }
 
@@ -65,6 +67,7 @@ impl WifiChart {
                 self.wifi_datasets.push(WifiDataset {
                     ssid: w.ssid.clone(),
                     data: MaxSizeVec::new(100),
+                    cached_data: Vec::new(),
                     color: w.color,
                 });
             }
@@ -73,16 +76,20 @@ impl WifiChart {
         self.signal_tick[1] += 1.0;
     }
 
-    pub fn make_chart(&self) -> Chart<'_> {
+    pub fn make_chart(&mut self) -> Chart<'_> {
+        // First, update all cached data from VecDeque to Vec
+        for d in &mut self.wifi_datasets {
+            d.cached_data = d.data.get_vec();
+        }
+
         let mut datasets = Vec::new();
         for d in &self.wifi_datasets {
-            let d_data = &d.data.get_vec();
             let dataset = Dataset::default()
                 .name(&*d.ssid)
                 .marker(symbols::Marker::Dot)
                 .style(Style::default().fg(d.color))
                 .graph_type(GraphType::Line)
-                .data(d_data);
+                .data(&d.cached_data);
             datasets.push(dataset);
         }
 
