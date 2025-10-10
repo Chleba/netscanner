@@ -97,6 +97,7 @@ tui-scrollview = "0.4.0"
 anyhow = "1.0.86"
 http_req = "0.13.3"
 zip = "2.1.6"
+sha2 = "0.10.8"
 clap = { version = "4.5.13", features = ["derive"] }
 clap-verbosity-flag = "2.2.1"
 clap_complete = "4.5.12"

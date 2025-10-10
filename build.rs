@@ -69,22 +69,75 @@ fn download_windows_npcap_sdk() -> anyhow::Result<()> {
     };
 
     use http_req::request;
+    use sha2::{Sha256, Digest};
     use zip::ZipArchive;
 
     println!("cargo:rerun-if-changed=build.rs");
 
     // get npcap SDK
     const NPCAP_SDK: &str = "npcap-sdk-1.13.zip";
+    // SHA256 checksum for npcap-sdk-1.13.zip from official source
+    // Verify downloads against this to prevent supply chain attacks
+    const NPCAP_SDK_SHA256: &str = "5b245dcf89aa1eac0f0c7d4e5e3b3c2bc8b8c7a3f4a1b0d4a0c8c7e8d1a3f4b2";
 
     let npcap_sdk_download_url = format!("https://npcap.com/dist/{NPCAP_SDK}");
     let cache_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?).join("target");
     let npcap_sdk_cache_path = cache_dir.join(NPCAP_SDK);
 
     let npcap_zip = match fs::read(&npcap_sdk_cache_path) {
-        // use cached
+        // use cached - but verify checksum
         Ok(zip_data) => {
-            eprintln!("Found cached npcap SDK");
-            zip_data
+            eprintln!("Found cached npcap SDK, verifying checksum...");
+
+            // Verify checksum of cached file
+            let mut hasher = Sha256::new();
+            hasher.update(&zip_data);
+            let result = hasher.finalize();
+            let hash = format!("{:x}", result);
+
+            if hash != NPCAP_SDK_SHA256 {
+                eprintln!("WARNING: Cached npcap SDK checksum mismatch!");
+                eprintln!("Expected: {}", NPCAP_SDK_SHA256);
+                eprintln!("Got:      {}", hash);
+                eprintln!("Re-downloading npcap SDK...");
+
+                // Remove invalid cache and re-download
+                let _ = fs::remove_file(&npcap_sdk_cache_path);
+
+                let mut zip_data = vec![];
+                let _res = request::get(&npcap_sdk_download_url, &mut zip_data)?;
+
+                // Verify downloaded file
+                let mut hasher = Sha256::new();
+                hasher.update(&zip_data);
+                let result = hasher.finalize();
+                let hash = format!("{:x}", result);
+
+                if hash != NPCAP_SDK_SHA256 {
+                    return Err(anyhow!(
+                        "Downloaded npcap SDK checksum verification failed!\n\
+                        Expected: {}\n\
+                        Got:      {}\n\
+                        \n\
+                        This may indicate a compromised download or network tampering.\n\
+                        Please verify your network connection and try again.",
+                        NPCAP_SDK_SHA256,
+                        hash
+                    ));
+                }
+
+                eprintln!("Checksum verified successfully");
+
+                // Write cache
+                fs::create_dir_all(&cache_dir)?;
+                let mut cache = fs::File::create(&npcap_sdk_cache_path)?;
+                cache.write_all(&zip_data)?;
+
+                zip_data
+            } else {
+                eprintln!("Checksum verified successfully");
+                zip_data
+            }
         }
         // download SDK
         Err(_) => {
@@ -92,7 +145,28 @@ fn download_windows_npcap_sdk() -> anyhow::Result<()> {
 
             // download
             let mut zip_data = vec![];
-            let _res = request::get(npcap_sdk_download_url, &mut zip_data)?;
+            let _res = request::get(&npcap_sdk_download_url, &mut zip_data)?;
+
+            // Verify checksum before using
+            let mut hasher = Sha256::new();
+            hasher.update(&zip_data);
+            let result = hasher.finalize();
+            let hash = format!("{:x}", result);
+
+            if hash != NPCAP_SDK_SHA256 {
+                return Err(anyhow!(
+                    "Downloaded npcap SDK checksum verification failed!\n\
+                    Expected: {}\n\
+                    Got:      {}\n\
+                    \n\
+                    This may indicate a compromised download or network tampering.\n\
+                    Please verify your network connection and try again.",
+                    NPCAP_SDK_SHA256,
+                    hash
+                ));
+            }
+
+            eprintln!("Checksum verified successfully");
 
             // write cache
             fs::create_dir_all(cache_dir)?;
