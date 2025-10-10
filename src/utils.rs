@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
 use directories::ProjectDirs;
-use human_panic::metadata;
 use lazy_static::lazy_static;
 use std::net::Ipv4Addr;
 use tracing::error;

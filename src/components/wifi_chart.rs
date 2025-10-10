@@ -2,10 +2,7 @@ use crate::components::wifi_scan::WifiInfo;
 use crate::utils::MaxSizeVec;
 use chrono::Timelike;
 use color_eyre::eyre::Result;
-use pnet::datalink::{self, NetworkInterface};
 use ratatui::{prelude::*, widgets::*};
-use std::collections::HashMap;
-use std::process::{Command, Output};
 use std::time::Instant;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -26,7 +23,7 @@ pub struct WifiDataset {
 
 pub struct WifiChart {
     action_tx: Option<UnboundedSender<Action>>,
-    last_update_time: Instant,
+    _last_update_time: Instant,
     wifi_datasets: Vec<WifiDataset>,
     signal_tick: [f64; 2],
     show_graph: bool,
@@ -43,7 +40,7 @@ impl WifiChart {
         Self {
             show_graph: false,
             action_tx: None,
-            last_update_time: Instant::now(),
+            _last_update_time: Instant::now(),
             wifi_datasets: Vec::new(),
             signal_tick: [0.0, 40.0],
         }

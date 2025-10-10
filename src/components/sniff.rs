@@ -1,27 +1,18 @@
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use dns_lookup::{lookup_addr, lookup_host};
+use dns_lookup::lookup_addr;
 
 use ipnetwork::IpNetwork;
-use pnet::{
-    datalink::NetworkInterface,
-    packet::{
-        arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
-        ethernet::{EtherTypes, MutableEthernetPacket},
-        MutablePacket, Packet,
-    },
-};
 use ratatui::style::Stylize;
 
 use ratatui::{prelude::*, widgets::*};
 use std::net::IpAddr;
-use tokio::sync::mpsc::{self, UnboundedSender};
-use tui_scrollview::{ScrollView, ScrollViewState};
+use tokio::sync::mpsc::UnboundedSender;
+use tui_scrollview::ScrollViewState;
 
 use super::Component;
 use crate::{
     action::Action,
-    config::DEFAULT_BORDER_STYLE,
     enums::{PacketTypeEnum, PacketsInfoTypesEnum, TabsEnum},
     layout::{get_vertical_layout, HORIZONTAL_CONSTRAINTS},
     tui::Frame,
@@ -40,8 +31,8 @@ pub struct IPTraffic {
 pub struct Sniffer {
     active_tab: TabsEnum,
     action_tx: Option<UnboundedSender<Action>>,
-    list_state: ListState,
-    scrollbar_state: ScrollbarState,
+    _list_state: ListState,
+    _scrollbar_state: ScrollbarState,
     traffic_ips: Vec<IPTraffic>,
     scrollview_state: ScrollViewState,
     udp_sum: f64,
@@ -60,8 +51,8 @@ impl Sniffer {
         Self {
             active_tab: TabsEnum::Discovery,
             action_tx: None,
-            list_state: ListState::default().with_selected(Some(0)),
-            scrollbar_state: ScrollbarState::new(0),
+            _list_state: ListState::default().with_selected(Some(0)),
+            _scrollbar_state: ScrollbarState::new(0),
             traffic_ips: Vec::new(),
             scrollview_state: ScrollViewState::new(),
             udp_sum: 0.0,

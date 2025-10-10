@@ -1,4 +1,4 @@
-use ratatui::{prelude::*, widgets::*};
+use ratatui::prelude::*;
 
 const VERTICAL_TOP_PERCENT: u16 = 40;
 const VERTICAL_BOTTOM_PERCENT: u16 = 60;

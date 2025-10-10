@@ -1,4 +1,3 @@
-use ipnetwork::IpNetwork;
 use pnet::{
     datalink::{self, NetworkInterface},
     util::MacAddr,
@@ -15,7 +14,6 @@ use crate::{
     action::Action,
     config::DEFAULT_BORDER_STYLE,
     layout::{get_horizontal_layout, get_vertical_layout},
-    mode::Mode,
     tui::Frame,
 };
 

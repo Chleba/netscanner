@@ -1,9 +1,8 @@
-use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use dns_lookup::{lookup_addr, lookup_host};
+use dns_lookup::lookup_addr;
 use futures::StreamExt;
-use futures::{future::join_all, stream};
+use futures::stream;
 
 use ratatui::style::Stylize;
 
@@ -11,11 +10,10 @@ use core::str;
 use port_desc::{PortDescription, TransportProtocol};
 use ratatui::{prelude::*, widgets::*};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::{string, time::Duration};
+use std::time::Duration;
 use tokio::{
     net::TcpStream,
-    sync::mpsc::{self, UnboundedSender},
-    task::{self, JoinHandle},
+    sync::mpsc::UnboundedSender,
 };
 
 use super::Component;

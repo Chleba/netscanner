@@ -1,8 +1,7 @@
-use chrono::{DateTime, Local, Timelike};
+use chrono::{DateTime, Local};
 use config::Source;
 use std::time::Instant;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio_wifiscanner::Wifi;
 
 use color_eyre::eyre::Result;
 use ratatui::{prelude::*, widgets::*};
@@ -12,7 +11,6 @@ use crate::{
     action::Action,
     config::DEFAULT_BORDER_STYLE,
     layout::{get_horizontal_layout, get_vertical_layout},
-    mode::Mode,
     tui::Frame,
 };
 

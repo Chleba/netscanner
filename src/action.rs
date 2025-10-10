@@ -1,12 +1,10 @@
 use chrono::{DateTime, Local};
 use pnet::datalink::NetworkInterface;
-use pnet::util::MacAddr;
-use ratatui::text::Line;
 use serde::{
     de::{self, Deserializer, Visitor},
-    Deserialize, Serialize,
+    Deserialize,
 };
-use std::{fmt, net::Ipv4Addr};
+use std::fmt;
 
 use crate::{
     components::{packetdump::ArpPacketData, wifi_scan::WifiInfo},

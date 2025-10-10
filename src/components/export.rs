@@ -1,8 +1,7 @@
 use chrono::{DateTime, Local};
 use color_eyre::{eyre::Result, owo_colors::OwoColorize};
-use crossterm::style::Stylize;
 use csv::Writer;
-use ratatui::{prelude::*, widgets::*};
+use ratatui::prelude::*;
 use std::env;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -14,7 +13,7 @@ pub struct Export {
     action_tx: Option<UnboundedSender<Action>>,
     home_dir: String,
     export_done: bool,
-    export_failed: bool,
+    _export_failed: bool,
 }
 
 impl Export {
@@ -23,7 +22,7 @@ impl Export {
             action_tx: None,
             home_dir: String::new(),
             export_done: false,
-            export_failed: false,
+            _export_failed: false,
         }
     }
 
@@ -42,7 +41,7 @@ impl Export {
         if std::fs::metadata(self.home_dir.clone()).is_err()
             && std::fs::create_dir_all(self.home_dir.clone()).is_err()
         {
-            self.export_failed = true;
+            self._export_failed = true;
         }
     }
 
@@ -79,7 +78,7 @@ impl Export {
         // -- create .netscanner folder if it doesn't exist
         if std::fs::metadata(self.home_dir.clone()).is_err() {
             if std::fs::create_dir_all(self.home_dir.clone()).is_err() {
-                self.export_failed = true;
+                self._export_failed = true;
             }
         }
     }

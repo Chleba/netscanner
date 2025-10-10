@@ -2,12 +2,11 @@ use chrono::{DateTime, Local};
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::{KeyCode, KeyEvent};
-use ipnetwork::Ipv4Network;
 
 use pnet::datalink::{Channel, ChannelType, NetworkInterface};
 use pnet::packet::icmpv6::Icmpv6Types;
 use pnet::packet::{
-    arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
+    arp::ArpPacket,
     ethernet::{EtherTypes, EthernetPacket, MutableEthernetPacket},
     icmp::{echo_reply, echo_request, IcmpPacket, IcmpTypes},
     icmpv6::Icmpv6Packet,
@@ -15,8 +14,7 @@ use pnet::packet::{
     ipv4::Ipv4Packet,
     ipv6::Ipv6Packet,
     tcp::TcpPacket,
-    udp::UdpPacket,
-    MutablePacket, Packet,
+    udp::UdpPacket, Packet,
 };
 use pnet::util::MacAddr;
 
@@ -24,7 +22,6 @@ use ratatui::layout::Position;
 use ratatui::style::Stylize;
 use ratatui::{prelude::*, widgets::*};
 use std::{
-    collections::HashMap,
     net::{IpAddr, Ipv4Addr},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -33,10 +30,7 @@ use std::{
     thread::{self, JoinHandle},
     time::Duration,
 };
-use tokio::{
-    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
-    task,
-};
+use tokio::sync::mpsc::UnboundedSender;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
@@ -44,7 +38,6 @@ use super::{Component, Frame};
 use crate::{
     action::Action,
     config::DEFAULT_BORDER_STYLE,
-    config::{Config, KeyBindings},
     enums::{
         ARPPacketInfo, ICMP6PacketInfo, ICMPPacketInfo, PacketTypeEnum, PacketsInfoTypesEnum,
         TCPPacketInfo, TabsEnum, UDPPacketInfo,
@@ -69,7 +62,7 @@ pub struct PacketDump {
     active_tab: TabsEnum,
     action_tx: Option<UnboundedSender<Action>>,
     loop_thread: Option<JoinHandle<()>>,
-    should_quit: bool,
+    _should_quit: bool,
     dump_paused: Arc<AtomicBool>,
     dump_stop: Arc<AtomicBool>,
     active_interface: Option<NetworkInterface>,
@@ -101,7 +94,7 @@ impl PacketDump {
             active_tab: TabsEnum::Discovery,
             action_tx: None,
             loop_thread: None,
-            should_quit: false,
+            _should_quit: false,
             dump_paused: Arc::new(AtomicBool::new(false)),
             dump_stop: Arc::new(AtomicBool::new(false)),
             active_interface: None,

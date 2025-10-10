@@ -1,29 +1,21 @@
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use dns_lookup::{lookup_addr, lookup_host};
-use futures::future::join_all;
+use dns_lookup::lookup_addr;
 
-use pnet::datalink::{Channel, NetworkInterface};
-use pnet::packet::{
-    arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
-    ethernet::{EtherTypes, MutableEthernetPacket},
-    MutablePacket, Packet,
-};
-use pnet::util::MacAddr;
+use pnet::datalink::NetworkInterface;
 use tokio::sync::Semaphore;
 
 use core::str;
 use ratatui::layout::Position;
 use ratatui::{prelude::*, widgets::*};
 use std::net::{IpAddr, Ipv4Addr};
-use std::string;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
-use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence, ICMP};
+use std::time::Duration;
+use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence};
 use tokio::{
-    sync::mpsc::{self, UnboundedSender},
-    task::{self, JoinHandle},
+    sync::mpsc::UnboundedSender,
+    task::JoinHandle,
 };
 
 use super::Component;
@@ -125,69 +117,6 @@ impl Discovery {
     fn reset_scan(&mut self) {
         self.scanned_ips.clear();
         self.ip_num = 0;
-    }
-
-    fn send_arp(&mut self, target_ip: Ipv4Addr) {
-        if let Some(active_interface) = &self.active_interface {
-            if let Some(active_interface_mac) = active_interface.mac {
-                let ipv4 = active_interface.ips.iter().find(|f| f.is_ipv4()).unwrap();
-                let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
-
-                let (mut sender, _) =
-                    match pnet::datalink::channel(active_interface, Default::default()) {
-                        Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
-                        Ok(_) => {
-                            if let Some(tx_action) = &self.action_tx {
-                                tx_action
-                                    .clone()
-                                    .send(Action::Error(
-                                        "Unknown or unsupported channel type".into(),
-                                    ))
-                                    .unwrap();
-                            }
-                            return;
-                        }
-                        Err(e) => {
-                            if let Some(tx_action) = &self.action_tx {
-                                tx_action
-                                    .clone()
-                                    .send(Action::Error(format!(
-                                        "Unable to create datalink channel: {e}"
-                                    )))
-                                    .unwrap();
-                            }
-                            return;
-                        }
-                    };
-
-                let mut ethernet_buffer = [0u8; 42];
-                let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer).unwrap();
-
-                ethernet_packet.set_destination(MacAddr::broadcast());
-                ethernet_packet.set_source(active_interface_mac);
-                ethernet_packet.set_ethertype(EtherTypes::Arp);
-
-                let mut arp_buffer = [0u8; 28];
-                let mut arp_packet = MutableArpPacket::new(&mut arp_buffer).unwrap();
-
-                arp_packet.set_hardware_type(ArpHardwareTypes::Ethernet);
-                arp_packet.set_protocol_type(EtherTypes::Ipv4);
-                arp_packet.set_hw_addr_len(6);
-                arp_packet.set_proto_addr_len(4);
-                arp_packet.set_operation(ArpOperations::Request);
-                arp_packet.set_sender_hw_addr(active_interface_mac);
-                arp_packet.set_sender_proto_addr(source_ip);
-                arp_packet.set_target_hw_addr(MacAddr::zero());
-                arp_packet.set_target_proto_addr(target_ip);
-
-                ethernet_packet.set_payload(arp_packet.packet_mut());
-
-                sender
-                    .send_to(ethernet_packet.packet(), None)
-                    .unwrap()
-                    .unwrap();
-            }
-        }
     }
 
     // fn scan(&mut self) {
