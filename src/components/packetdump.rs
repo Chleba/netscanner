@@ -187,7 +187,7 @@ impl PacketDump {
                         echo_reply_packet.get_identifier()
                     );
 
-                    action_tx.try_send(Action::PacketDump(
+                    let _ = action_tx.try_send(Action::PacketDump(
                         Local::now(),
                         PacketsInfoTypesEnum::Icmp(ICMPPacketInfo {
                             interface_name: interface_name.to_string(),
@@ -216,7 +216,7 @@ impl PacketDump {
                         echo_request_packet.get_identifier()
                     );
 
-                    action_tx.try_send(Action::PacketDump(
+                    let _ = action_tx.try_send(Action::PacketDump(
                         Local::now(),
                         PacketsInfoTypesEnum::Icmp(ICMPPacketInfo {
                             interface_name: interface_name.to_string(),
@@ -252,7 +252,7 @@ impl PacketDump {
                 icmpv6_packet.get_icmpv6_type()
             );
 
-            action_tx.try_send(Action::PacketDump(
+            let _ = action_tx.try_send(Action::PacketDump(
                 Local::now(),
                 PacketsInfoTypesEnum::Icmp6(ICMP6PacketInfo {
                     interface_name: interface_name.to_string(),
@@ -262,8 +262,7 @@ impl PacketDump {
                     raw_str,
                 }),
                 PacketTypeEnum::Icmp6,
-            ))
-            .unwrap();
+            ));
         }
     }
 

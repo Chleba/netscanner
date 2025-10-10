@@ -134,7 +134,7 @@ impl Sniffer {
             self.traffic_sorted_cache.sort_by(|a, b| {
                 let a_sum = a.download + a.upload;
                 let b_sum = b.download + b.upload;
-                b_sum.partial_cmp(&a_sum).unwrap()
+                b_sum.partial_cmp(&a_sum).unwrap_or(std::cmp::Ordering::Equal)
             });
             self.cache_dirty = false;
         }
@@ -360,7 +360,7 @@ impl Component for Sniffer {
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         // -- tab change
         if let Action::TabChange(tab) = action {
-            self.tab_changed(tab).unwrap();
+            self.tab_changed(tab)?;
         }
 
         if self.active_tab == TabsEnum::Traffic {

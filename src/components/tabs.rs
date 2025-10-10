@@ -82,8 +82,10 @@ impl Tabs {
     fn next_tab(&mut self) {
         self.tab_index = (self.tab_index + 1) % TabsEnum::COUNT;
         if let Some(ref action_tx) = self.action_tx {
-            let tab_enum = TabsEnum::iter().nth(self.tab_index).unwrap();
-            action_tx.try_send(Action::TabChange(tab_enum)).unwrap();
+            // Safe: tab_index is always < TabsEnum::COUNT
+            if let Some(tab_enum) = TabsEnum::iter().nth(self.tab_index) {
+                let _ = action_tx.try_send(Action::TabChange(tab_enum));
+            }
         }
     }
 }
