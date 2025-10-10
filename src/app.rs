@@ -204,11 +204,18 @@ impl App {
                     Action::Resize(w, h) => {
                         tui.resize(Rect::new(0, 0, w, h))?;
                         tui.draw(|f| {
-                            for component in self.components.iter_mut() {
+                            for (idx, component) in self.components.iter_mut().enumerate() {
                                 let r = component.draw(f, f.area());
                                 if let Err(e) = r {
                                     action_tx
-                                        .try_send(Action::Error(format!("Failed to draw: {:?}", e)))
+                                        .try_send(Action::Error(format!(
+                                            "Failed to render component {} during terminal resize ({}x{}).\n\
+                                            \n\
+                                            Error: {:?}\n\
+                                            \n\
+                                            The application will now exit to prevent further issues.",
+                                            idx, w, h, e
+                                        )))
                                         .unwrap();
                                 }
                             }
@@ -216,11 +223,18 @@ impl App {
                     }
                     Action::Render => {
                         tui.draw(|f| {
-                            for component in self.components.iter_mut() {
+                            for (idx, component) in self.components.iter_mut().enumerate() {
                                 let r = component.draw(f, f.area());
                                 if let Err(e) = r {
                                     action_tx
-                                        .try_send(Action::Error(format!("Failed to draw: {:?}", e)))
+                                        .try_send(Action::Error(format!(
+                                            "Failed to render component {} during frame update.\n\
+                                            \n\
+                                            Error: {:?}\n\
+                                            \n\
+                                            The application will now exit to prevent further issues.",
+                                            idx, e
+                                        )))
                                         .unwrap();
                                 }
                             }
