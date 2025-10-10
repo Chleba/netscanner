@@ -163,7 +163,10 @@ impl WifiScan {
     }
 
     pub fn scan(&mut self) {
-        let tx = self.action_tx.clone().unwrap();
+        let Some(tx) = self.action_tx.clone() else {
+            log::error!("Cannot scan WiFi: action channel not initialized");
+            return;
+        };
         tokio::spawn(async move {
             let networks = tokio_wifiscanner::scan().await;
             match networks {
@@ -217,7 +220,7 @@ impl WifiScan {
         }
         // -- sort wifi networks by it's signal strength
         self.wifis
-            .sort_by(|a, b| b.signal.partial_cmp(&a.signal).unwrap());
+            .sort_by(|a, b| b.signal.partial_cmp(&a.signal).unwrap_or(std::cmp::Ordering::Equal));
     }
 
     fn app_tick(&mut self) -> Result<()> {

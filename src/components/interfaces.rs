@@ -80,10 +80,12 @@ impl Interfaces {
 
     fn send_active_interface(&mut self) {
         if !self.active_interfaces.is_empty() {
-            let tx = self.action_tx.clone().unwrap();
+            let Some(tx) = self.action_tx.clone() else {
+                log::error!("Cannot send active interface: action channel not initialized");
+                return;
+            };
             let active_interface = &self.active_interfaces[self.active_interface_index];
-            tx.try_send(Action::ActiveInterface(active_interface.clone()))
-                .unwrap();
+            let _ = tx.try_send(Action::ActiveInterface(active_interface.clone()));
         }
     }
 
@@ -108,8 +110,10 @@ impl Interfaces {
         let mut rows = Vec::new();
         for w in &self.interfaces {
             let mut active = String::from("");
-            if active_interface.is_some() && active_interface.unwrap() == w {
-                active = String::from("*");
+            if let Some(ai) = active_interface {
+                if ai == w {
+                    active = String::from("*");
+                }
             }
             let name = if cfg!(windows) {
                 w.description.clone()

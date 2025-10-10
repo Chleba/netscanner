@@ -110,7 +110,7 @@ pub fn bytes_convert(num: f64) -> String {
     );
     let pretty_bytes = format!("{:.2}", num / delimiter.powi(exponent))
         .parse::<f64>()
-        .unwrap()
+        .unwrap_or(0.0)
         * 1_f64;
     let unit = units[exponent as usize];
     format!("{}{}", pretty_bytes, unit)

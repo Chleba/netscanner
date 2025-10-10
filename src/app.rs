@@ -184,17 +184,17 @@ impl App {
                                 scanned_ports = Arc::new(p.get_scanned_ports().to_vec());
                             }
                         }
-                        action_tx
-                            .try_send(Action::ExportData(ExportData {
-                                scanned_ips,
-                                scanned_ports,
-                                arp_packets,
-                                udp_packets,
-                                tcp_packets,
-                                icmp_packets,
-                                icmp6_packets,
-                            }))
-                            .unwrap();
+                        if let Err(e) = action_tx.try_send(Action::ExportData(ExportData {
+                            scanned_ips,
+                            scanned_ports,
+                            arp_packets,
+                            udp_packets,
+                            tcp_packets,
+                            icmp_packets,
+                            icmp6_packets,
+                        })) {
+                            log::error!("Failed to send export data action: {:?}", e);
+                        }
                     }
 
                     Action::Tick => {
@@ -209,16 +209,14 @@ impl App {
                             for (idx, component) in self.components.iter_mut().enumerate() {
                                 let r = component.draw(f, f.area());
                                 if let Err(e) = r {
-                                    action_tx
-                                        .try_send(Action::Error(format!(
-                                            "Failed to render component {} during terminal resize ({}x{}).\n\
-                                            \n\
-                                            Error: {:?}\n\
-                                            \n\
-                                            The application will now exit to prevent further issues.",
-                                            idx, w, h, e
-                                        )))
-                                        .unwrap();
+                                    let _ = action_tx.try_send(Action::Error(format!(
+                                        "Failed to render component {} during terminal resize ({}x{}).\n\
+                                        \n\
+                                        Error: {:?}\n\
+                                        \n\
+                                        The application will now exit to prevent further issues.",
+                                        idx, w, h, e
+                                    )));
                                 }
                             }
                         })?;
@@ -228,16 +226,14 @@ impl App {
                             for (idx, component) in self.components.iter_mut().enumerate() {
                                 let r = component.draw(f, f.area());
                                 if let Err(e) = r {
-                                    action_tx
-                                        .try_send(Action::Error(format!(
-                                            "Failed to render component {} during frame update.\n\
-                                            \n\
-                                            Error: {:?}\n\
-                                            \n\
-                                            The application will now exit to prevent further issues.",
-                                            idx, e
-                                        )))
-                                        .unwrap();
+                                    let _ = action_tx.try_send(Action::Error(format!(
+                                        "Failed to render component {} during frame update.\n\
+                                        \n\
+                                        Error: {:?}\n\
+                                        \n\
+                                        The application will now exit to prevent further issues.",
+                                        idx, e
+                                    )));
                                 }
                             }
                         })?;
