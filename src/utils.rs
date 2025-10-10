@@ -190,13 +190,13 @@ pub fn get_config_dir() -> PathBuf {
 
 pub fn initialize_logging() -> Result<()> {
     let directory = get_data_dir();
-    std::fs::create_dir_all(directory.clone())?;
-    let log_path = directory.join(LOG_FILE.clone());
+    std::fs::create_dir_all(&directory)?;
+    let log_path = directory.join(LOG_FILE.as_str());
     let log_file = std::fs::File::create(log_path)?;
     std::env::set_var(
         "RUST_LOG",
         std::env::var("RUST_LOG")
-            .or_else(|_| std::env::var(LOG_ENV.clone()))
+            .or_else(|_| std::env::var(LOG_ENV.as_str()))
             .unwrap_or_else(|_| format!("{}=info", env!("CARGO_CRATE_NAME"))),
     );
     let file_subscriber = tracing_subscriber::fmt::layer()

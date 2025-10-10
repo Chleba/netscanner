@@ -39,8 +39,8 @@ impl Export {
         self.home_dir = format!("{}/.netscanner", home_dir);
 
         // -- create dot folder
-        if std::fs::metadata(self.home_dir.clone()).is_err()
-            && std::fs::create_dir_all(self.home_dir.clone()).is_err()
+        if std::fs::metadata(&self.home_dir).is_err()
+            && std::fs::create_dir_all(&self.home_dir).is_err()
         {
             self._export_failed = true;
         }
@@ -58,8 +58,8 @@ impl Export {
         self.home_dir = format!("{}/.netscanner", home_dir);
 
         // -- create dot folder
-        if std::fs::metadata(self.home_dir.clone()).is_err() {
-            if std::fs::create_dir_all(self.home_dir.clone()).is_err() {
+        if std::fs::metadata(&self.home_dir).is_err() {
+            if std::fs::create_dir_all(&self.home_dir).is_err() {
                 println!("Failed to create export dir");
             }
         }
@@ -77,8 +77,8 @@ impl Export {
         self.home_dir = format!("{}\\.netscanner", home_dir);
 
         // -- create .netscanner folder if it doesn't exist
-        if std::fs::metadata(self.home_dir.clone()).is_err() {
-            if std::fs::create_dir_all(self.home_dir.clone()).is_err() {
+        if std::fs::metadata(&self.home_dir).is_err() {
+            if std::fs::create_dir_all(&self.home_dir).is_err() {
                 self._export_failed = true;
             }
         }

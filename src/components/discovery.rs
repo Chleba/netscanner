@@ -206,6 +206,7 @@ impl Discovery {
             self.is_scanning = true;
 
             // Early return if action_tx is not available
+            // Clone necessary: Sender will be moved into async task
             let Some(tx) = self.action_tx.clone() else {
                 self.is_scanning = false;
                 return;
@@ -335,8 +336,9 @@ impl Discovery {
         self.set_scrollbar_height();
 
         // Perform DNS lookup asynchronously in background
+        // Clone necessary: Values moved into async task
         if let Some(tx) = self.action_tx.clone() {
-            let dns_cache = self.dns_cache.clone();
+            let dns_cache = self.dns_cache.clone(); // Arc clone - cheap
             let ip_string = ip.to_string();
             tokio::spawn(async move {
                 let hostname = dns_cache.lookup_with_timeout(hip).await;
