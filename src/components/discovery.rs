@@ -547,7 +547,7 @@ impl Component for Discovery {
         if self.is_scanning {
             if let Action::Tick = action {
                 let mut s_index = self.spinner_index + 1;
-                s_index %= SPINNER_SYMBOLS.len() - 1;
+                s_index %= SPINNER_SYMBOLS.len();
                 self.spinner_index = s_index;
             }
         }
