@@ -1,12 +1,92 @@
-/// Utility for checking and reporting privileged operation requirements
+//! Privilege checking and user-friendly error reporting for network operations.
+//!
+//! Network scanning requires elevated privileges for raw socket access. This module
+//! provides utilities to:
+//! - Check if the process has sufficient privileges
+//! - Generate platform-specific error messages with clear instructions
+//! - Diagnose permission-related failures
+//!
+//! # Platform Support
+//!
+//! ## Unix (Linux, macOS, BSD)
+//! - Checks if effective user ID (euid) is 0 (root)
+//! - Provides instructions for `sudo` or capabilities (Linux)
+//!
+//! ## Windows
+//! - Assumes privileges are available (checked at operation time)
+//! - Provides instructions for "Run as Administrator"
+//!
+//! # Usage Pattern
+//!
+//! ```rust
+//! use netscanner::privilege;
+//!
+//! // Warn early but allow partial functionality
+//! if !privilege::has_network_privileges() {
+//!     eprintln!("WARNING: Running without elevated privileges.");
+//!     eprintln!("Some network operations may fail.");
+//! }
+//!
+//! // Later, when an operation fails:
+//! # let error = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+//! if privilege::is_permission_error(&error) {
+//!     eprintln!("{}", privilege::get_privilege_error_message());
+//! }
+//! ```
+//!
+//! # Design Philosophy
+//!
+//! The application uses a **warn but don't exit** approach:
+//! - Checks privileges at startup and warns if insufficient
+//! - Allows the application to run with reduced functionality
+//! - Operations that require privileges fail with helpful error messages
+//!
+//! This enables users to explore the UI even without root, and makes it
+//! clear which operations require elevation.
+
 use std::io;
 
-/// Check if the current process has sufficient privileges for raw network operations
+/// Checks if the current process has sufficient privileges for raw network operations.
+///
+/// Raw network operations (packet capture, raw sockets) require elevated privileges:
+/// - **Unix**: Requires root (euid = 0) or specific capabilities
+/// - **Windows**: Requires Administrator privileges (checked at operation time)
+///
+/// # Returns
+///
+/// - `true` if privileges are sufficient
+/// - `false` if privileges are insufficient (Unix only)
+///
+/// # Platform Behavior
+///
+/// ## Unix
+/// Returns `true` if the effective user ID is 0 (root). This covers both:
+/// - Running with `sudo`
+/// - Binary with setuid bit set
+/// - Process with CAP_NET_RAW/CAP_NET_ADMIN capabilities
+///
+/// ## Windows
+/// Always returns `true` because privilege checking requires complex Win32 API calls.
+/// Actual privilege verification happens when operations are attempted.
+///
+/// # Example
+///
+/// ```rust
+/// use netscanner::privilege;
+///
+/// if !privilege::has_network_privileges() {
+///     eprintln!("Warning: Running without elevated privileges");
+/// }
+/// ```
 #[cfg(unix)]
 pub fn has_network_privileges() -> bool {
     unsafe { libc::geteuid() == 0 }
 }
 
+/// Windows implementation of privilege checking.
+///
+/// Always returns `true` to allow the application to start. Actual permission
+/// errors will be caught when operations are attempted, with descriptive messages.
 #[cfg(windows)]
 pub fn has_network_privileges() -> bool {
     // On Windows, we can't easily check at runtime, so we assume true
@@ -14,7 +94,31 @@ pub fn has_network_privileges() -> bool {
     true
 }
 
-/// Get a user-friendly error message for privilege-related failures
+/// Generates a platform-specific error message for privilege-related failures.
+///
+/// This provides users with clear, actionable instructions for running the
+/// application with sufficient privileges.
+///
+/// # Returns
+///
+/// A multi-line formatted string with:
+/// - Explanation of the problem
+/// - Platform-specific instructions (sudo, setcap, Run as Administrator)
+/// - Security notes where applicable
+///
+/// # Example Output (Linux)
+///
+/// ```text
+/// Insufficient privileges for network operations.
+///
+/// This application requires raw socket access for network scanning.
+///
+/// Please run with elevated privileges:
+/// - Using sudo: sudo netscanner [args]
+/// - Or set capabilities: sudo setcap cap_net_raw,cap_net_admin+eip /path/to/netscanner
+///
+/// Note: Setting capabilities is more secure than using sudo.
+/// ```
 pub fn get_privilege_error_message() -> String {
     #[cfg(unix)]
     {
@@ -82,12 +186,65 @@ pub fn get_privilege_error_message() -> String {
     }
 }
 
-/// Check if an IO error is likely due to insufficient privileges
+/// Checks if an IO error is due to insufficient privileges.
+///
+/// This is a simple wrapper around checking for `PermissionDenied` error kind,
+/// useful for determining if an error should trigger privilege-related help.
+///
+/// # Arguments
+///
+/// * `error` - The IO error to check
+///
+/// # Returns
+///
+/// `true` if the error is `ErrorKind::PermissionDenied`, `false` otherwise
+///
+/// # Example
+///
+/// ```rust
+/// use netscanner::privilege;
+/// use std::io;
+///
+/// let error = io::Error::from(io::ErrorKind::PermissionDenied);
+/// assert!(privilege::is_permission_error(&error));
+///
+/// if privilege::is_permission_error(&error) {
+///     println!("{}", privilege::get_privilege_error_message());
+/// }
+/// ```
 pub fn is_permission_error(error: &io::Error) -> bool {
     error.kind() == io::ErrorKind::PermissionDenied
 }
 
-/// Get a descriptive error message for datalink channel creation failures
+/// Generates a descriptive error message for datalink channel creation failures.
+///
+/// This provides context-specific error messages for the common failure case
+/// of creating packet capture channels. It distinguishes between permission
+/// errors and other failures.
+///
+/// # Arguments
+///
+/// * `error` - The IO error that occurred
+/// * `interface_name` - Name of the network interface that failed
+///
+/// # Returns
+///
+/// A formatted error message with:
+/// - The specific interface name
+/// - The underlying error details
+/// - Possible causes and solutions
+/// - Privilege instructions if it's a permission error
+///
+/// # Example
+///
+/// ```rust
+/// use netscanner::privilege;
+/// use std::io;
+///
+/// let error = io::Error::from(io::ErrorKind::PermissionDenied);
+/// let message = privilege::get_datalink_error_message(&error, "eth0");
+/// eprintln!("{}", message);
+/// ```
 pub fn get_datalink_error_message(error: &io::Error, interface_name: &str) -> String {
     if is_permission_error(error) {
         get_privilege_error_message()

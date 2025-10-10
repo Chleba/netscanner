@@ -1,3 +1,63 @@
+//! Application core module - coordinates components and manages the event loop.
+//!
+//! This module contains the [`App`] struct, which serves as the central coordinator
+//! for the netscanner application. It manages the component lifecycle, routes actions
+//! between components, and orchestrates the main event loop.
+//!
+//! # Architecture
+//!
+//! The [`App`] uses an **action-based messaging architecture** where components
+//! communicate by sending [`Action`] messages through bounded mpsc channels:
+//!
+//! ```text
+//! ┌──────────────────────────────────────────────────────┐
+//! │                     App (Coordinator)                 │
+//! │  ┌──────────────────────────────────────────────┐   │
+//! │  │  Components: Vec<Box<dyn Component>>         │   │
+//! │  │  - Discovery, Ports, PacketDump, WiFi, etc.  │   │
+//! │  └──────────────────────────────────────────────┘   │
+//! │                                                       │
+//! │  ┌──────────────┐         ┌──────────────┐         │
+//! │  │ action_tx    │────────▶│  action_rx   │         │
+//! │  │ (Sender)     │  mpsc   │ (Receiver)   │         │
+//! │  └──────────────┘         └──────────────┘         │
+//! │         │                         │                  │
+//! │         │                         ▼                  │
+//! │         │                  Route to Components      │
+//! │         │                         │                  │
+//! │         └─────────────────────────┘                 │
+//! └──────────────────────────────────────────────────────┘
+//! ```
+//!
+//! # Component Communication
+//!
+//! Components never call each other directly. Instead, they:
+//! 1. Receive actions via their `update()` method
+//! 2. Process the action and update internal state
+//! 3. Optionally return new actions to be sent to other components
+//!
+//! This loose coupling allows components to be added, removed, or modified
+//! independently without breaking the system.
+//!
+//! # Event Loop
+//!
+//! The main event loop ([`App::run`]) operates in phases:
+//!
+//! 1. **Event Collection**: Wait for terminal events (keyboard, resize, ticks)
+//! 2. **Action Generation**: Convert events to actions via keybindings
+//! 3. **Action Distribution**: Route actions to all components
+//! 4. **State Update**: Components update their state based on actions
+//! 5. **Rendering**: Components draw themselves to the terminal
+//!
+//! # Memory Management
+//!
+//! The application uses **bounded channels** (capacity 1000) for action messages
+//! to prevent memory exhaustion. If consumers are slow, senders will block
+//! rather than accumulating unbounded messages.
+//!
+//! For data export, [`Arc`] is used to share large datasets (scanned IPs, packets)
+//! without cloning, significantly reducing memory usage during export operations.
+
 use chrono::{DateTime, Local};
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
@@ -27,6 +87,24 @@ use crate::{
     tui,
 };
 
+/// The main application coordinator.
+///
+/// This struct owns all components and manages the application lifecycle,
+/// from initialization through the event loop to graceful shutdown.
+///
+/// # Fields
+///
+/// * `config` - Application configuration loaded from config files
+/// * `tick_rate` - Logic update rate in Hz (currently fixed at 1.0)
+/// * `frame_rate` - UI render rate in Hz (currently fixed at 10.0)
+/// * `components` - All UI components implementing the Component trait
+/// * `should_quit` - Signal to exit the main loop
+/// * `should_suspend` - Signal to suspend the application (Unix SIGTSTP)
+/// * `mode` - Current input mode (Normal, Input, etc.)
+/// * `last_tick_key_events` - Buffer for multi-key combinations
+/// * `action_tx` - Sender half of the action channel
+/// * `action_rx` - Receiver half of the action channel
+/// * `post_exist_msg` - Optional error message to display after exit
 pub struct App {
     pub config: Config,
     pub tick_rate: f64,
@@ -42,7 +120,32 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(tick_rate: f64, frame_rate: f64) -> Result<Self> {
+    /// Creates a new application instance.
+    ///
+    /// This constructor initializes all components, creates the action channel,
+    /// and prepares the application for execution. Components are created in
+    /// dependency order to ensure proper initialization.
+    ///
+    /// # Arguments
+    ///
+    /// * `_tick_rate` - Requested logic update rate (currently unused, fixed at 1.0 Hz)
+    /// * `_frame_rate` - Requested render rate (currently unused, fixed at 10.0 Hz)
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(App)` with all components initialized, or an error if:
+    /// - Configuration loading fails
+    /// - Component initialization fails
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use netscanner::app::App;
+    ///
+    /// let app = App::new(2.0, 30.0)?;
+    /// # Ok::<(), color_eyre::eyre::Error>(())
+    /// ```
+    pub fn new(_tick_rate: f64, _frame_rate: f64) -> Result<Self> {
         let title = Title::new();
         let interfaces = Interfaces::default();
         let wifiscan = WifiScan::default();
@@ -88,6 +191,74 @@ impl App {
         })
     }
 
+    /// Runs the main application event loop.
+    ///
+    /// This is the heart of the application, coordinating all components through
+    /// an event-driven architecture. The loop continues until `should_quit` is set.
+    ///
+    /// # Event Loop Phases
+    ///
+    /// ## 1. Initialization
+    /// - Create and configure the TUI
+    /// - Register action handlers with all components
+    /// - Register config handlers with all components
+    /// - Initialize components with terminal size
+    ///
+    /// ## 2. Main Loop
+    /// - **Event Collection**: Wait for terminal events (keys, resize, ticks, render)
+    /// - **Event Translation**: Convert terminal events to Actions via keybindings
+    /// - **Event Distribution**: Pass events to components via `handle_events()`
+    /// - **Action Processing**: Route actions to all components via `update()`
+    /// - **Special Actions**:
+    ///   - `Action::Export`: Collect data from all components using Arc for efficiency
+    ///   - `Action::Resize`: Trigger re-render with new terminal dimensions
+    ///   - `Action::Render`: Draw all components to the terminal
+    ///   - `Action::Quit`: Initiate graceful shutdown sequence
+    ///
+    /// ## 3. Shutdown Sequence
+    /// - Send `Action::Shutdown` to all components
+    /// - Process any pending actions
+    /// - Call `shutdown()` on each component with 5-second timeout
+    /// - Handle panics during shutdown gracefully
+    /// - Stop the TUI and restore terminal state
+    ///
+    /// # Data Export Flow
+    ///
+    /// When `Action::Export` is received, the app:
+    /// 1. Uses `Any` trait to downcast components to their concrete types
+    /// 2. Collects data (IPs, ports, packets) from Discovery, Ports, and PacketDump
+    /// 3. Wraps data in `Arc` to avoid expensive clones
+    /// 4. Sends `Action::ExportData` to the Export component
+    ///
+    /// This approach avoids tight coupling while enabling data sharing.
+    ///
+    /// # Error Handling
+    ///
+    /// Render errors are caught and converted to `Action::Error`, which:
+    /// - Sets `should_quit` to true
+    /// - Stores an error message in `post_exist_msg`
+    /// - Allows graceful shutdown and error reporting
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - TUI initialization or configuration fails
+    /// - Component registration fails
+    /// - Terminal rendering encounters a fatal error
+    /// - Shutdown sequence fails
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use netscanner::app::App;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> color_eyre::eyre::Result<()> {
+    ///     let mut app = App::new(1.0, 10.0)?;
+    ///     app.run().await?;
+    ///     Ok(())
+    /// }
+    /// ```
     pub async fn run(&mut self) -> Result<()> {
         // let (action: action_rx_tx, mut action_rx) = mpsc::unbounded_channel();
         let action_tx = &self.action_tx;

@@ -1,3 +1,74 @@
+//! Component system for modular UI elements.
+//!
+//! This module defines the [`Component`] trait and exports all component implementations.
+//! Components are self-contained UI elements that handle events, update state, and render
+//! themselves independently.
+//!
+//! # Architecture
+//!
+//! The component system enables a **modular, loosely-coupled architecture**:
+//!
+//! ```text
+//! ┌─────────────────────────────────────────────────────────┐
+//! │                    Component Trait                       │
+//! │  ┌───────────────────────────────────────────────────┐  │
+//! │  │  Lifecycle Methods                                │  │
+//! │  │  • init()       - Initialize with terminal size   │  │
+//! │  │  • shutdown()   - Cleanup resources               │  │
+//! │  └───────────────────────────────────────────────────┘  │
+//! │  ┌───────────────────────────────────────────────────┐  │
+//! │  │  Event Handling                                   │  │
+//! │  │  • handle_events()      - Process terminal events │  │
+//! │  │  • handle_key_events()  - Handle keyboard         │  │
+//! │  │  • handle_mouse_events() - Handle mouse           │  │
+//! │  └───────────────────────────────────────────────────┘  │
+//! │  ┌───────────────────────────────────────────────────┐  │
+//! │  │  State Management                                 │  │
+//! │  │  • update() - Process actions, update state       │  │
+//! │  └───────────────────────────────────────────────────┘  │
+//! │  ┌───────────────────────────────────────────────────┐  │
+//! │  │  Rendering                                        │  │
+//! │  │  • draw() - Render to terminal frame              │  │
+//! │  └───────────────────────────────────────────────────┘  │
+//! └─────────────────────────────────────────────────────────┘
+//! ```
+//!
+//! # Component Lifecycle
+//!
+//! 1. **Creation**: Component is instantiated via `Default` or `new()`
+//! 2. **Registration**: Action and config handlers are registered
+//! 3. **Initialization**: `init()` called with terminal size
+//! 4. **Event Loop**: Component processes events and actions
+//! 5. **Shutdown**: `shutdown()` called for cleanup
+//!
+//! # Available Components
+//!
+//! - **[`discovery`]**: Network host discovery via ICMP/ARP
+//! - **[`ports`]**: Concurrent TCP port scanning
+//! - **[`packetdump`]**: Real-time packet capture and analysis
+//! - **[`sniff`]**: Network traffic monitoring
+//! - **[`wifi_scan`]**: WiFi network scanning
+//! - **[`wifi_chart`]**: WiFi signal strength visualization
+//! - **[`wifi_interface`]**: WiFi connection information
+//! - **[`interfaces`]**: Network interface selection
+//! - **[`export`]**: Data export functionality
+//! - **[`tabs`]**: Tab navigation UI
+//! - **[`title`]**: Application title bar
+//!
+//! # Component Communication
+//!
+//! Components communicate exclusively through [`Action`] messages:
+//! - Never call other components directly
+//! - Send actions via the registered `action_tx` channel
+//! - Receive actions via `update()` method
+//! - Return new actions to be processed
+//!
+//! # Type Downcasting
+//!
+//! The `as_any()` method allows safe downcasting from `Box<dyn Component>` to
+//! concrete types when needed (e.g., for data export). This is used sparingly
+//! to maintain loose coupling.
+
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyEvent, MouseEvent};
 use ratatui::layout::{Rect, Size};
