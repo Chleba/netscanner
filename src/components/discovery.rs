@@ -41,6 +41,11 @@ use tui_input::Input;
 // or exhausting system resources. 32 provides good throughput while remaining conservative.
 const POOL_SIZE: usize = 32;
 
+// Ping timeout in seconds
+// Time to wait for ICMP echo reply before considering host unreachable
+// 2 seconds provides good balance between speed and reliability for local networks
+const PING_TIMEOUT_SECS: u64 = 2;
+
 // Width of the CIDR input field in characters
 const INPUT_SIZE: usize = 30;
 
@@ -208,7 +213,7 @@ impl Discovery {
                             let mut pinger = client
                                 .pinger(IpAddr::V4(ip), PingIdentifier(random()))
                                 .await;
-                            pinger.timeout(Duration::from_secs(2));
+                            pinger.timeout(Duration::from_secs(PING_TIMEOUT_SECS));
 
                             match pinger.ping(PingSequence(2), &payload).await {
                                 Ok((IcmpPacket::V4(_packet), _dur)) => {

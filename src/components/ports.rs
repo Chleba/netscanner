@@ -31,6 +31,11 @@ use crate::{
 // 64 allows faster scanning than discovery while still being network-friendly
 const POOL_SIZE: usize = 64;
 
+// Port scan timeout in seconds
+// Time to wait for TCP connection before considering port closed
+// 2 seconds balances thoroughness with scan speed for typical networks
+const PORT_SCAN_TIMEOUT_SECS: u64 = 2;
+
 // Animation frames for the scanning spinner
 const SPINNER_SYMBOLS: [&str; 6] = ["⠷", "⠯", "⠟", "⠻", "⠽", "⠾"];
 
@@ -204,7 +209,7 @@ impl Ports {
     }
 
     async fn scan(tx: Sender<Action>, index: usize, ip: IpAddr, port: u16) {
-        let timeout = Duration::from_secs(2);
+        let timeout = Duration::from_secs(PORT_SCAN_TIMEOUT_SECS);
         let soc_addr = SocketAddr::new(ip, port);
         if let Ok(Ok(_)) = tokio::time::timeout(timeout, TcpStream::connect(&soc_addr)).await {
             // Successfully connected to port
