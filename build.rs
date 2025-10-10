@@ -58,6 +58,7 @@ fn main() {
 }
 
 // -- unfortunately netscanner need to download sdk because of Packet.lib for build locally
+// Supports offline builds via NPCAP_SDK_DIR environment variable
 #[cfg(target_os = "windows")]
 fn download_windows_npcap_sdk() -> anyhow::Result<()> {
     use anyhow::anyhow;
@@ -73,6 +74,66 @@ fn download_windows_npcap_sdk() -> anyhow::Result<()> {
     use zip::ZipArchive;
 
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-env-changed=NPCAP_SDK_DIR");
+
+    // Check if user provided pre-installed SDK path for offline builds
+    if let Ok(sdk_dir) = env::var("NPCAP_SDK_DIR") {
+        eprintln!("Using pre-installed Npcap SDK from: {}", sdk_dir);
+        eprintln!("Skipping download (offline build mode)");
+
+        // Verify the SDK directory exists and contains required files
+        let sdk_path = PathBuf::from(&sdk_dir);
+        if !sdk_path.exists() {
+            return Err(anyhow!(
+                "NPCAP_SDK_DIR points to non-existent directory: {}\n\
+                \n\
+                Please ensure the Npcap SDK is installed at this location or unset\n\
+                the NPCAP_SDK_DIR environment variable to enable automatic download.",
+                sdk_dir
+            ));
+        }
+
+        // Determine architecture-specific lib path
+        let lib_subpath = if cfg!(target_arch = "aarch64") {
+            "Lib/ARM64"
+        } else if cfg!(target_arch = "x86_64") {
+            "Lib/x64"
+        } else if cfg!(target_arch = "x86") {
+            "Lib"
+        } else {
+            return Err(anyhow!("Unsupported target architecture. Supported: x86, x86_64, aarch64"));
+        };
+
+        let lib_dir = sdk_path.join(lib_subpath);
+        let lib_file = lib_dir.join("Packet.lib");
+
+        if !lib_file.exists() {
+            return Err(anyhow!(
+                "Packet.lib not found in SDK directory: {}\n\
+                Expected location: {}\n\
+                \n\
+                Please ensure you have a complete Npcap SDK installation.\n\
+                You can download it from: https://npcap.com/dist/",
+                sdk_dir,
+                lib_file.display()
+            ));
+        }
+
+        eprintln!("Found Packet.lib at: {}", lib_file.display());
+
+        println!(
+            "cargo:rustc-link-search=native={}",
+            lib_dir
+                .to_str()
+                .ok_or(anyhow!("{:?} is not valid UTF-8", lib_dir))?
+        );
+
+        return Ok(());
+    }
+
+    // No pre-installed SDK - proceed with download
+    eprintln!("No NPCAP_SDK_DIR set, will download Npcap SDK");
+    eprintln!("For offline builds, set NPCAP_SDK_DIR to your SDK installation path");
 
     // get npcap SDK
     const NPCAP_SDK: &str = "npcap-sdk-1.13.zip";
