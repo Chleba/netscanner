@@ -2,13 +2,12 @@ use chrono::{DateTime, Local};
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
 use ratatui::prelude::Rect;
-use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 use crate::{
     action::Action,
     components::{
-        discovery::{self, Discovery, ScannedIp},
+        discovery::{Discovery, ScannedIp},
         export::Export,
         interfaces::Interfaces,
         packetdump::PacketDump,

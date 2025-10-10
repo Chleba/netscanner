@@ -1,13 +1,11 @@
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::style::Stylize;
 use ratatui::{prelude::*, widgets::*};
 use ratatui::{
     text::{Line, Span},
     widgets::{block::Title, Paragraph},
 };
-use serde::{Deserialize, Serialize};
 use strum::{EnumCount, IntoEnumIterator};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -15,7 +13,7 @@ use super::{Component, Frame};
 use crate::{
     action::Action,
     config::DEFAULT_BORDER_STYLE,
-    config::{Config, KeyBindings},
+    config::Config,
     enums::TabsEnum,
     layout::get_vertical_layout,
 };

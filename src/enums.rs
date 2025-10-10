@@ -2,7 +2,7 @@ use crate::components::{discovery::ScannedIp, ports::ScannedIpPorts};
 use chrono::{DateTime, Local};
 use pnet::{
     packet::{
-        arp::{ArpOperation, ArpOperations},
+        arp::ArpOperation,
         icmp::IcmpType,
         icmpv6::Icmpv6Type,
     },

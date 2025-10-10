@@ -1,5 +1,5 @@
 use color_eyre::eyre::Result;
-use pnet::datalink::{self, NetworkInterface};
+use pnet::datalink::{self};
 use ratatui::{prelude::*, widgets::*};
 use std::collections::HashMap;
 use std::process::{Command, Output};
@@ -10,7 +10,6 @@ use super::Component;
 use crate::{
     action::Action,
     layout::{get_horizontal_layout, get_vertical_layout},
-    mode::Mode,
     tui::Frame,
 };
 
@@ -25,7 +24,7 @@ struct WifiConn {
 }
 
 struct CommandError {
-    desc: String,
+    _desc: String,
 }
 
 pub struct WifiInterface {
@@ -67,13 +66,13 @@ impl WifiInterface {
             .arg("info")
             .output()
             .map_err(|e| CommandError {
-                desc: format!("command failed: {}", e),
+                _desc: format!("command failed: {}", e),
             })?;
         if iw_output.status.success() {
             Ok(iw_output)
         } else {
             Err(CommandError {
-                desc: "command failed".to_string(),
+                _desc: "command failed".to_string(),
             })
         }
     }
