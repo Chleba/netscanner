@@ -1,6 +1,5 @@
 use chrono::{DateTime, Local};
 use color_eyre::eyre::Result;
-use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use pnet::datalink::{Channel, ChannelType, NetworkInterface};
@@ -557,7 +556,7 @@ impl PacketDump {
                     }
                 }
                 // Err(e) => println!("packetdump: unable to receive packet: {}", e),
-                Err(e) => {}
+                Err(_e) => {}
             }
         }
     }
@@ -1184,7 +1183,7 @@ impl Component for PacketDump {
                 Mode::Normal => return Ok(None),
                 Mode::Input => match key.code {
                     KeyCode::Enter => {
-                        if let Some(sender) = &self.action_tx {
+                        if let Some(_sender) = &self.action_tx {
                             self.set_filter_str(self.input.value().to_string());
                             // self.set_cidr(self.input.value().to_string(), true);
                         }
