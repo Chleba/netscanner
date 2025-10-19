@@ -419,20 +419,30 @@ impl PacketDump {
     }
 
     fn t_logic(action_tx: Sender<Action>, interface: NetworkInterface, stop: Arc<AtomicBool>) {
-        let (_, mut receiver) = match pnet::datalink::channel(
-            &interface,
-            pnet::datalink::Config {
-                write_buffer_size: 4096,
-                read_buffer_size: 4096,
-                read_timeout: Some(Duration::new(1, 0)),
-                write_timeout: None,
-                channel_type: ChannelType::Layer2,
-                bpf_fd_attempts: 1000,
-                linux_fanout: None,
-                promiscuous: true,
-                socket_fd: None,
-            },
-        ) {
+        // Configure optimized packet capture settings
+        // Note: pnet does not support BPF filtering at the API level - all filtering
+        // must be done in userspace after packets are captured. This is a known limitation
+        // of the pnet library. For kernel-level filtering, consider using the pcap crate instead.
+        let config = pnet::datalink::Config {
+            // Increased buffer sizes for better performance with high packet rates
+            // Larger buffers reduce syscall overhead and can handle burst traffic better
+            write_buffer_size: 65536, // 64KB - sufficient for batch writes
+            read_buffer_size: 65536,  // 64KB - can hold ~40-70 standard packets (MTU 1500)
+
+            // Reduced read timeout for more responsive packet capture and faster shutdown
+            // 100ms provides a good balance between CPU usage and responsiveness
+            // This also ensures the stop signal is checked every 100ms maximum
+            read_timeout: Some(Duration::from_millis(100)),
+
+            write_timeout: None, // No write timeout needed for packet capture
+            channel_type: ChannelType::Layer2, // Capture at Layer 2 (Ethernet)
+            bpf_fd_attempts: 1000, // macOS/BSD: Try up to 1000 /dev/bpf* descriptors
+            linux_fanout: None,    // Linux fanout not used for single-threaded capture
+            promiscuous: true,     // Capture all packets on the interface, not just those addressed to this host
+            socket_fd: None,       // Let pnet create its own socket
+        };
+
+        let (_, mut receiver) = match pnet::datalink::channel(&interface, config) {
             Ok(Channel::Ethernet(packet_tx, rx)) => (packet_tx, rx),
             Ok(_) => {
                 let _ = action_tx.try_send(Action::Error(format!(
