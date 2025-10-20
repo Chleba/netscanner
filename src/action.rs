@@ -160,6 +160,8 @@ pub enum Action {
     CidrError,
     /// DNS reverse lookup completed (IP, Hostname)
     DnsResolved(String, String),
+    /// MAC address discovered for IP (IP, MAC)
+    UpdateMac(String, String),
 
     // -- Packet capture
     /// New packet captured (time, packet data, type)
