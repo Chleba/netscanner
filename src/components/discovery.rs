@@ -179,12 +179,6 @@ impl Discovery {
             (solicited_node.segments()[7] & 0xff) as u8,
         );
 
-        // Create NDP option for source link-layer address
-        let mut option_data = [0u8; 8];
-        option_data[0] = NdpOptionTypes::SourceLLAddr.0;
-        option_data[1] = 1; // Length in units of 8 bytes
-        option_data[2..8].copy_from_slice(&source_mac.octets());
-
         // Total packet size calculation:
         // Ethernet (14) + IPv6 (40) + ICMPv6 NS (24) + NDP Option (8) = 86 bytes
         let mut ethernet_buffer = vec![0u8; 86];
@@ -285,6 +279,7 @@ impl Discovery {
         // Try to receive packets within timeout
         let result = tokio_timeout(timeout, async {
             loop {
+                tokio::task::yield_now().await;
                 match rx.next() {
                     Ok(packet) => {
                         // Parse Ethernet frame
@@ -316,6 +311,7 @@ impl Discovery {
                                     // Extract target link-layer address from options
                                     for option in na_packet.get_options() {
                                         if option.option_type == NdpOptionTypes::TargetLLAddr
+                                            && option.length == 1
                                             && option.data.len() >= 6 {
                                             let mac = MacAddr::new(
                                                 option.data[0],
