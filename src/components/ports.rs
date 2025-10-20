@@ -7,7 +7,7 @@ use ratatui::style::Stylize;
 use core::str;
 use port_desc::{PortDescription, TransportProtocol};
 use ratatui::{prelude::*, widgets::*};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 use tokio::{
     net::TcpStream,
@@ -108,7 +108,8 @@ impl Ports {
     }
 
     fn process_ip(&mut self, ip: &str) {
-        let Ok(ipv4) = ip.parse::<Ipv4Addr>() else {
+        // Parse IP address - support both IPv4 and IPv6
+        let Ok(ip_addr) = ip.parse::<IpAddr>() else {
             return;
         };
 
@@ -124,9 +125,16 @@ impl Ports {
 
             self.ip_ports.sort_by(|a, b| {
                 // Safe: IPs were validated during insertion
-                let a_ip: Ipv4Addr = a.ip.parse().expect("validated IP");
-                let b_ip: Ipv4Addr = b.ip.parse().expect("validated IP");
-                a_ip.cmp(&b_ip)
+                let a_ip: IpAddr = a.ip.parse().expect("validated IP");
+                let b_ip: IpAddr = b.ip.parse().expect("validated IP");
+                // Compare IpAddr directly - supports both IPv4 and IPv6
+                match (a_ip, b_ip) {
+                    (IpAddr::V4(a_v4), IpAddr::V4(b_v4)) => a_v4.cmp(&b_v4),
+                    (IpAddr::V6(a_v6), IpAddr::V6(b_v6)) => a_v6.cmp(&b_v6),
+                    // IPv4 addresses sort before IPv6 addresses
+                    (IpAddr::V4(_), IpAddr::V6(_)) => std::cmp::Ordering::Less,
+                    (IpAddr::V6(_), IpAddr::V4(_)) => std::cmp::Ordering::Greater,
+                }
             });
         }
 
@@ -136,7 +144,6 @@ impl Ports {
         if let Some(tx) = self.action_tx.clone() {
             let dns_cache = self.dns_cache.clone();
             let ip_string = ip.to_string();
-            let ip_addr: IpAddr = ipv4.into();
             tokio::spawn(async move {
                 let hostname = dns_cache.lookup_with_timeout(ip_addr).await;
                 if !hostname.is_empty() {
