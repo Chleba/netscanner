@@ -342,6 +342,16 @@ impl App {
                         let mut icmp_packets = Arc::new(Vec::new());
                         let mut icmp6_packets = Arc::new(Vec::new());
 
+                        // Note: Component downcasting pattern used here for data aggregation.
+                        // While this creates coupling between App and specific component types,
+                        // it's an acceptable trade-off given the current architecture where:
+                        // 1. Export is inherently a cross-component operation requiring data from
+                        //    multiple specific sources (Discovery, PacketDump, Ports)
+                        // 2. Alternative approaches (message-passing, shared state) would add
+                        //    significant complexity for this single use case
+                        // 3. The coupling is contained to this export handler
+                        // TODO: Consider refactoring to message-based data retrieval if more
+                        // cross-component data access patterns emerge.
                         for component in &self.components {
                             if let Some(d) = component.as_any().downcast_ref::<Discovery>() {
                                 scanned_ips = Arc::new(d.get_scanned_ips().to_vec());
