@@ -1,5 +1,6 @@
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
+use ipnetwork::IpNetwork;
 
 use pnet::datalink::NetworkInterface;
 use tokio::sync::Semaphore;
@@ -7,7 +8,7 @@ use tokio::sync::Semaphore;
 use core::str;
 use ratatui::layout::Position;
 use ratatui::{prelude::*, widgets::*};
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence};
@@ -26,7 +27,7 @@ use crate::{
     layout::get_vertical_layout,
     mode::Mode,
     tui::Frame,
-    utils::{count_ipv4_net_length, get_ips4_from_cidr},
+    utils::{count_ipv4_net_length, count_ipv6_net_length, get_ips4_from_cidr, get_ips6_from_cidr},
 };
 use crossterm::event::Event;
 use crossterm::event::{KeyCode, KeyEvent};
@@ -53,7 +54,7 @@ const PING_TIMEOUT_SECS: u64 = 2;
 // Width of the CIDR input field in characters
 const INPUT_SIZE: usize = 30;
 
-// Default CIDR range for initial scan
+// Default CIDR range for initial scan (IPv4)
 const DEFAULT_IP: &str = "192.168.1.0/24";
 
 // Animation frames for the scanning spinner
@@ -62,7 +63,7 @@ const SPINNER_SYMBOLS: [&str; 6] = ["⠷", "⠯", "⠟", "⠻", "⠽", "⠾"];
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScannedIp {
     pub ip: String,
-    pub ip_addr: Ipv4Addr, // Cached parsed IP for efficient sorting
+    pub ip_addr: IpAddr, // Cached parsed IP for efficient sorting (both IPv4 and IPv6)
     pub mac: String,
     pub hostname: String,
     pub vendor: String,
@@ -75,7 +76,7 @@ pub struct Discovery {
     scanned_ips: Vec<ScannedIp>,
     ip_num: i32,
     input: Input,
-    cidr: Option<Ipv4Cidr>,
+    cidr: Option<IpNetwork>, // Support both IPv4 and IPv6 CIDR
     cidr_error: bool,
     is_scanning: bool,
     mode: Mode,
@@ -152,35 +153,60 @@ impl Discovery {
             return;
         }
 
-        match trimmed.parse::<Ipv4Cidr>() {
-            Ok(ip_cidr) => {
-                // Validate CIDR range is reasonable (prevent scanning entire internet)
-                // Minimum network length /8 (16,777,216 hosts) - too large
-                // Maximum network length /32 (1 host) - pointless but allowed
-                // Recommended minimum: /16 (65,536 hosts)
-                // For safety, we'll enforce a minimum of /16
-                let network_length = ip_cidr.network_length();
+        // Try parsing as IpNetwork (supports both IPv4 and IPv6)
+        match trimmed.parse::<IpNetwork>() {
+            Ok(ip_network) => {
+                match ip_network {
+                    IpNetwork::V4(ipv4_net) => {
+                        // IPv4 validation
+                        let network_length = ipv4_net.prefix();
 
-                if network_length < 16 {
-                    // Network too large - prevent scanning millions of IPs
-                    if let Some(tx) = &self.action_tx {
-                        let _ = tx.clone().try_send(Action::CidrError);
+                        if network_length < 16 {
+                            // Network too large - prevent scanning millions of IPs
+                            if let Some(tx) = &self.action_tx {
+                                let _ = tx.clone().try_send(Action::CidrError);
+                            }
+                            return;
+                        }
+
+                        // Validate it's not a special-purpose network
+                        let first_octet = ipv4_net.network().octets()[0];
+
+                        // Reject loopback (127.0.0.0/8), multicast (224.0.0.0/4), and reserved ranges
+                        if first_octet == 127 || first_octet >= 224 {
+                            if let Some(tx) = &self.action_tx {
+                                let _ = tx.clone().try_send(Action::CidrError);
+                            }
+                            return;
+                        }
                     }
-                    return;
+                    IpNetwork::V6(ipv6_net) => {
+                        // IPv6 validation
+                        let network_length = ipv6_net.prefix();
+
+                        // For IPv6, enforce minimum /120 to prevent scanning massive ranges
+                        // /120 = 256 addresses, which is reasonable
+                        if network_length < 120 {
+                            log::warn!("IPv6 network /{} is too large for scanning, minimum is /120", network_length);
+                            if let Some(tx) = &self.action_tx {
+                                let _ = tx.clone().try_send(Action::CidrError);
+                            }
+                            return;
+                        }
+
+                        // Validate it's not a special-purpose network
+                        if ipv6_net.network().is_multicast()
+                            || ipv6_net.network().is_loopback()
+                            || ipv6_net.network().is_unspecified() {
+                            if let Some(tx) = &self.action_tx {
+                                let _ = tx.clone().try_send(Action::CidrError);
+                            }
+                            return;
+                        }
+                    }
                 }
 
-                // Validate it's not a special-purpose network
-                let first_octet = ip_cidr.first_address().octets()[0];
-
-                // Reject loopback (127.0.0.0/8), multicast (224.0.0.0/4), and reserved ranges
-                if first_octet == 127 || first_octet >= 224 {
-                    if let Some(tx) = &self.action_tx {
-                        let _ = tx.clone().try_send(Action::CidrError);
-                    }
-                    return;
-                }
-
-                self.cidr = Some(ip_cidr);
+                self.cidr = Some(ip_network);
                 if scan {
                     self.scan();
                 }
@@ -217,68 +243,160 @@ impl Discovery {
             let semaphore = Arc::new(Semaphore::new(pool_size));
 
             self.task = tokio::spawn(async move {
-                log::debug!("Starting CIDR scan task");
-                let ips = get_ips4_from_cidr(cidr);
-                let tasks: Vec<_> = ips
-                    .iter()
-                    .map(|&ip| {
-                        let s = semaphore.clone();
-                        let tx = tx.clone();
-                        let c = || async move {
-                            // Semaphore acquire should not fail in normal operation
-                            // If it does, we skip this IP and continue
-                            let Ok(_permit) = s.acquire().await else {
-                                let _ = tx.try_send(Action::CountIp);
-                                return;
-                            };
-                            let client =
-                                Client::new(&Config::default()).expect("Cannot create client");
-                            let payload = [0; 56];
-                            let mut pinger = client
-                                .pinger(IpAddr::V4(ip), PingIdentifier(random()))
-                                .await;
-                            pinger.timeout(Duration::from_secs(PING_TIMEOUT_SECS));
+                log::debug!("Starting CIDR scan task for {:?}", cidr);
 
-                            match pinger.ping(PingSequence(2), &payload).await {
-                                Ok((IcmpPacket::V4(_packet), _dur)) => {
-                                    tx.try_send(Action::PingIp(_packet.get_real_dest().to_string()))
-                                        .unwrap_or_default();
-                                    tx.try_send(Action::CountIp).unwrap_or_default();
-                                }
+                match cidr {
+                    IpNetwork::V4(ipv4_cidr) => {
+                        // Convert ipnetwork::Ipv4Network to cidr::Ipv4Cidr
+                        let cidr_str = format!("{}/{}", ipv4_cidr.network(), ipv4_cidr.prefix());
+                        let Ok(ipv4_cidr_old) = cidr_str.parse::<Ipv4Cidr>() else {
+                            log::error!("Failed to convert IPv4 CIDR for scanning");
+                            let _ = tx.try_send(Action::CidrError);
+                            return;
+                        };
+
+                        let ips = get_ips4_from_cidr(ipv4_cidr_old);
+                        let tasks: Vec<_> = ips
+                            .iter()
+                            .map(|&ip| {
+                                let s = semaphore.clone();
+                                let tx = tx.clone();
+                                let c = || async move {
+                                    // Semaphore acquire should not fail in normal operation
+                                    // If it does, we skip this IP and continue
+                                    let Ok(_permit) = s.acquire().await else {
+                                        let _ = tx.try_send(Action::CountIp);
+                                        return;
+                                    };
+                                    let client = match Client::new(&Config::default()) {
+                                        Ok(c) => c,
+                                        Err(e) => {
+                                            log::error!("Failed to create ICMP client: {:?}", e);
+                                            let _ = tx.try_send(Action::CountIp);
+                                            return;
+                                        }
+                                    };
+                                    let payload = [0; 56];
+                                    let mut pinger = client
+                                        .pinger(IpAddr::V4(ip), PingIdentifier(random()))
+                                        .await;
+                                    pinger.timeout(Duration::from_secs(PING_TIMEOUT_SECS));
+
+                                    match pinger.ping(PingSequence(2), &payload).await {
+                                        Ok((IcmpPacket::V4(_packet), _dur)) => {
+                                            tx.try_send(Action::PingIp(_packet.get_real_dest().to_string()))
+                                                .unwrap_or_default();
+                                            tx.try_send(Action::CountIp).unwrap_or_default();
+                                        }
+                                        Ok(_) => {
+                                            tx.try_send(Action::CountIp).unwrap_or_default();
+                                        }
+                                        Err(_) => {
+                                            tx.try_send(Action::CountIp).unwrap_or_default();
+                                        }
+                                    }
+                                };
+                                tokio::spawn(c())
+                            })
+                            .collect();
+                        for t in tasks {
+                            // Check if task panicked or was aborted
+                            match t.await {
                                 Ok(_) => {
-                                    tx.try_send(Action::CountIp).unwrap_or_default();
+                                    // Task completed successfully
                                 }
-                                Err(_) => {
-                                    tx.try_send(Action::CountIp).unwrap_or_default();
+                                Err(e) if e.is_cancelled() => {
+                                    log::debug!("Discovery scan task was cancelled for IPv4 CIDR range");
+                                }
+                                Err(e) if e.is_panic() => {
+                                    log::error!(
+                                        "Discovery scan task panicked while scanning IPv4 CIDR range: {:?}",
+                                        e
+                                    );
+                                }
+                                Err(e) => {
+                                    log::error!(
+                                        "Discovery scan task failed while scanning IPv4 CIDR range: {:?}",
+                                        e
+                                    );
                                 }
                             }
-                        };
-                        tokio::spawn(c())
-                    })
-                    .collect();
-                for t in tasks {
-                    // Check if task panicked or was aborted
-                    match t.await {
-                        Ok(_) => {
-                            // Task completed successfully
                         }
-                        Err(e) if e.is_cancelled() => {
-                            log::debug!("Discovery scan task was cancelled for CIDR range");
-                        }
-                        Err(e) if e.is_panic() => {
-                            log::error!(
-                                "Discovery scan task panicked while scanning CIDR range: {:?}",
-                                e
-                            );
-                        }
-                        Err(e) => {
-                            log::error!(
-                                "Discovery scan task failed while scanning CIDR range: {:?}",
-                                e
-                            );
+                    }
+                    IpNetwork::V6(ipv6_cidr) => {
+                        // IPv6 scanning
+                        let ips = get_ips6_from_cidr(ipv6_cidr);
+                        log::debug!("Scanning {} IPv6 addresses", ips.len());
+
+                        let tasks: Vec<_> = ips
+                            .iter()
+                            .map(|&ip| {
+                                let s = semaphore.clone();
+                                let tx = tx.clone();
+                                let c = || async move {
+                                    // Semaphore acquire should not fail in normal operation
+                                    // If it does, we skip this IP and continue
+                                    let Ok(_permit) = s.acquire().await else {
+                                        let _ = tx.try_send(Action::CountIp);
+                                        return;
+                                    };
+                                    let client = match Client::new(&Config::default()) {
+                                        Ok(c) => c,
+                                        Err(e) => {
+                                            log::error!("Failed to create ICMP client: {:?}", e);
+                                            let _ = tx.try_send(Action::CountIp);
+                                            return;
+                                        }
+                                    };
+                                    let payload = [0; 56];
+                                    let mut pinger = client
+                                        .pinger(IpAddr::V6(ip), PingIdentifier(random()))
+                                        .await;
+                                    pinger.timeout(Duration::from_secs(PING_TIMEOUT_SECS));
+
+                                    match pinger.ping(PingSequence(2), &payload).await {
+                                        Ok((IcmpPacket::V6(_packet), _dur)) => {
+                                            tx.try_send(Action::PingIp(_packet.get_real_dest().to_string()))
+                                                .unwrap_or_default();
+                                            tx.try_send(Action::CountIp).unwrap_or_default();
+                                        }
+                                        Ok(_) => {
+                                            tx.try_send(Action::CountIp).unwrap_or_default();
+                                        }
+                                        Err(_) => {
+                                            tx.try_send(Action::CountIp).unwrap_or_default();
+                                        }
+                                    }
+                                };
+                                tokio::spawn(c())
+                            })
+                            .collect();
+                        for t in tasks {
+                            // Check if task panicked or was aborted
+                            match t.await {
+                                Ok(_) => {
+                                    // Task completed successfully
+                                }
+                                Err(e) if e.is_cancelled() => {
+                                    log::debug!("Discovery scan task was cancelled for IPv6 CIDR range");
+                                }
+                                Err(e) if e.is_panic() => {
+                                    log::error!(
+                                        "Discovery scan task panicked while scanning IPv6 CIDR range: {:?}",
+                                        e
+                                    );
+                                }
+                                Err(e) => {
+                                    log::error!(
+                                        "Discovery scan task failed while scanning IPv6 CIDR range: {:?}",
+                                        e
+                                    );
+                                }
+                            }
                         }
                     }
                 }
+
                 log::debug!("CIDR scan task completed");
             });
         };
@@ -309,20 +427,14 @@ impl Discovery {
             return;
         };
 
-        // Extract Ipv4Addr for storage
-        let ip_v4 = match hip {
-            IpAddr::V4(v4) => v4,
-            IpAddr::V6(_) => return, // Skip IPv6 for now
-        };
-
         // Add IP immediately without hostname (will be updated asynchronously)
         if let Some(n) = self.scanned_ips.iter_mut().find(|item| item.ip == ip) {
             n.ip = ip.to_string();
-            n.ip_addr = ip_v4;
+            n.ip_addr = hip;
         } else {
             let new_ip = ScannedIp {
                 ip: ip.to_string(),
-                ip_addr: ip_v4,
+                ip_addr: hip,
                 mac: String::new(),
                 hostname: String::new(), // Will be filled asynchronously
                 vendor: String::new(),
@@ -331,7 +443,16 @@ impl Discovery {
             // Use binary search to find the correct insertion position
             // This maintains sorted order in O(n) time instead of O(n log n) for full sort
             let insert_pos = self.scanned_ips
-                .binary_search_by(|probe| probe.ip_addr.cmp(&ip_v4))
+                .binary_search_by(|probe| {
+                    // Compare IpAddr directly - supports both IPv4 and IPv6
+                    match (probe.ip_addr, hip) {
+                        (IpAddr::V4(a), IpAddr::V4(b)) => a.cmp(&b),
+                        (IpAddr::V6(a), IpAddr::V6(b)) => a.cmp(&b),
+                        // IPv4 addresses sort before IPv6 addresses
+                        (IpAddr::V4(_), IpAddr::V6(_)) => std::cmp::Ordering::Less,
+                        (IpAddr::V6(_), IpAddr::V4(_)) => std::cmp::Ordering::Greater,
+                    }
+                })
                 .unwrap_or_else(|pos| pos);
             self.scanned_ips.insert(insert_pos, new_ip);
         }
@@ -353,13 +474,34 @@ impl Discovery {
     }
 
     fn set_active_subnet(&mut self, interface: &NetworkInterface) {
-        let a_ip = interface.ips[0].ip().to_string();
-        let ip: Vec<&str> = a_ip.split('.').collect();
-        if ip.len() > 1 {
-            let new_a_ip = format!("{}.{}.{}.0/24", ip[0], ip[1], ip[2]);
-            self.input = Input::default().with_value(new_a_ip);
+        let a_ip = interface.ips[0].ip();
 
-            self.set_cidr(self.input.value().to_string(), false);
+        match a_ip {
+            IpAddr::V4(ipv4) => {
+                // IPv4 subnet detection
+                let octets = ipv4.octets();
+                let new_a_ip = format!("{}.{}.{}.0/24", octets[0], octets[1], octets[2]);
+                self.input = Input::default().with_value(new_a_ip);
+                self.set_cidr(self.input.value().to_string(), false);
+            }
+            IpAddr::V6(ipv6) => {
+                // IPv6 subnet detection - use /120 for reasonable scanning
+                // Get the network portion (first 120 bits)
+                let segments = ipv6.segments();
+                // For link-local addresses (fe80::/10), use the common /64 prefix
+                if ipv6.segments()[0] & 0xffc0 == 0xfe80 {
+                    let new_a_ip = format!("fe80::{:x}:{:x}:{:x}:0/120",
+                        segments[4], segments[5], segments[6]);
+                    self.input = Input::default().with_value(new_a_ip);
+                } else {
+                    // For other IPv6 addresses, construct a /120 subnet
+                    let new_a_ip = format!("{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:0/120",
+                        segments[0], segments[1], segments[2], segments[3],
+                        segments[4], segments[5], segments[6]);
+                    self.input = Input::default().with_value(new_a_ip);
+                }
+                self.set_cidr(self.input.value().to_string(), false);
+            }
         }
     }
 
@@ -411,7 +553,7 @@ impl Discovery {
 
     fn make_table(
         scanned_ips: &Vec<ScannedIp>,
-        cidr: Option<Ipv4Cidr>,
+        cidr: Option<IpNetwork>,
         ip_num: i32,
         is_scanning: bool,
     ) -> Table<'_> {
@@ -421,7 +563,8 @@ impl Discovery {
             .bottom_margin(1);
         let mut rows = Vec::new();
         let cidr_length = match cidr {
-            Some(c) => count_ipv4_net_length(c.network_length() as u32),
+            Some(IpNetwork::V4(c)) => count_ipv4_net_length(c.prefix() as u32) as u64,
+            Some(IpNetwork::V6(c)) => count_ipv6_net_length(c.prefix() as u32),
             None => 0,
         };
 
@@ -457,7 +600,7 @@ impl Discovery {
         let table = Table::new(
             rows,
             [
-                Constraint::Length(16),
+                Constraint::Length(40), // Increased for IPv6 addresses (up to 39 chars)
                 Constraint::Length(19),
                 Constraint::Fill(1),
                 Constraint::Fill(1),
@@ -661,7 +804,16 @@ impl Component for Discovery {
             self.ip_num += 1;
 
             let ip_count = match self.cidr {
-                Some(cidr) => count_ipv4_net_length(cidr.network_length() as u32) as i32,
+                Some(IpNetwork::V4(cidr)) => count_ipv4_net_length(cidr.prefix() as u32) as i32,
+                Some(IpNetwork::V6(cidr)) => {
+                    let count = count_ipv6_net_length(cidr.prefix() as u32);
+                    // Cap at i32::MAX for practical purposes
+                    if count > i32::MAX as u64 {
+                        i32::MAX
+                    } else {
+                        count as i32
+                    }
+                }
                 None => 0,
             };
 
