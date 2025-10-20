@@ -447,7 +447,7 @@ mod tests {
   #[test]
   fn test_parse_color_rgb() {
     let color = parse_color("rgb123");
-    let expected = 16 + 1 * 36 + 2 * 6 + 3;
+    let expected = 16 + 36 + 2 * 6 + 3;
     assert_eq!(color, Some(Color::Indexed(expected)));
   }
 
