@@ -5,8 +5,10 @@ use ipnetwork::IpNetwork;
 use pnet::datalink::{self, Channel, NetworkInterface};
 use pnet::packet::ethernet::{EtherTypes, MutableEthernetPacket};
 use pnet::packet::icmpv6::{checksum, echo_request, Icmpv6Types};
+use pnet::packet::icmpv6::ndp::{MutableNeighborSolicitPacket, NdpOption, NdpOptionTypes, NeighborAdvertPacket};
 use pnet::packet::ipv6::MutableIpv6Packet;
 use pnet::packet::Packet;
+use pnet::util::MacAddr;
 use tokio::sync::Semaphore;
 
 use core::str;
@@ -259,9 +261,6 @@ impl Discovery {
         let mut ipv6_packet = MutableIpv6Packet::new(&mut ipv6_buffer)
             .ok_or("Failed to create IPv6 packet")?;
 
-        ipv6_packet.set_version(6);
-        ipv6_packet.set_traffic_class(0);
-        ipv6_packet.set_flow_label(0);
         ipv6_packet.set_payload_length((ICMPV6_HEADER_LEN + PAYLOAD_LEN) as u16);
         ipv6_packet.set_next_header(pnet::packet::ip::IpNextHeaderProtocols::Icmpv6);
         ipv6_packet.set_hop_limit(64);
@@ -403,6 +402,203 @@ impl Discovery {
         result.ok().flatten()
     }
 
+    // Send ICMPv6 Neighbor Solicitation to discover MAC address
+    // Returns Ok(()) if packet was sent successfully
+    async fn send_neighbor_solicitation(
+        interface: &NetworkInterface,
+        source_ipv6: Ipv6Addr,
+        target_ipv6: Ipv6Addr,
+    ) -> Result<(), String> {
+        // Get MAC address of interface
+        let source_mac = interface.mac.ok_or("Interface has no MAC address".to_string())?;
+
+        // Calculate solicited-node multicast address for target
+        // Format: ff02::1:ffXX:XXXX where XX:XXXX are the last 24 bits of target address
+        let target_segments = target_ipv6.segments();
+        let solicited_node = Ipv6Addr::new(
+            0xff02, 0, 0, 0, 0, 1,
+            0xff00 | (target_segments[6] & 0x00ff),
+            target_segments[7],
+        );
+
+        // Calculate solicited-node multicast MAC address
+        // Format: 33:33:XX:XX:XX:XX where XX:XX:XX:XX are the last 32 bits of IPv6 multicast address
+        let multicast_mac = MacAddr::new(
+            0x33, 0x33,
+            ((solicited_node.segments()[6] >> 8) & 0xff) as u8,
+            (solicited_node.segments()[6] & 0xff) as u8,
+            ((solicited_node.segments()[7] >> 8) & 0xff) as u8,
+            (solicited_node.segments()[7] & 0xff) as u8,
+        );
+
+        // Total packet size calculation:
+        // Ethernet (14) + IPv6 (40) + ICMPv6 NS (24) + NDP Option (8) = 86 bytes
+        let mut ethernet_buffer = vec![0u8; 86];
+        let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer)
+            .ok_or("Failed to create Ethernet packet".to_string())?;
+
+        // Build Ethernet header
+        ethernet_packet.set_destination(multicast_mac);
+        ethernet_packet.set_source(source_mac);
+        ethernet_packet.set_ethertype(EtherTypes::Ipv6);
+
+        // Build IPv6 header
+        let mut ipv6_buffer = vec![0u8; 72]; // IPv6 + ICMPv6 NS + NDP Option
+        let mut ipv6_packet = MutableIpv6Packet::new(&mut ipv6_buffer)
+            .ok_or("Failed to create IPv6 packet".to_string())?;
+
+        ipv6_packet.set_version(6);
+        ipv6_packet.set_traffic_class(0);
+        ipv6_packet.set_flow_label(0);
+        ipv6_packet.set_payload_length(32); // ICMPv6 NS (24) + NDP Option (8)
+        ipv6_packet.set_next_header(pnet::packet::ip::IpNextHeaderProtocols::Icmpv6);
+        ipv6_packet.set_hop_limit(255);
+        ipv6_packet.set_source(source_ipv6);
+        ipv6_packet.set_destination(solicited_node);
+
+        // Build ICMPv6 Neighbor Solicitation
+        let mut icmpv6_buffer = vec![0u8; 32]; // NS (24) + NDP Option (8)
+        let mut ns_packet = MutableNeighborSolicitPacket::new(&mut icmpv6_buffer)
+            .ok_or("Failed to create Neighbor Solicit packet".to_string())?;
+
+        ns_packet.set_icmpv6_type(Icmpv6Types::NeighborSolicit);
+        ns_packet.set_icmpv6_code(pnet::packet::icmpv6::Icmpv6Code(0));
+        ns_packet.set_reserved(0);
+        ns_packet.set_target_addr(target_ipv6);
+
+        // Add source link-layer address option
+        let ndp_option = NdpOption {
+            option_type: NdpOptionTypes::SourceLLAddr,
+            length: 1,
+            data: source_mac.octets().to_vec(),
+        };
+        ns_packet.set_options(&[ndp_option]);
+
+        // Calculate ICMPv6 checksum
+        let checksum = pnet::packet::icmpv6::checksum(
+            &pnet::packet::icmpv6::Icmpv6Packet::new(ns_packet.packet())
+                .ok_or("Failed to create ICMPv6 packet for checksum".to_string())?,
+            &source_ipv6,
+            &solicited_node,
+        );
+        ns_packet.set_checksum(checksum);
+
+        // Copy ICMPv6 packet into IPv6 payload
+        ipv6_packet.set_payload(ns_packet.packet());
+
+        // Copy IPv6 packet into Ethernet payload
+        ethernet_packet.set_payload(ipv6_packet.packet());
+
+        // Send the packet
+        let (mut tx, _) = match datalink::channel(interface, Default::default()) {
+            Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
+            Ok(_) => return Err("Unsupported channel type".to_string()),
+            Err(e) => return Err(format!("Failed to create datalink channel: {:?}", e)),
+        };
+
+        tx.send_to(ethernet_packet.packet(), None)
+            .ok_or("Failed to send packet".to_string())?
+            .map_err(|e| format!("Failed to send NDP packet: {:?}", e))?;
+
+        log::debug!("Sent Neighbor Solicitation for {} from {}", target_ipv6, source_ipv6);
+        Ok(())
+    }
+
+    // Listen for ICMPv6 Neighbor Advertisement responses
+    // Returns Some((IPv6, MAC)) if a response is received within timeout
+    async fn receive_neighbor_advertisement(
+        interface: &NetworkInterface,
+        target_ipv6: Ipv6Addr,
+        timeout: Duration,
+    ) -> Option<(Ipv6Addr, MacAddr)> {
+        use pnet::packet::ethernet::EthernetPacket;
+        use pnet::packet::ipv6::Ipv6Packet;
+        use tokio::time::{timeout as tokio_timeout, sleep};
+
+        // Open datalink channel for receiving
+        let (_tx, mut rx) = match datalink::channel(interface, Default::default()) {
+            Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
+            Ok(_) => {
+                log::debug!("Unsupported channel type for NDP receive");
+                return None;
+            }
+            Err(e) => {
+                log::debug!("Failed to open datalink channel for NDP: {:?}", e);
+                return None;
+            }
+        };
+
+        // Try to receive packets within timeout
+        let result = tokio_timeout(timeout, async {
+            loop {
+                tokio::task::yield_now().await;
+                match rx.next() {
+                    Ok(packet) => {
+                        // Parse Ethernet frame
+                        if let Some(eth_packet) = EthernetPacket::new(packet) {
+                            // Check if it's IPv6
+                            if eth_packet.get_ethertype() != EtherTypes::Ipv6 {
+                                continue;
+                            }
+
+                            // Parse IPv6 packet
+                            if let Some(ipv6_packet) = Ipv6Packet::new(eth_packet.payload()) {
+                                // Check if it's ICMPv6
+                                if ipv6_packet.get_next_header() != pnet::packet::ip::IpNextHeaderProtocols::Icmpv6 {
+                                    continue;
+                                }
+
+                                // Check if source matches target we're looking for
+                                if ipv6_packet.get_source() != target_ipv6 {
+                                    continue;
+                                }
+
+                                // Parse ICMPv6 Neighbor Advertisement
+                                if let Some(na_packet) = NeighborAdvertPacket::new(ipv6_packet.payload()) {
+                                    // Check if it's a Neighbor Advertisement
+                                    if na_packet.get_icmpv6_type() != Icmpv6Types::NeighborAdvert {
+                                        continue;
+                                    }
+
+                                    // Extract target link-layer address from options
+                                    for option in na_packet.get_options() {
+                                        if option.option_type == NdpOptionTypes::TargetLLAddr
+                                            && option.length == 1
+                                            && option.data.len() >= 6 {
+                                            let mac = MacAddr::new(
+                                                option.data[0],
+                                                option.data[1],
+                                                option.data[2],
+                                                option.data[3],
+                                                option.data[4],
+                                                option.data[5],
+                                            );
+                                            log::debug!("Received Neighbor Advertisement from {} with MAC {}", target_ipv6, mac);
+                                            return Some((target_ipv6, mac));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::debug!("Error receiving packet for NDP: {:?}", e);
+                        sleep(Duration::from_millis(10)).await;
+                    }
+                }
+            }
+        }).await;
+
+        match result {
+            Ok(Some(result)) => Some(result),
+            Ok(None) => None,
+            Err(_) => {
+                log::debug!("Timeout waiting for Neighbor Advertisement from {}", target_ipv6);
+                None
+            }
+        }
+    }
+
     pub fn get_scanned_ips(&self) -> &Vec<ScannedIp> {
         &self.scanned_ips
     }
@@ -510,7 +706,7 @@ impl Discovery {
             };
 
             // Clone interface for IPv6 scanning (needed for raw packet operations)
-            let iface = self.active_interface.clone();
+            let interface = self.active_interface.clone();
 
             // Calculate optimal pool size based on system resources
             let pool_size = Self::get_pool_size();
@@ -608,7 +804,7 @@ impl Discovery {
                             .map(|&ip| {
                                 let s = semaphore.clone();
                                 let tx = tx.clone();
-                                let iface = iface.clone();
+                                let interface_clone = interface.clone();
                                 let c = || async move {
                                     // Semaphore acquire should not fail in normal operation
                                     // If it does, we skip this IP and continue
@@ -627,14 +823,14 @@ impl Discovery {
                                         log::debug!("Using manual ICMPv6 for {} (non-macOS)", ip);
 
                                         // Get source IPv6 from interface (needed for sending)
-                                        if let Some(source_ipv6) = iface.as_ref().and_then(Self::get_interface_ipv6) {
+                                        if let Some(source_ipv6) = interface_clone.as_ref().and_then(Self::get_interface_ipv6) {
                                             // Generate random identifier and sequence for this ping
                                             let identifier = random::<u16>();
                                             let sequence = 1u16;
 
                                             // Send ICMPv6 Echo Request
                                             match Self::send_icmpv6_echo_request(
-                                                iface.as_ref().unwrap(),
+                                                interface_clone.as_ref().unwrap(),
                                                 source_ipv6,
                                                 ip,
                                                 identifier,
@@ -643,7 +839,7 @@ impl Discovery {
                                                 Ok(()) => {
                                                     // Listen for Echo Reply
                                                     if let Some(target_ipv6) = Self::receive_icmpv6_echo_reply(
-                                                        iface.as_ref().unwrap(),
+                                                        interface_clone.as_ref().unwrap(),
                                                         ip,
                                                         identifier,
                                                         sequence,
@@ -670,6 +866,38 @@ impl Discovery {
                                     if ping_success {
                                         tx.try_send(Action::PingIp(ip.to_string()))
                                             .unwrap_or_default();
+
+                                        // Attempt NDP for MAC address discovery after successful ping
+                                        if let Some(ref interface_ref) = interface_clone {
+                                            if let Some(source_ipv6) = Self::get_interface_ipv6(interface_ref) {
+                                                log::debug!("Attempting NDP for {} from {}", ip, source_ipv6);
+
+                                                // Send Neighbor Solicitation
+                                                match Self::send_neighbor_solicitation(interface_ref, source_ipv6, ip).await {
+                                                    Ok(()) => {
+                                                        // Listen for Neighbor Advertisement with 2 second timeout
+                                                        if let Some((_ipv6, mac)) = Self::receive_neighbor_advertisement(
+                                                            interface_ref,
+                                                            ip,
+                                                            Duration::from_secs(2)
+                                                        ).await {
+                                                            log::debug!("NDP discovered MAC {} for {}", mac, ip);
+                                                            let _ = tx.try_send(Action::UpdateMac(
+                                                                ip.to_string(),
+                                                                mac.to_string()
+                                                            ));
+                                                        } else {
+                                                            log::debug!("No NDP response for {}", ip);
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        log::debug!("NDP failed for {}: {:?}", ip, e);
+                                                    }
+                                                }
+                                            } else {
+                                                log::debug!("No IPv6 address found on interface for NDP");
+                                            }
+                                        }
                                     }
 
                                     tx.try_send(Action::CountIp).unwrap_or_default();
@@ -1103,6 +1331,18 @@ impl Component for Discovery {
         if let Action::DnsResolved(ref ip, ref hostname) = action {
             if let Some(entry) = self.scanned_ips.iter_mut().find(|item| item.ip == *ip) {
                 entry.hostname = hostname.clone();
+            }
+        }
+        // -- MAC address discovered via NDP (for IPv6)
+        if let Action::UpdateMac(ref ip, ref mac) = action {
+            if let Some(entry) = self.scanned_ips.iter_mut().find(|item| item.ip == *ip) {
+                entry.mac = mac.clone();
+                // Lookup vendor OUI
+                if let Some(oui) = &self.oui {
+                    if let Ok(Some(oui_res)) = oui.lookup_by_mac(mac) {
+                        entry.vendor = oui_res.company_name.clone();
+                    }
+                }
             }
         }
         // -- count IPs
