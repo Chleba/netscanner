@@ -54,7 +54,7 @@ impl WifiChart {
 
     fn parse_char_data(&mut self, nets: &[WifiInfo]) {
         for w in nets {
-            let seconds: f64 = w.time.second() as f64;
+            let _seconds: f64 = w.time.second() as f64;
             if let Some(p) = self
                 .wifi_datasets
                 .iter_mut()
@@ -62,7 +62,7 @@ impl WifiChart {
             {
                 let n = &mut self.wifi_datasets[p];
                 let signal: f64 = w.signal as f64;
-                n.data.push((self.signal_tick[1], signal * -1.0));
+                n.data.push((self.signal_tick[1], -signal));
             } else {
                 self.wifi_datasets.push(WifiDataset {
                     ssid: w.ssid.clone(),

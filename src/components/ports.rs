@@ -1,5 +1,4 @@
 use color_eyre::eyre::Result;
-use color_eyre::owo_colors::OwoColorize;
 use futures::StreamExt;
 use futures::stream;
 
@@ -28,7 +27,7 @@ use crate::{
 
 // Default concurrent port scan pool size
 // Used as fallback if CPU detection fails
-const DEFAULT_POOL_SIZE: usize = 64;
+const _DEFAULT_POOL_SIZE: usize = 64;
 
 // Minimum concurrent operations to maintain reasonable scan speed
 const MIN_POOL_SIZE: usize = 32;
@@ -368,7 +367,7 @@ impl Ports {
 }
 
 impl Component for Ports {
-    fn init(&mut self, area: Size) -> Result<()> {
+    fn init(&mut self, _area: Size) -> Result<()> {
         Ok(())
     }
 

@@ -132,18 +132,18 @@ impl WifiInterface {
 
     fn make_list(&mut self) -> List<'_> {
         if let Some(wifi_info) = &self.wifi_info {
-            let interface = &wifi_info.interface;
-            let interface_label = "Interface:";
+            let _interface = &wifi_info.interface;
+            let _interface_label = "Interface:";
             let ssid = &wifi_info.ssid;
             let ssid_label = "SSID:";
-            let ifindex = &wifi_info.ifindex;
-            let ifindex_label = "Intf index:";
+            let _ifindex = &wifi_info.ifindex;
+            let _ifindex_label = "Intf index:";
             let channel = &wifi_info.channel;
             let channel_label = "Channel:";
-            let txpower = &wifi_info.txpower;
-            let txpower_label = "TxPower:";
-            let mac = &wifi_info.mac;
-            let mac_label = "Mac addr:";
+            let _txpower = &wifi_info.txpower;
+            let _txpower_label = "TxPower:";
+            let _mac = &wifi_info.mac;
+            let _mac_label = "Mac addr:";
 
             let mut items: Vec<ListItem> = Vec::new();
 

@@ -1,5 +1,5 @@
 use chrono::{DateTime, Local};
-use color_eyre::{eyre::Result, owo_colors::OwoColorize};
+use color_eyre::eyre::Result;
 use csv::Writer;
 use ratatui::prelude::*;
 use std::env;
@@ -66,10 +66,10 @@ impl Export {
         self.home_dir = format!("{}/.netscanner", home_dir);
 
         // -- create dot folder
-        if std::fs::metadata(&self.home_dir).is_err() {
-            if std::fs::create_dir_all(&self.home_dir).is_err() {
-                log::error!("Failed to create export directory: {}", self.home_dir);
-            }
+        if std::fs::metadata(&self.home_dir).is_err()
+            && std::fs::create_dir_all(&self.home_dir).is_err()
+        {
+            log::error!("Failed to create export directory: {}", self.home_dir);
         }
     }
 
@@ -160,7 +160,7 @@ impl Export {
 }
 
 impl Component for Export {
-    fn init(&mut self, area: Size) -> Result<()> {
+    fn init(&mut self, _area: Size) -> Result<()> {
         self.get_user_home_dir();
         Ok(())
     }

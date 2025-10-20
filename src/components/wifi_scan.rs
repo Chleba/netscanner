@@ -94,12 +94,11 @@ impl WifiScan {
         // .bottom_margin(1);
         let mut rows = Vec::new();
         for w in &self.wifis {
-            let s_clamp = w.signal.max(MIN_DBM).min(MAX_DBM);
+            let s_clamp = w.signal.clamp(MIN_DBM, MAX_DBM);
             let percent = ((s_clamp - MIN_DBM) / (MAX_DBM - MIN_DBM)).clamp(0.0, 1.0);
 
             let p = (percent * 10.0) as usize;
-            let gauge: String = std::iter::repeat(char::from_u32(0x25a8).unwrap_or('#'))
-                .take(p)
+            let gauge: String = std::iter::repeat_n(char::from_u32(0x25a8).unwrap_or('#'), p)
                 .collect();
 
             let signal = format!("({}){}", w.signal, gauge);
