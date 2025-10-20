@@ -71,6 +71,12 @@ pub fn count_ipv4_net_length(net_length: u32) -> u32 {
 }
 
 pub fn count_ipv6_net_length(net_length: u32) -> u64 {
+    // IPv6 prefix lengths must be 0-128
+    if net_length > 128 {
+        log::error!("Invalid IPv6 prefix length: {}, must be 0-128", net_length);
+        return 0;
+    }
+
     // For IPv6, we need to use u64 for larger subnet calculations
     // We'll cap at u64::MAX for practical purposes
     if net_length >= 64 {
