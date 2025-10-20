@@ -4,11 +4,9 @@ use ipnetwork::IpNetwork;
 
 use pnet::datalink::{self, Channel, NetworkInterface};
 use pnet::packet::ethernet::{EtherTypes, MutableEthernetPacket};
-use pnet::packet::icmpv6::ndp::{MutableNeighborSolicitPacket, NdpOption, NdpOptionTypes, NeighborAdvertPacket};
-use pnet::packet::icmpv6::Icmpv6Types;
+use pnet::packet::icmpv6::{checksum, echo_request, Icmpv6Types};
 use pnet::packet::ipv6::MutableIpv6Packet;
 use pnet::packet::Packet;
-use pnet::util::MacAddr;
 use tokio::sync::Semaphore;
 
 use core::str;
@@ -137,214 +135,272 @@ impl Discovery {
         calculated.clamp(MIN_POOL_SIZE, MAX_POOL_SIZE)
     }
 
-    // Get the interface's IPv6 address for NDP
-    // Returns the first non-loopback, non-multicast IPv6 address
+    // Extract IPv6 address from network interface
+    // Prefers global unicast addresses over link-local for proper routing
     fn get_interface_ipv6(interface: &NetworkInterface) -> Option<Ipv6Addr> {
-        interface
-            .ips
-            .iter()
-            .filter_map(|ip| match ip.ip() {
-                IpAddr::V6(v6) if !v6.is_loopback() && !v6.is_multicast() => Some(v6),
-                _ => None,
-            })
-            .next()
+        let mut link_local = None;
+
+        for ip_network in &interface.ips {
+            if let IpAddr::V6(ipv6_addr) = ip_network.ip() {
+                if ipv6_addr.is_loopback() || ipv6_addr.is_multicast() {
+                    continue;
+                }
+
+                // Prefer global unicast addresses (non-link-local)
+                if !Self::is_link_local_ipv6(&ipv6_addr) {
+                    return Some(ipv6_addr);
+                }
+
+                // Store link-local as fallback
+                if link_local.is_none() {
+                    link_local = Some(ipv6_addr);
+                }
+            }
+        }
+
+        // Return link-local if no global address found
+        link_local
     }
 
-    // Send ICMPv6 Neighbor Solicitation to discover MAC address
-    // Returns Ok(()) if packet was sent successfully
-    async fn send_neighbor_solicitation(
+    // Check if an IPv6 address is link-local (fe80::/10)
+    fn is_link_local_ipv6(addr: &Ipv6Addr) -> bool {
+        let segments = addr.segments();
+        (segments[0] & 0xffc0) == 0xfe80
+    }
+
+    // Check if we're running on macOS
+    fn is_macos() -> bool {
+        cfg!(target_os = "macos")
+    }
+
+    // Use system ping6 command (works on macOS where kernel blocks user-space ICMP)
+    // Returns true if host responds, false otherwise
+    async fn ping6_system_command(target_ipv6: Ipv6Addr, timeout_secs: u64) -> bool {
+        use tokio::process::Command;
+        use tokio::time::timeout;
+        use std::time::Duration;
+
+        let mut cmd = Command::new("ping6");
+        cmd.arg("-c").arg("1");
+
+        // Platform-specific timeout handling
+        #[cfg(target_os = "linux")]
+        {
+            // Linux supports -W flag for timeout in seconds
+            cmd.arg("-W").arg(timeout_secs.to_string());
+        }
+
+        // macOS ping6 doesn't support -W flag, relies on default timeout (~10s)
+        // We use tokio timeout wrapper to enforce timeout on all platforms
+
+        cmd.arg(target_ipv6.to_string());
+
+        let result = timeout(
+            Duration::from_secs(timeout_secs + 1),
+            cmd.output()
+        ).await;
+
+        match result {
+            Ok(Ok(output)) => {
+                if output.status.success() {
+                    log::debug!("ping6 success for {}", target_ipv6);
+                    true
+                } else {
+                    log::debug!("ping6 no response from {}", target_ipv6);
+                    false
+                }
+            }
+            Ok(Err(e)) => {
+                log::debug!("Failed to execute ping6 command: {:?}", e);
+                false
+            }
+            Err(_) => {
+                log::debug!("ping6 command timed out for {}", target_ipv6);
+                false
+            }
+        }
+    }
+
+    // Send ICMPv6 Echo Request packet to target IPv6 address
+    // Uses raw packet construction via pnet library
+    async fn send_icmpv6_echo_request(
         interface: &NetworkInterface,
         source_ipv6: Ipv6Addr,
         target_ipv6: Ipv6Addr,
+        identifier: u16,
+        sequence: u16,
     ) -> Result<(), String> {
-        // Get MAC address of interface
-        let source_mac = interface.mac.ok_or("Interface has no MAC address".to_string())?;
+        // Create datalink channel for sending raw packets
+        let (mut tx, _) = match datalink::channel(interface, Default::default()) {
+            Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
+            Ok(_) => return Err("Unknown channel type".to_string()),
+            Err(e) => return Err(format!("Failed to create datalink channel: {}", e)),
+        };
 
-        // Calculate solicited-node multicast address for target
-        // Format: ff02::1:ffXX:XXXX where XX:XXXX are the last 24 bits of target address
-        let target_segments = target_ipv6.segments();
-        let solicited_node = Ipv6Addr::new(
-            0xff02, 0, 0, 0, 0, 1,
-            0xff00 | (target_segments[6] & 0x00ff),
-            target_segments[7],
-        );
+        // Packet structure:
+        // [Ethernet Header (14 bytes)] [IPv6 Header (40 bytes)] [ICMPv6 Echo Request (8 bytes + payload)]
+        const ETHERNET_HEADER_LEN: usize = 14;
+        const IPV6_HEADER_LEN: usize = 40;
+        const ICMPV6_HEADER_LEN: usize = 8;
+        const PAYLOAD_LEN: usize = 56; // Standard ping payload size
+        const TOTAL_LEN: usize = ETHERNET_HEADER_LEN + IPV6_HEADER_LEN + ICMPV6_HEADER_LEN + PAYLOAD_LEN;
 
-        // Calculate solicited-node multicast MAC address
-        // Format: 33:33:XX:XX:XX:XX where XX:XX:XX:XX are the last 32 bits of IPv6 multicast address
-        let multicast_mac = MacAddr::new(
-            0x33, 0x33,
-            ((solicited_node.segments()[6] >> 8) & 0xff) as u8,
-            (solicited_node.segments()[6] & 0xff) as u8,
-            ((solicited_node.segments()[7] >> 8) & 0xff) as u8,
-            (solicited_node.segments()[7] & 0xff) as u8,
-        );
-
-        // Total packet size calculation:
-        // Ethernet (14) + IPv6 (40) + ICMPv6 NS (24) + NDP Option (8) = 86 bytes
-        let mut ethernet_buffer = vec![0u8; 86];
+        let mut ethernet_buffer = [0u8; TOTAL_LEN];
         let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer)
-            .ok_or("Failed to create Ethernet packet".to_string())?;
+            .ok_or("Failed to create Ethernet packet")?;
 
-        // Build Ethernet header
-        ethernet_packet.set_destination(multicast_mac);
-        ethernet_packet.set_source(source_mac);
+        // Set Ethernet header
+        ethernet_packet.set_destination(pnet::util::MacAddr::broadcast());
+        ethernet_packet.set_source(interface.mac.unwrap_or(pnet::util::MacAddr::zero()));
         ethernet_packet.set_ethertype(EtherTypes::Ipv6);
 
-        // Build IPv6 header
-        let mut ipv6_buffer = vec![0u8; 72]; // IPv6 + ICMPv6 NS + NDP Option
+        // Create IPv6 packet in the Ethernet payload
+        let mut ipv6_buffer = [0u8; IPV6_HEADER_LEN + ICMPV6_HEADER_LEN + PAYLOAD_LEN];
         let mut ipv6_packet = MutableIpv6Packet::new(&mut ipv6_buffer)
-            .ok_or("Failed to create IPv6 packet".to_string())?;
+            .ok_or("Failed to create IPv6 packet")?;
 
         ipv6_packet.set_version(6);
         ipv6_packet.set_traffic_class(0);
         ipv6_packet.set_flow_label(0);
-        ipv6_packet.set_payload_length(32); // ICMPv6 NS (24) + NDP Option (8)
+        ipv6_packet.set_payload_length((ICMPV6_HEADER_LEN + PAYLOAD_LEN) as u16);
         ipv6_packet.set_next_header(pnet::packet::ip::IpNextHeaderProtocols::Icmpv6);
-        ipv6_packet.set_hop_limit(255);
+        ipv6_packet.set_hop_limit(64);
         ipv6_packet.set_source(source_ipv6);
-        ipv6_packet.set_destination(solicited_node);
+        ipv6_packet.set_destination(target_ipv6);
 
-        // Build ICMPv6 Neighbor Solicitation
-        let mut icmpv6_buffer = vec![0u8; 32]; // NS (24) + NDP Option (8)
-        let mut ns_packet = MutableNeighborSolicitPacket::new(&mut icmpv6_buffer)
-            .ok_or("Failed to create Neighbor Solicit packet".to_string())?;
+        // Create ICMPv6 Echo Request in the IPv6 payload
+        let mut icmpv6_buffer = [0u8; ICMPV6_HEADER_LEN + PAYLOAD_LEN];
 
-        ns_packet.set_icmpv6_type(Icmpv6Types::NeighborSolicit);
-        ns_packet.set_icmpv6_code(pnet::packet::icmpv6::Icmpv6Code(0));
-        ns_packet.set_reserved(0);
-        ns_packet.set_target_addr(target_ipv6);
+        use pnet::packet::icmpv6::echo_request::MutableEchoRequestPacket;
+        let mut echo_request_packet = MutableEchoRequestPacket::new(&mut icmpv6_buffer)
+            .ok_or("Failed to create Echo Request packet")?;
 
-        // Add source link-layer address option
-        let ndp_option = NdpOption {
-            option_type: NdpOptionTypes::SourceLLAddr,
-            length: 1,
-            data: source_mac.octets().to_vec(),
-        };
-        ns_packet.set_options(&[ndp_option]);
+        echo_request_packet.set_icmpv6_type(Icmpv6Types::EchoRequest);
+        echo_request_packet.set_icmpv6_code(echo_request::Icmpv6Codes::NoCode);
+        echo_request_packet.set_identifier(identifier);
+        echo_request_packet.set_sequence_number(sequence);
+        // Payload (data field) is zeros (already initialized)
 
-        // Calculate ICMPv6 checksum
-        let checksum = pnet::packet::icmpv6::checksum(
-            &pnet::packet::icmpv6::Icmpv6Packet::new(ns_packet.packet())
-                .ok_or("Failed to create ICMPv6 packet for checksum".to_string())?,
-            &source_ipv6,
-            &solicited_node,
-        );
-        ns_packet.set_checksum(checksum);
+        // Calculate and set ICMPv6 checksum
+        // Need to convert back to Icmpv6Packet for checksum calculation
+        use pnet::packet::icmpv6::Icmpv6Packet;
+        let icmpv6_for_checksum = Icmpv6Packet::new(echo_request_packet.packet())
+            .ok_or("Failed to create Icmpv6Packet for checksum")?;
+        let checksum_val = checksum(&icmpv6_for_checksum, &source_ipv6, &target_ipv6);
+        echo_request_packet.set_checksum(checksum_val);
 
-        // Copy ICMPv6 packet into IPv6 payload
-        ipv6_packet.set_payload(ns_packet.packet());
+        // Copy ICMPv6 Echo Request into IPv6 payload
+        ipv6_packet.set_payload(echo_request_packet.packet());
 
         // Copy IPv6 packet into Ethernet payload
         ethernet_packet.set_payload(ipv6_packet.packet());
 
         // Send the packet
-        let (mut tx, _) = match datalink::channel(interface, Default::default()) {
-            Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
-            Ok(_) => return Err("Unsupported channel type".to_string()),
-            Err(e) => return Err(format!("Failed to create datalink channel: {:?}", e)),
-        };
-
+        // Yield to tokio scheduler before blocking I/O
+        tokio::task::yield_now().await;
         tx.send_to(ethernet_packet.packet(), None)
-            .ok_or("Failed to send packet".to_string())?
-            .map_err(|e| format!("Failed to send NDP packet: {:?}", e))?;
+            .ok_or("Failed to send packet")?
+            .map_err(|e| format!("Send error: {}", e))?;
 
-        log::debug!("Sent Neighbor Solicitation for {} from {}", target_ipv6, source_ipv6);
         Ok(())
     }
 
-    // Listen for ICMPv6 Neighbor Advertisement responses
-    // Returns Some((IPv6, MAC)) if a response is received within timeout
-    async fn receive_neighbor_advertisement(
+    // Receive ICMPv6 Echo Reply packet from target IPv6 address
+    // Listens for Echo Reply with matching identifier and sequence number
+    async fn receive_icmpv6_echo_reply(
         interface: &NetworkInterface,
         target_ipv6: Ipv6Addr,
+        identifier: u16,
+        sequence: u16,
         timeout: Duration,
-    ) -> Option<(Ipv6Addr, MacAddr)> {
-        use pnet::packet::ethernet::EthernetPacket;
-        use pnet::packet::ipv6::Ipv6Packet;
-        use tokio::time::{timeout as tokio_timeout, sleep};
-
-        // Open datalink channel for receiving
-        let (_tx, mut rx) = match datalink::channel(interface, Default::default()) {
+    ) -> Option<Ipv6Addr> {
+        // Create datalink channel for receiving raw packets
+        let (_, mut rx) = match datalink::channel(interface, Default::default()) {
             Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
-            Ok(_) => {
-                log::debug!("Unsupported channel type for NDP receive");
-                return None;
-            }
+            Ok(_) => return None,
             Err(e) => {
-                log::debug!("Failed to open datalink channel for NDP: {:?}", e);
+                log::debug!("Failed to create datalink channel for receiving: {}", e);
                 return None;
             }
         };
 
-        // Try to receive packets within timeout
-        let result = tokio_timeout(timeout, async {
+        // Set up timeout using tokio
+        let result = tokio::time::timeout(timeout, async {
             loop {
+                // Yield to tokio scheduler before blocking I/O
                 tokio::task::yield_now().await;
+
                 match rx.next() {
                     Ok(packet) => {
                         // Parse Ethernet frame
-                        if let Some(eth_packet) = EthernetPacket::new(packet) {
-                            // Check if it's IPv6
-                            if eth_packet.get_ethertype() != EtherTypes::Ipv6 {
-                                continue;
-                            }
+                        use pnet::packet::ethernet::EthernetPacket;
+                        let eth_packet = match EthernetPacket::new(packet) {
+                            Some(eth) => eth,
+                            None => continue,
+                        };
 
-                            // Parse IPv6 packet
-                            if let Some(ipv6_packet) = Ipv6Packet::new(eth_packet.payload()) {
-                                // Check if it's ICMPv6
-                                if ipv6_packet.get_next_header() != pnet::packet::ip::IpNextHeaderProtocols::Icmpv6 {
-                                    continue;
-                                }
+                        // Check if it's an IPv6 packet
+                        if eth_packet.get_ethertype() != EtherTypes::Ipv6 {
+                            continue;
+                        }
 
-                                // Check if source matches target we're looking for
-                                if ipv6_packet.get_source() != target_ipv6 {
-                                    continue;
-                                }
+                        // Parse IPv6 packet
+                        use pnet::packet::ipv6::Ipv6Packet;
+                        let ipv6_packet = match Ipv6Packet::new(eth_packet.payload()) {
+                            Some(ipv6) => ipv6,
+                            None => continue,
+                        };
 
-                                // Parse ICMPv6 Neighbor Advertisement
-                                if let Some(na_packet) = NeighborAdvertPacket::new(ipv6_packet.payload()) {
-                                    // Check if it's a Neighbor Advertisement
-                                    if na_packet.get_icmpv6_type() != Icmpv6Types::NeighborAdvert {
-                                        continue;
-                                    }
+                        // Check if it's from our target
+                        if ipv6_packet.get_source() != target_ipv6 {
+                            continue;
+                        }
 
-                                    // Extract target link-layer address from options
-                                    for option in na_packet.get_options() {
-                                        if option.option_type == NdpOptionTypes::TargetLLAddr
-                                            && option.length == 1
-                                            && option.data.len() >= 6 {
-                                            let mac = MacAddr::new(
-                                                option.data[0],
-                                                option.data[1],
-                                                option.data[2],
-                                                option.data[3],
-                                                option.data[4],
-                                                option.data[5],
-                                            );
-                                            log::debug!("Received Neighbor Advertisement from {} with MAC {}", target_ipv6, mac);
-                                            return Some((target_ipv6, mac));
-                                        }
-                                    }
-                                }
-                            }
+                        // Check if it's an ICMPv6 packet
+                        use pnet::packet::ip::IpNextHeaderProtocols;
+                        if ipv6_packet.get_next_header() != IpNextHeaderProtocols::Icmpv6 {
+                            continue;
+                        }
+
+                        // Parse ICMPv6 packet
+                        use pnet::packet::icmpv6::Icmpv6Packet;
+                        let icmpv6_packet = match Icmpv6Packet::new(ipv6_packet.payload()) {
+                            Some(icmpv6) => icmpv6,
+                            None => continue,
+                        };
+
+                        // Check if it's an Echo Reply
+                        if icmpv6_packet.get_icmpv6_type() != Icmpv6Types::EchoReply {
+                            continue;
+                        }
+
+                        // Parse Echo Reply packet to get identifier and sequence
+                        // These are at bytes 4-5 and 6-7 of the ICMPv6 packet
+                        use pnet::packet::icmpv6::echo_reply::EchoReplyPacket;
+                        let echo_reply = match EchoReplyPacket::new(icmpv6_packet.packet()) {
+                            Some(reply) => reply,
+                            None => continue,
+                        };
+
+                        let reply_identifier = echo_reply.get_identifier();
+                        let reply_sequence = echo_reply.get_sequence_number();
+
+                        if reply_identifier == identifier && reply_sequence == sequence {
+                            // Found matching Echo Reply
+                            return Some(ipv6_packet.get_source());
                         }
                     }
                     Err(e) => {
-                        log::debug!("Error receiving packet for NDP: {:?}", e);
-                        sleep(Duration::from_millis(10)).await;
+                        log::debug!("Error receiving packet: {}", e);
+                        continue;
                     }
                 }
             }
-        }).await;
+        })
+        .await;
 
-        match result {
-            Ok(Some(result)) => Some(result),
-            Ok(None) => None,
-            Err(_) => {
-                log::debug!("Timeout waiting for Neighbor Advertisement from {}", target_ipv6);
-                None
-            }
-        }
+        // Return result if successful, None if timeout
+        result.ok().flatten()
     }
 
     pub fn get_scanned_ips(&self) -> &Vec<ScannedIp> {
@@ -453,8 +509,8 @@ impl Discovery {
                 return;
             };
 
-            // Clone interface for async task
-            let interface = self.active_interface.clone();
+            // Clone interface for IPv6 scanning (needed for raw packet operations)
+            let iface = self.active_interface.clone();
 
             // Calculate optimal pool size based on system resources
             let pool_size = Self::get_pool_size();
@@ -543,7 +599,7 @@ impl Discovery {
                         }
                     }
                     IpNetwork::V6(ipv6_cidr) => {
-                        // IPv6 scanning
+                        // IPv6 scanning - using manual ICMPv6 Echo Request/Reply
                         let ips = get_ips6_from_cidr(ipv6_cidr);
                         log::debug!("Scanning {} IPv6 addresses", ips.len());
 
@@ -552,7 +608,7 @@ impl Discovery {
                             .map(|&ip| {
                                 let s = semaphore.clone();
                                 let tx = tx.clone();
-                                let iface = interface.clone();
+                                let iface = iface.clone();
                                 let c = || async move {
                                     // Semaphore acquire should not fail in normal operation
                                     // If it does, we skip this IP and continue
@@ -560,67 +616,63 @@ impl Discovery {
                                         let _ = tx.try_send(Action::CountIp);
                                         return;
                                     };
-                                    let client = match Client::new(&Config::default()) {
-                                        Ok(c) => c,
-                                        Err(e) => {
-                                            log::error!("Failed to create ICMP client: {:?}", e);
-                                            let _ = tx.try_send(Action::CountIp);
-                                            return;
-                                        }
-                                    };
-                                    let payload = [0; 56];
-                                    let mut pinger = client
-                                        .pinger(IpAddr::V6(ip), PingIdentifier(random()))
-                                        .await;
-                                    pinger.timeout(Duration::from_secs(PING_TIMEOUT_SECS));
 
-                                    match pinger.ping(PingSequence(2), &payload).await {
-                                        Ok((IcmpPacket::V6(_packet), _dur)) => {
-                                            let target_ipv6 = _packet.get_real_dest();
-                                            tx.try_send(Action::PingIp(target_ipv6.to_string()))
-                                                .unwrap_or_default();
+                                    // On macOS, use system ping6 command because kernel doesn't deliver
+                                    // ICMPv6 Echo Reply packets to user-space raw sockets
+                                    let ping_success = if Self::is_macos() {
+                                        log::debug!("Using system ping6 for {} (macOS)", ip);
+                                        Self::ping6_system_command(ip, PING_TIMEOUT_SECS).await
+                                    } else {
+                                        // On Linux/other platforms, use manual ICMPv6 implementation
+                                        log::debug!("Using manual ICMPv6 for {} (non-macOS)", ip);
 
-                                            // Attempt NDP for MAC address discovery
-                                            if let Some(ref iface_ref) = iface {
-                                                if let Some(source_ipv6) = Self::get_interface_ipv6(iface_ref) {
-                                                    log::debug!("Attempting NDP for {} from {}", target_ipv6, source_ipv6);
+                                        // Get source IPv6 from interface (needed for sending)
+                                        if let Some(source_ipv6) = iface.as_ref().and_then(Self::get_interface_ipv6) {
+                                            // Generate random identifier and sequence for this ping
+                                            let identifier = random::<u16>();
+                                            let sequence = 1u16;
 
-                                                    // Send Neighbor Solicitation
-                                                    match Self::send_neighbor_solicitation(iface_ref, source_ipv6, target_ipv6).await {
-                                                        Ok(()) => {
-                                                            // Listen for Neighbor Advertisement with 2 second timeout
-                                                            if let Some((_ipv6, mac)) = Self::receive_neighbor_advertisement(
-                                                                iface_ref,
-                                                                target_ipv6,
-                                                                Duration::from_secs(2)
-                                                            ).await {
-                                                                log::debug!("NDP discovered MAC {} for {}", mac, target_ipv6);
-                                                                let _ = tx.try_send(Action::UpdateMac(
-                                                                    target_ipv6.to_string(),
-                                                                    mac.to_string()
-                                                                ));
-                                                            } else {
-                                                                log::debug!("No NDP response for {}", target_ipv6);
-                                                            }
-                                                        }
-                                                        Err(e) => {
-                                                            log::debug!("NDP failed for {}: {:?}", target_ipv6, e);
-                                                        }
+                                            // Send ICMPv6 Echo Request
+                                            match Self::send_icmpv6_echo_request(
+                                                iface.as_ref().unwrap(),
+                                                source_ipv6,
+                                                ip,
+                                                identifier,
+                                                sequence
+                                            ).await {
+                                                Ok(()) => {
+                                                    // Listen for Echo Reply
+                                                    if let Some(target_ipv6) = Self::receive_icmpv6_echo_reply(
+                                                        iface.as_ref().unwrap(),
+                                                        ip,
+                                                        identifier,
+                                                        sequence,
+                                                        Duration::from_secs(PING_TIMEOUT_SECS)
+                                                    ).await {
+                                                        log::debug!("ICMPv6 Echo Reply received from {}", target_ipv6);
+                                                        true
+                                                    } else {
+                                                        log::debug!("No ICMPv6 Echo Reply from {}", ip);
+                                                        false
                                                     }
-                                                } else {
-                                                    log::debug!("No IPv6 address found on interface for NDP");
+                                                }
+                                                Err(e) => {
+                                                    log::debug!("Failed to send ICMPv6 Echo Request to {}: {}", ip, e);
+                                                    false
                                                 }
                                             }
+                                        } else {
+                                            log::debug!("No IPv6 address on interface for pinging {}", ip);
+                                            false
+                                        }
+                                    };
 
-                                            tx.try_send(Action::CountIp).unwrap_or_default();
-                                        }
-                                        Ok(_) => {
-                                            tx.try_send(Action::CountIp).unwrap_or_default();
-                                        }
-                                        Err(_) => {
-                                            tx.try_send(Action::CountIp).unwrap_or_default();
-                                        }
+                                    if ping_success {
+                                        tx.try_send(Action::PingIp(ip.to_string()))
+                                            .unwrap_or_default();
                                     }
+
+                                    tx.try_send(Action::CountIp).unwrap_or_default();
                                 };
                                 tokio::spawn(c())
                             })
@@ -1051,18 +1103,6 @@ impl Component for Discovery {
         if let Action::DnsResolved(ref ip, ref hostname) = action {
             if let Some(entry) = self.scanned_ips.iter_mut().find(|item| item.ip == *ip) {
                 entry.hostname = hostname.clone();
-            }
-        }
-        // -- MAC address discovered via NDP (for IPv6)
-        if let Action::UpdateMac(ref ip, ref mac) = action {
-            if let Some(entry) = self.scanned_ips.iter_mut().find(|item| item.ip == *ip) {
-                entry.mac = mac.clone();
-                // Lookup vendor OUI
-                if let Some(oui) = &self.oui {
-                    if let Ok(Some(oui_res)) = oui.lookup_by_mac(mac) {
-                        entry.vendor = oui_res.company_name.clone();
-                    }
-                }
             }
         }
         // -- count IPs
