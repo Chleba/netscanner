@@ -22,16 +22,14 @@
 - [x] WiFi networks scanning
 - [x] WiFi signals strength (with charts)
 - [x] (IPv4) Pinging CIDR with hostname, oui & mac address
+- [x] (IPv6) Pinging CIDR with hostname, oui & mac address (NDP-based)
 - [x] (IPv4) Packetdump (TCP, UDP, ICMP, ARP)
-- [x] (IPv6) Packetdump (ICMP6)
+- [x] (IPv6) Packetdump (TCP, UDP, ICMP6)
 - [x] start/pause packetdump
-- [x] scanning open ports (TCP)
+- [x] scanning open ports (TCP/IPv4 and TCP/IPv6)
 - [x] packet logs filter
 - [x] export scanned ips, ports, packets into csv
 - [x] traffic counting + DNS records
-
-**TODO:**
-- [ ] ipv6 scanning & dumping
 
 ## *Notes*:
 - Must be run with root privileges. 
