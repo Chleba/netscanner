@@ -1,29 +1,19 @@
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
-use color_eyre::owo_colors::OwoColorize;
-use dns_lookup::{lookup_addr, lookup_host};
-use futures::future::join_all;
 
-use pnet::datalink::{Channel, NetworkInterface};
-use pnet::packet::{
-    arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
-    ethernet::{EtherTypes, MutableEthernetPacket},
-    MutablePacket, Packet,
-};
-use pnet::util::MacAddr;
+use pnet::datalink::NetworkInterface;
 use tokio::sync::Semaphore;
 
 use core::str;
 use ratatui::layout::Position;
 use ratatui::{prelude::*, widgets::*};
 use std::net::{IpAddr, Ipv4Addr};
-use std::string;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
-use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence, ICMP};
+use std::time::Duration;
+use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence};
 use tokio::{
-    sync::mpsc::{self, UnboundedSender},
-    task::{self, JoinHandle},
+    sync::mpsc::Sender,
+    task::JoinHandle,
 };
 
 use super::Component;
@@ -31,6 +21,7 @@ use crate::{
     action::Action,
     components::packetdump::ArpPacketData,
     config::DEFAULT_BORDER_STYLE,
+    dns_cache::DnsCache,
     enums::TabsEnum,
     layout::get_vertical_layout,
     mode::Mode,
@@ -44,14 +35,34 @@ use rand::random;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
-static POOL_SIZE: usize = 32;
-static INPUT_SIZE: usize = 30;
-static DEFAULT_IP: &str = "192.168.1.0/24";
+// Default concurrent ping scan pool size
+// Used as fallback if CPU detection fails or for single-core systems
+const _DEFAULT_POOL_SIZE: usize = 32;
+
+// Minimum concurrent operations to maintain reasonable performance
+const MIN_POOL_SIZE: usize = 16;
+
+// Maximum concurrent operations to prevent resource exhaustion
+const MAX_POOL_SIZE: usize = 64;
+
+// Ping timeout in seconds
+// Time to wait for ICMP echo reply before considering host unreachable
+// 2 seconds provides good balance between speed and reliability for local networks
+const PING_TIMEOUT_SECS: u64 = 2;
+
+// Width of the CIDR input field in characters
+const INPUT_SIZE: usize = 30;
+
+// Default CIDR range for initial scan
+const DEFAULT_IP: &str = "192.168.1.0/24";
+
+// Animation frames for the scanning spinner
 const SPINNER_SYMBOLS: [&str; 6] = ["⠷", "⠯", "⠟", "⠻", "⠽", "⠾"];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScannedIp {
     pub ip: String,
+    pub ip_addr: Ipv4Addr, // Cached parsed IP for efficient sorting
     pub mac: String,
     pub hostname: String,
     pub vendor: String,
@@ -60,7 +71,7 @@ pub struct ScannedIp {
 pub struct Discovery {
     active_tab: TabsEnum,
     active_interface: Option<NetworkInterface>,
-    action_tx: Option<UnboundedSender<Action>>,
+    action_tx: Option<Sender<Action>>,
     scanned_ips: Vec<ScannedIp>,
     ip_num: i32,
     input: Input,
@@ -73,6 +84,7 @@ pub struct Discovery {
     table_state: TableState,
     scrollbar_state: ScrollbarState,
     spinner_index: usize,
+    dns_cache: DnsCache,
 }
 
 impl Default for Discovery {
@@ -99,7 +111,23 @@ impl Discovery {
             table_state: TableState::default().with_selected(0),
             scrollbar_state: ScrollbarState::new(0),
             spinner_index: 0,
+            dns_cache: DnsCache::new(),
         }
+    }
+
+    // Calculate optimal pool size based on available CPU cores
+    // Returns a value between MIN_POOL_SIZE and MAX_POOL_SIZE
+    fn get_pool_size() -> usize {
+        // Try to detect number of CPU cores
+        let num_cpus = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4); // Default to 4 if detection fails
+
+        // Use 2x CPU cores as starting point for I/O-bound operations
+        let calculated = num_cpus * 2;
+
+        // Clamp to min/max bounds
+        calculated.clamp(MIN_POOL_SIZE, MAX_POOL_SIZE)
     }
 
     pub fn get_scanned_ips(&self) -> &Vec<ScannedIp> {
@@ -107,16 +135,59 @@ impl Discovery {
     }
 
     fn set_cidr(&mut self, cidr_str: String, scan: bool) {
-        match cidr_str.parse::<Ipv4Cidr>() {
+        // Validate input is not empty and doesn't contain suspicious characters
+        let trimmed = cidr_str.trim();
+        if trimmed.is_empty() {
+            if let Some(tx) = &self.action_tx {
+                let _ = tx.clone().try_send(Action::CidrError);
+            }
+            return;
+        }
+
+        // Basic format validation before parsing
+        if !trimmed.contains('/') {
+            if let Some(tx) = &self.action_tx {
+                let _ = tx.clone().try_send(Action::CidrError);
+            }
+            return;
+        }
+
+        match trimmed.parse::<Ipv4Cidr>() {
             Ok(ip_cidr) => {
+                // Validate CIDR range is reasonable (prevent scanning entire internet)
+                // Minimum network length /8 (16,777,216 hosts) - too large
+                // Maximum network length /32 (1 host) - pointless but allowed
+                // Recommended minimum: /16 (65,536 hosts)
+                // For safety, we'll enforce a minimum of /16
+                let network_length = ip_cidr.network_length();
+
+                if network_length < 16 {
+                    // Network too large - prevent scanning millions of IPs
+                    if let Some(tx) = &self.action_tx {
+                        let _ = tx.clone().try_send(Action::CidrError);
+                    }
+                    return;
+                }
+
+                // Validate it's not a special-purpose network
+                let first_octet = ip_cidr.first_address().octets()[0];
+
+                // Reject loopback (127.0.0.0/8), multicast (224.0.0.0/4), and reserved ranges
+                if first_octet == 127 || first_octet >= 224 {
+                    if let Some(tx) = &self.action_tx {
+                        let _ = tx.clone().try_send(Action::CidrError);
+                    }
+                    return;
+                }
+
                 self.cidr = Some(ip_cidr);
                 if scan {
                     self.scan();
                 }
             }
-            Err(e) => {
+            Err(_) => {
                 if let Some(tx) = &self.action_tx {
-                    tx.clone().send(Action::CidrError).unwrap();
+                    let _ = tx.clone().try_send(Action::CidrError);
                 }
             }
         }
@@ -127,126 +198,26 @@ impl Discovery {
         self.ip_num = 0;
     }
 
-    fn send_arp(&mut self, target_ip: Ipv4Addr) {
-        if let Some(active_interface) = &self.active_interface {
-            if let Some(active_interface_mac) = active_interface.mac {
-                let ipv4 = active_interface.ips.iter().find(|f| f.is_ipv4()).unwrap();
-                let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
-
-                let (mut sender, _) =
-                    match pnet::datalink::channel(active_interface, Default::default()) {
-                        Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
-                        Ok(_) => {
-                            if let Some(tx_action) = &self.action_tx {
-                                tx_action
-                                    .clone()
-                                    .send(Action::Error(
-                                        "Unknown or unsupported channel type".into(),
-                                    ))
-                                    .unwrap();
-                            }
-                            return;
-                        }
-                        Err(e) => {
-                            if let Some(tx_action) = &self.action_tx {
-                                tx_action
-                                    .clone()
-                                    .send(Action::Error(format!(
-                                        "Unable to create datalink channel: {e}"
-                                    )))
-                                    .unwrap();
-                            }
-                            return;
-                        }
-                    };
-
-                let mut ethernet_buffer = [0u8; 42];
-                let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer).unwrap();
-
-                ethernet_packet.set_destination(MacAddr::broadcast());
-                ethernet_packet.set_source(active_interface_mac);
-                ethernet_packet.set_ethertype(EtherTypes::Arp);
-
-                let mut arp_buffer = [0u8; 28];
-                let mut arp_packet = MutableArpPacket::new(&mut arp_buffer).unwrap();
-
-                arp_packet.set_hardware_type(ArpHardwareTypes::Ethernet);
-                arp_packet.set_protocol_type(EtherTypes::Ipv4);
-                arp_packet.set_hw_addr_len(6);
-                arp_packet.set_proto_addr_len(4);
-                arp_packet.set_operation(ArpOperations::Request);
-                arp_packet.set_sender_hw_addr(active_interface_mac);
-                arp_packet.set_sender_proto_addr(source_ip);
-                arp_packet.set_target_hw_addr(MacAddr::zero());
-                arp_packet.set_target_proto_addr(target_ip);
-
-                ethernet_packet.set_payload(arp_packet.packet_mut());
-
-                sender
-                    .send_to(ethernet_packet.packet(), None)
-                    .unwrap()
-                    .unwrap();
-            }
-        }
-    }
-
-    // fn scan(&mut self) {
-    //     self.reset_scan();
-
-    //     if let Some(cidr) = self.cidr {
-    //         self.is_scanning = true;
-    //         let tx = self.action_tx.as_ref().unwrap().clone();
-    //         self.task = tokio::spawn(async move {
-    //             let ips = get_ips4_from_cidr(cidr);
-    //             let chunks: Vec<_> = ips.chunks(POOL_SIZE).collect();
-    //             for chunk in chunks {
-    //                 let tasks: Vec<_> = chunk
-    //                     .iter()
-    //                     .map(|&ip| {
-    //                         let tx = tx.clone();
-    //                         let closure = || async move {
-    //                             let client =
-    //                                 Client::new(&Config::default()).expect("Cannot create client");
-    //                             let payload = [0; 56];
-    //                             let mut pinger = client
-    //                                 .pinger(IpAddr::V4(ip), PingIdentifier(random()))
-    //                                 .await;
-    //                             pinger.timeout(Duration::from_secs(2));
-
-    //                             match pinger.ping(PingSequence(2), &payload).await {
-    //                                 Ok((IcmpPacket::V4(packet), dur)) => {
-    //                                     tx.send(Action::PingIp(packet.get_real_dest().to_string()))
-    //                                         .unwrap_or_default();
-    //                                     tx.send(Action::CountIp).unwrap_or_default();
-    //                                 }
-    //                                 Ok(_) => {
-    //                                     tx.send(Action::CountIp).unwrap_or_default();
-    //                                 }
-    //                                 Err(_) => {
-    //                                     tx.send(Action::CountIp).unwrap_or_default();
-    //                                 }
-    //                             }
-    //                         };
-    //                         task::spawn(closure())
-    //                     })
-    //                     .collect();
-
-    //                 let _ = join_all(tasks).await;
-    //             }
-    //         });
-    //     };
-    // }
-
     fn scan(&mut self) {
         self.reset_scan();
 
         if let Some(cidr) = self.cidr {
             self.is_scanning = true;
 
-            let tx = self.action_tx.clone().unwrap();
-            let semaphore = Arc::new(Semaphore::new(POOL_SIZE));
+            // Early return if action_tx is not available
+            // Clone necessary: Sender will be moved into async task
+            let Some(tx) = self.action_tx.clone() else {
+                self.is_scanning = false;
+                return;
+            };
+
+            // Calculate optimal pool size based on system resources
+            let pool_size = Self::get_pool_size();
+            log::debug!("Using pool size of {} for discovery scan", pool_size);
+            let semaphore = Arc::new(Semaphore::new(pool_size));
 
             self.task = tokio::spawn(async move {
+                log::debug!("Starting CIDR scan task");
                 let ips = get_ips4_from_cidr(cidr);
                 let tasks: Vec<_> = ips
                     .iter()
@@ -254,26 +225,31 @@ impl Discovery {
                         let s = semaphore.clone();
                         let tx = tx.clone();
                         let c = || async move {
-                            let _permit = s.acquire().await.unwrap();
+                            // Semaphore acquire should not fail in normal operation
+                            // If it does, we skip this IP and continue
+                            let Ok(_permit) = s.acquire().await else {
+                                let _ = tx.try_send(Action::CountIp);
+                                return;
+                            };
                             let client =
                                 Client::new(&Config::default()).expect("Cannot create client");
                             let payload = [0; 56];
                             let mut pinger = client
                                 .pinger(IpAddr::V4(ip), PingIdentifier(random()))
                                 .await;
-                            pinger.timeout(Duration::from_secs(2));
+                            pinger.timeout(Duration::from_secs(PING_TIMEOUT_SECS));
 
                             match pinger.ping(PingSequence(2), &payload).await {
-                                Ok((IcmpPacket::V4(packet), dur)) => {
-                                    tx.send(Action::PingIp(packet.get_real_dest().to_string()))
+                                Ok((IcmpPacket::V4(_packet), _dur)) => {
+                                    tx.try_send(Action::PingIp(_packet.get_real_dest().to_string()))
                                         .unwrap_or_default();
-                                    tx.send(Action::CountIp).unwrap_or_default();
+                                    tx.try_send(Action::CountIp).unwrap_or_default();
                                 }
                                 Ok(_) => {
-                                    tx.send(Action::CountIp).unwrap_or_default();
+                                    tx.try_send(Action::CountIp).unwrap_or_default();
                                 }
                                 Err(_) => {
-                                    tx.send(Action::CountIp).unwrap_or_default();
+                                    tx.try_send(Action::CountIp).unwrap_or_default();
                                 }
                             }
                         };
@@ -281,9 +257,29 @@ impl Discovery {
                     })
                     .collect();
                 for t in tasks {
-                    let _ = t.await;
+                    // Check if task panicked or was aborted
+                    match t.await {
+                        Ok(_) => {
+                            // Task completed successfully
+                        }
+                        Err(e) if e.is_cancelled() => {
+                            log::debug!("Discovery scan task was cancelled for CIDR range");
+                        }
+                        Err(e) if e.is_panic() => {
+                            log::error!(
+                                "Discovery scan task panicked while scanning CIDR range: {:?}",
+                                e
+                            );
+                        }
+                        Err(e) => {
+                            log::error!(
+                                "Discovery scan task failed while scanning CIDR range: {:?}",
+                                e
+                            );
+                        }
+                    }
                 }
-                // let _ = join_all(tasks).await;
+                log::debug!("CIDR scan task completed");
             });
         };
     }
@@ -307,37 +303,57 @@ impl Discovery {
     }
 
     fn process_ip(&mut self, ip: &str) {
-        let tx = self.action_tx.as_ref().unwrap();
-        let ipv4: Ipv4Addr = ip.parse().unwrap();
-        // self.send_arp(ipv4);
+        // Parse IP address - should always succeed as it comes from successful ping
+        let Ok(hip) = ip.parse::<IpAddr>() else {
+            // If parsing fails, skip this IP
+            return;
+        };
 
+        // Extract Ipv4Addr for storage
+        let ip_v4 = match hip {
+            IpAddr::V4(v4) => v4,
+            IpAddr::V6(_) => return, // Skip IPv6 for now
+        };
+
+        // Add IP immediately without hostname (will be updated asynchronously)
         if let Some(n) = self.scanned_ips.iter_mut().find(|item| item.ip == ip) {
-            let hip: IpAddr = ip.parse().unwrap();
-            let host = lookup_addr(&hip).unwrap_or_default();
-            n.hostname = host;
             n.ip = ip.to_string();
+            n.ip_addr = ip_v4;
         } else {
-            let hip: IpAddr = ip.parse().unwrap();
-            let host = lookup_addr(&hip).unwrap_or_default();
-            self.scanned_ips.push(ScannedIp {
+            let new_ip = ScannedIp {
                 ip: ip.to_string(),
+                ip_addr: ip_v4,
                 mac: String::new(),
-                hostname: host,
+                hostname: String::new(), // Will be filled asynchronously
                 vendor: String::new(),
-            });
+            };
 
-            self.scanned_ips.sort_by(|a, b| {
-                let a_ip: Ipv4Addr = a.ip.parse::<Ipv4Addr>().unwrap();
-                let b_ip: Ipv4Addr = b.ip.parse::<Ipv4Addr>().unwrap();
-                a_ip.partial_cmp(&b_ip).unwrap()
-            });
+            // Use binary search to find the correct insertion position
+            // This maintains sorted order in O(n) time instead of O(n log n) for full sort
+            let insert_pos = self.scanned_ips
+                .binary_search_by(|probe| probe.ip_addr.cmp(&ip_v4))
+                .unwrap_or_else(|pos| pos);
+            self.scanned_ips.insert(insert_pos, new_ip);
         }
 
         self.set_scrollbar_height();
+
+        // Perform DNS lookup asynchronously in background
+        // Clone necessary: Values moved into async task
+        if let Some(tx) = self.action_tx.clone() {
+            let dns_cache = self.dns_cache.clone(); // Arc clone - cheap
+            let ip_string = ip.to_string();
+            tokio::spawn(async move {
+                let hostname = dns_cache.lookup_with_timeout(hip).await;
+                if !hostname.is_empty() {
+                    let _ = tx.try_send(Action::DnsResolved(ip_string, hostname));
+                }
+            });
+        }
     }
 
-    fn set_active_subnet(&mut self, intf: &NetworkInterface) {
-        let a_ip = intf.ips[0].ip().to_string();
+    fn set_active_subnet(&mut self, interface: &NetworkInterface) {
+        let a_ip = interface.ips[0].ip().to_string();
         let ip: Vec<&str> = a_ip.split('.').collect();
         if ip.len() > 1 {
             let new_a_ip = format!("{}.{}.{}.0/24", ip[0], ip[1], ip[2]);
@@ -398,7 +414,7 @@ impl Discovery {
         cidr: Option<Ipv4Cidr>,
         ip_num: i32,
         is_scanning: bool,
-    ) -> Table {
+    ) -> Table<'_> {
         let header = Row::new(vec!["ip", "mac", "hostname", "vendor"])
             .style(Style::default().fg(Color::Yellow))
             .top_margin(1)
@@ -501,7 +517,7 @@ impl Discovery {
         scrollbar
     }
 
-    fn make_input(&self, scroll: usize) -> Paragraph {
+    fn make_input(&self, scroll: usize) -> Paragraph<'_> {
         let input = Paragraph::new(self.input.value())
             .style(Style::default().fg(Color::Green))
             .scroll((0, scroll as u16))
@@ -548,7 +564,7 @@ impl Discovery {
         input
     }
 
-    fn make_error(&mut self) -> Paragraph {
+    fn make_error(&mut self) -> Paragraph<'_> {
         let error = Paragraph::new("CIDR parse error")
             .style(Style::default().fg(Color::Red))
             .block(
@@ -560,7 +576,7 @@ impl Discovery {
         error
     }
 
-    fn make_spinner(&self) -> Span {
+    fn make_spinner(&self) -> Span<'_> {
         let spinner = SPINNER_SYMBOLS[self.spinner_index];
         Span::styled(
             format!("{spinner}scanning.."),
@@ -570,7 +586,7 @@ impl Discovery {
 }
 
 impl Component for Discovery {
-    fn init(&mut self, area: Size) -> Result<()> {
+    fn init(&mut self, _area: Size) -> Result<()> {
         if self.cidr.is_none() {
             self.set_cidr(String::from(DEFAULT_IP), false);
         }
@@ -586,8 +602,8 @@ impl Component for Discovery {
         self
     }
 
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
-        self.action_tx = Some(tx);
+    fn register_action_handler(&mut self, action_tx: Sender<Action>) -> Result<()> {
+        self.action_tx = Some(action_tx);
         Ok(())
     }
 
@@ -597,7 +613,7 @@ impl Component for Discovery {
                 Mode::Normal => return Ok(None),
                 Mode::Input => match key.code {
                     KeyCode::Enter => {
-                        if let Some(sender) = &self.action_tx {
+                        if let Some(_sender) = &self.action_tx {
                             self.set_cidr(self.input.value().to_string(), true);
                         }
                         Action::ModeChange(Mode::Normal)
@@ -615,10 +631,17 @@ impl Component for Discovery {
     }
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
+        // Monitor task health
+        if self.is_scanning && self.task.is_finished() {
+            // Task finished unexpectedly while still marked as scanning
+            log::warn!("Scan task finished unexpectedly, checking for errors");
+            self.is_scanning = false;
+        }
+
         if self.is_scanning {
             if let Action::Tick = action {
                 let mut s_index = self.spinner_index + 1;
-                s_index %= SPINNER_SYMBOLS.len() - 1;
+                s_index %= SPINNER_SYMBOLS.len();
                 self.spinner_index = s_index;
             }
         }
@@ -626,6 +649,12 @@ impl Component for Discovery {
         // -- custom actions
         if let Action::PingIp(ref ip) = action {
             self.process_ip(ip);
+        }
+        // -- DNS resolved
+        if let Action::DnsResolved(ref ip, ref hostname) = action {
+            if let Some(entry) = self.scanned_ips.iter_mut().find(|item| item.ip == *ip) {
+                entry.hostname = hostname.clone();
+            }
         }
         // -- count IPs
         if let Action::CountIp = action {
@@ -659,12 +688,11 @@ impl Component for Discovery {
         }
         // -- active interface
         if let Action::ActiveInterface(ref interface) = action {
-            let intf = interface.clone();
             // -- first time scan after setting of interface
             if self.active_interface.is_none() {
-                self.set_active_subnet(&intf);
+                self.set_active_subnet(interface);
             }
-            self.active_interface = Some(intf);
+            self.active_interface = Some(interface.clone());
         }
 
         if self.active_tab == TabsEnum::Discovery {
@@ -680,11 +708,9 @@ impl Component for Discovery {
             if let Action::ModeChange(mode) = action {
                 // -- when scanning don't switch to input mode
                 if self.is_scanning && mode == Mode::Input {
-                    self.action_tx
-                        .clone()
-                        .unwrap()
-                        .send(Action::ModeChange(Mode::Normal))
-                        .unwrap();
+                    if let Some(tx) = &self.action_tx {
+                        let _ = tx.clone().try_send(Action::ModeChange(Mode::Normal));
+                    }
                     return Ok(None);
                 }
 
@@ -692,18 +718,16 @@ impl Component for Discovery {
                     // self.input.reset();
                     self.cidr_error = false;
                 }
-                self.action_tx
-                    .clone()
-                    .unwrap()
-                    .send(Action::AppModeChange(mode))
-                    .unwrap();
+                if let Some(tx) = &self.action_tx {
+                    let _ = tx.clone().try_send(Action::AppModeChange(mode));
+                }
                 self.mode = mode;
             }
         }
 
         // -- tab change
         if let Action::TabChange(tab) = action {
-            self.tab_changed(tab).unwrap();
+            let _ = self.tab_changed(tab);
         }
 
         Ok(None)
@@ -711,6 +735,19 @@ impl Component for Discovery {
 
     fn tab_changed(&mut self, tab: TabsEnum) -> Result<()> {
         self.active_tab = tab;
+        Ok(())
+    }
+
+    fn shutdown(&mut self) -> Result<()> {
+        log::info!("Shutting down discovery component");
+
+        // Mark as not scanning to stop any ongoing operations
+        self.is_scanning = false;
+
+        // Abort the scanning task if it's still running
+        self.task.abort();
+
+        log::info!("Discovery component shutdown complete");
         Ok(())
     }
 

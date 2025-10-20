@@ -1,28 +1,25 @@
 use color_eyre::eyre::Result;
-use color_eyre::owo_colors::OwoColorize;
-use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::style::Stylize;
 use ratatui::{prelude::*, widgets::*};
 use ratatui::{
     text::{Line, Span},
     widgets::{block::Title, Paragraph},
 };
-use serde::{Deserialize, Serialize};
 use strum::{EnumCount, IntoEnumIterator};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 use super::{Component, Frame};
 use crate::{
     action::Action,
     config::DEFAULT_BORDER_STYLE,
-    config::{Config, KeyBindings},
+    config::Config,
     enums::TabsEnum,
     layout::get_vertical_layout,
 };
 
 #[derive(Default)]
 pub struct Tabs {
-    action_tx: Option<UnboundedSender<Action>>,
+    action_tx: Option<Sender<Action>>,
     config: Config,
     tab_index: usize,
 }
@@ -36,7 +33,7 @@ impl Tabs {
         }
     }
 
-    fn make_tabs(&self) -> Paragraph {
+    fn make_tabs(&self) -> Paragraph<'_> {
         let enum_titles: Vec<Span> =
             TabsEnum::iter()
                 .enumerate()
@@ -84,15 +81,17 @@ impl Tabs {
     fn next_tab(&mut self) {
         self.tab_index = (self.tab_index + 1) % TabsEnum::COUNT;
         if let Some(ref action_tx) = self.action_tx {
-            let tab_enum = TabsEnum::iter().nth(self.tab_index).unwrap();
-            action_tx.send(Action::TabChange(tab_enum)).unwrap();
+            // Safe: tab_index is always < TabsEnum::COUNT
+            if let Some(tab_enum) = TabsEnum::iter().nth(self.tab_index) {
+                let _ = action_tx.try_send(Action::TabChange(tab_enum));
+            }
         }
     }
 }
 
 impl Component for Tabs {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
-        self.action_tx = Some(tx);
+    fn register_action_handler(&mut self, action_tx: Sender<Action>) -> Result<()> {
+        self.action_tx = Some(action_tx);
         Ok(())
     }
 

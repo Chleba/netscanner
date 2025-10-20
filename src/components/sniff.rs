@@ -1,27 +1,18 @@
 use color_eyre::eyre::Result;
-use color_eyre::owo_colors::OwoColorize;
-use dns_lookup::{lookup_addr, lookup_host};
 
 use ipnetwork::IpNetwork;
-use pnet::{
-    datalink::NetworkInterface,
-    packet::{
-        arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
-        ethernet::{EtherTypes, MutableEthernetPacket},
-        MutablePacket, Packet,
-    },
-};
 use ratatui::style::Stylize;
 
 use ratatui::{prelude::*, widgets::*};
+use std::collections::HashMap;
 use std::net::IpAddr;
-use tokio::sync::mpsc::{self, UnboundedSender};
-use tui_scrollview::{ScrollView, ScrollViewState};
+use tokio::sync::mpsc::Sender;
+use tui_scrollview::ScrollViewState;
 
 use super::Component;
 use crate::{
     action::Action,
-    config::DEFAULT_BORDER_STYLE,
+    dns_cache::DnsCache,
     enums::{PacketTypeEnum, PacketsInfoTypesEnum, TabsEnum},
     layout::{get_vertical_layout, HORIZONTAL_CONSTRAINTS},
     tui::Frame,
@@ -39,14 +30,17 @@ pub struct IPTraffic {
 
 pub struct Sniffer {
     active_tab: TabsEnum,
-    action_tx: Option<UnboundedSender<Action>>,
-    list_state: ListState,
-    scrollbar_state: ScrollbarState,
-    traffic_ips: Vec<IPTraffic>,
+    action_tx: Option<Sender<Action>>,
+    _list_state: ListState,
+    _scrollbar_state: ScrollbarState,
+    traffic_map: HashMap<IpAddr, IPTraffic>,
+    traffic_sorted_cache: Vec<IPTraffic>,
+    cache_dirty: bool,
     scrollview_state: ScrollViewState,
     udp_sum: f64,
     tcp_sum: f64,
     active_inft_ips: Vec<IpNetwork>,
+    dns_cache: DnsCache,
 }
 
 impl Default for Sniffer {
@@ -60,13 +54,16 @@ impl Sniffer {
         Self {
             active_tab: TabsEnum::Discovery,
             action_tx: None,
-            list_state: ListState::default().with_selected(Some(0)),
-            scrollbar_state: ScrollbarState::new(0),
-            traffic_ips: Vec::new(),
+            _list_state: ListState::default().with_selected(Some(0)),
+            _scrollbar_state: ScrollbarState::new(0),
+            traffic_map: HashMap::new(),
+            traffic_sorted_cache: Vec::new(),
+            cache_dirty: false,
             scrollview_state: ScrollViewState::new(),
             udp_sum: 0.0,
             tcp_sum: 0.0,
             active_inft_ips: Vec::new(),
+            dns_cache: DnsCache::new(),
         }
     }
 
@@ -78,46 +75,69 @@ impl Sniffer {
         self.scrollview_state.scroll_up();
     }
 
-    fn traffic_contains_ip(&self, ip: &IpAddr) -> bool {
-        self.traffic_ips
-            .iter()
-            .any(|traffic| traffic.ip == ip.clone())
-    }
-
     fn count_traffic_packet(&mut self, source: IpAddr, destination: IpAddr, length: usize) {
+        let mut new_ips = Vec::new();
+
         // -- destination
-        if self.traffic_contains_ip(&destination) {
-            if let Some(ip_entry) = self.traffic_ips.iter_mut().find(|ie| ie.ip == destination) {
-                ip_entry.download += length as f64;
-            }
+        if let Some(entry) = self.traffic_map.get_mut(&destination) {
+            entry.download += length as f64;
         } else {
-            self.traffic_ips.push(IPTraffic {
+            self.traffic_map.insert(destination, IPTraffic {
                 ip: destination,
                 download: length as f64,
                 upload: 0.0,
-                hostname: lookup_addr(&destination).unwrap_or(String::from("unknown")),
+                hostname: String::new(), // Will be filled asynchronously
             });
+            new_ips.push(destination);
         }
 
         // -- source
-        if self.traffic_contains_ip(&source) {
-            if let Some(ip_entry) = self.traffic_ips.iter_mut().find(|ie| ie.ip == source) {
-                ip_entry.upload += length as f64;
-            }
+        if let Some(entry) = self.traffic_map.get_mut(&source) {
+            entry.upload += length as f64;
         } else {
-            self.traffic_ips.push(IPTraffic {
+            self.traffic_map.insert(source, IPTraffic {
                 ip: source,
                 download: 0.0,
                 upload: length as f64,
-                hostname: lookup_addr(&source).unwrap_or(String::from("unknown")),
+                hostname: String::new(), // Will be filled asynchronously
             });
+            new_ips.push(source);
         }
 
-        self.traffic_ips.sort_by(|a, b| {
-            let a_sum = a.download + a.upload;
-            let b_sum = b.download + b.upload;
-            b_sum.partial_cmp(&a_sum).unwrap()
-        });
+        // Mark cache as dirty - will be sorted on next render
+        self.cache_dirty = true;
+
+        // Trigger background DNS lookups for new IPs
+        for ip in new_ips {
+            self.lookup_hostname_async(ip);
+        }
+    }
+
+    fn lookup_hostname_async(&self, ip: IpAddr) {
+        if let Some(tx) = self.action_tx.clone() {
+            let dns_cache = self.dns_cache.clone();
+            let ip_string = ip.to_string();
+            tokio::spawn(async move {
+                let hostname = dns_cache.lookup_with_timeout(ip).await;
+                if !hostname.is_empty() {
+                    let _ = tx.try_send(Action::DnsResolved(ip_string, hostname));
+                }
+            });
+        }
+    }
+
+    /// Get sorted traffic list, updating cache if dirty
+    fn get_sorted_traffic(&mut self) -> &Vec<IPTraffic> {
+        if self.cache_dirty {
+            self.traffic_sorted_cache = self.traffic_map.values().cloned().collect();
+            self.traffic_sorted_cache.sort_by(|a, b| {
+                let a_sum = a.download + a.upload;
+                let b_sum = b.download + b.upload;
+                b_sum.partial_cmp(&a_sum).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            self.cache_dirty = false;
+        }
+        &self.traffic_sorted_cache
     }
 
     fn process_packet(&mut self, packet: PacketsInfoTypesEnum) {
@@ -134,7 +154,7 @@ impl Sniffer {
         }
     }
 
-    fn make_charts(&self) -> BarChart {
+    fn make_charts(&self) -> BarChart<'_> {
         BarChart::default()
             .direction(Direction::Vertical)
             .bar_width(12)
@@ -155,7 +175,7 @@ impl Sniffer {
             )
     }
 
-    fn make_ips_block(&self) -> Block {
+    fn make_ips_block(&self) -> Block<'_> {
         let ips_block = Block::default()
             .title(
                 ratatui::widgets::block::Title::from(Line::from(vec![
@@ -187,7 +207,7 @@ impl Sniffer {
         ips_block
     }
 
-    fn make_sum_block(&self) -> Block {
+    fn make_sum_block(&self) -> Block<'_> {
         let ips_block = Block::default()
             .title(
                 ratatui::widgets::block::Title::from(Span::styled(
@@ -203,7 +223,7 @@ impl Sniffer {
         ips_block
     }
 
-    fn make_charts_block(&self) -> Block {
+    fn make_charts_block(&self) -> Block<'_> {
         Block::default()
             .title(
                 ratatui::widgets::block::Title::from(Span::styled(
@@ -219,10 +239,11 @@ impl Sniffer {
     }
 
     fn render_summary(&mut self, f: &mut Frame<'_>, area: Rect) {
-        if !self.traffic_ips.is_empty() {
+        let sorted_traffic = self.get_sorted_traffic().clone();
+        if !sorted_traffic.is_empty() {
             let total_download = Line::from(vec![
                 "Total download: ".into(),
-                bytes_convert(self.traffic_ips[0].download).green(),
+                bytes_convert(sorted_traffic[0].download).green(),
             ]);
             f.render_widget(
                 total_download,
@@ -236,7 +257,7 @@ impl Sniffer {
 
             let total_upload = Line::from(vec![
                 "Total upload: ".into(),
-                bytes_convert(self.traffic_ips[0].upload).red(),
+                bytes_convert(sorted_traffic[0].upload).red(),
             ]);
             f.render_widget(
                 total_upload,
@@ -249,8 +270,7 @@ impl Sniffer {
             );
 
             let a_intfs = &self.active_inft_ips;
-            let tu = self
-                .traffic_ips
+            let tu = sorted_traffic
                 .iter()
                 .filter(|item| {
                     let t_ip = item.ip.to_string();
@@ -284,8 +304,7 @@ impl Sniffer {
                 },
             );
 
-            let td = self
-                .traffic_ips
+            let td = sorted_traffic
                 .iter()
                 .filter(|item| {
                     let t_ip = item.ip.to_string();
@@ -332,15 +351,15 @@ impl Component for Sniffer {
         self
     }
 
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
-        self.action_tx = Some(tx);
+    fn register_action_handler(&mut self, action_tx: Sender<Action>) -> Result<()> {
+        self.action_tx = Some(action_tx);
         Ok(())
     }
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         // -- tab change
         if let Action::TabChange(tab) = action {
-            self.tab_changed(tab).unwrap();
+            self.tab_changed(tab)?;
         }
 
         if self.active_tab == TabsEnum::Traffic {
@@ -357,11 +376,22 @@ impl Component for Sniffer {
             self.active_inft_ips = interface.ips.clone();
         }
 
-        if let Action::PacketDump(time, packet, packet_type) = action {
+        if let Action::PacketDump(_time, ref packet, ref packet_type) = action {
             match packet_type {
-                PacketTypeEnum::Tcp => self.process_packet(packet),
-                PacketTypeEnum::Udp => self.process_packet(packet),
+                PacketTypeEnum::Tcp => self.process_packet(packet.clone()),
+                PacketTypeEnum::Udp => self.process_packet(packet.clone()),
                 _ => {}
+            }
+        }
+
+        // -- DNS resolved
+        if let Action::DnsResolved(ref ip_str, ref hostname) = action {
+            if let Ok(ip) = ip_str.parse::<IpAddr>() {
+                if let Some(entry) = self.traffic_map.get_mut(&ip) {
+                    entry.hostname = hostname.clone();
+                    // Mark cache as dirty since hostname changed
+                    self.cache_dirty = true;
+                }
             }
         }
 
@@ -387,8 +417,9 @@ impl Component for Sniffer {
                 width: ips_layout[0].width - 2,
                 height: ips_layout[0].height - 2,
             };
+            let sorted_traffic = self.get_sorted_traffic().clone();
             let ips_scroll = TrafficScroll {
-                traffic_ips: self.traffic_ips.clone(),
+                traffic_ips: sorted_traffic,
             };
             f.render_stateful_widget(ips_scroll, ips_rect, &mut self.scrollview_state);
 

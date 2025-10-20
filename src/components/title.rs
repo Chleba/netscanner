@@ -1,20 +1,17 @@
-use std::{collections::HashMap, time::Duration};
 
 use color_eyre::eyre::Result;
-use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
-use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 use super::{Component, Frame};
 use crate::{
     action::Action,
-    config::{Config, KeyBindings},
+    config::Config,
 };
 
 #[derive(Default)]
 pub struct Title {
-    command_tx: Option<UnboundedSender<Action>>,
+    command_tx: Option<Sender<Action>>,
     config: Config,
 }
 
@@ -28,8 +25,8 @@ impl Title {
 }
 
 impl Component for Title {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
-        self.command_tx = Some(tx);
+    fn register_action_handler(&mut self, action_tx: Sender<Action>) -> Result<()> {
+        self.command_tx = Some(action_tx);
         Ok(())
     }
 
@@ -42,7 +39,7 @@ impl Component for Title {
         Ok(())
     }
 
-    fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
+    fn draw(&mut self, f: &mut Frame<'_>, _area: Rect) -> Result<()> {
         let rect = Rect::new(0, 0, f.area().width, 1);
         let version: &str = env!("CARGO_PKG_VERSION");
         let title = format!(" Network Scanner (v{})", version);

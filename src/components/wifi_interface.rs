@@ -1,16 +1,15 @@
 use color_eyre::eyre::Result;
-use pnet::datalink::{self, NetworkInterface};
+use pnet::datalink::{self};
 use ratatui::{prelude::*, widgets::*};
 use std::collections::HashMap;
 use std::process::{Command, Output};
 use std::time::Instant;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 use super::Component;
 use crate::{
     action::Action,
     layout::{get_horizontal_layout, get_vertical_layout},
-    mode::Mode,
     tui::Frame,
 };
 
@@ -25,11 +24,11 @@ struct WifiConn {
 }
 
 struct CommandError {
-    desc: String,
+    _desc: String,
 }
 
 pub struct WifiInterface {
-    action_tx: Option<UnboundedSender<Action>>,
+    action_tx: Option<Sender<Action>>,
     last_update: Instant,
     wifi_info: Option<WifiConn>,
 }
@@ -67,13 +66,13 @@ impl WifiInterface {
             .arg("info")
             .output()
             .map_err(|e| CommandError {
-                desc: format!("command failed: {}", e),
+                _desc: format!("command failed: {}", e),
             })?;
         if iw_output.status.success() {
             Ok(iw_output)
         } else {
             Err(CommandError {
-                desc: "command failed".to_string(),
+                _desc: "command failed".to_string(),
             })
         }
     }
@@ -131,20 +130,20 @@ impl WifiInterface {
         }
     }
 
-    fn make_list(&mut self) -> List {
+    fn make_list(&mut self) -> List<'_> {
         if let Some(wifi_info) = &self.wifi_info {
-            let interface = &wifi_info.interface;
-            let interface_label = "Interface:";
+            let _interface = &wifi_info.interface;
+            let _interface_label = "Interface:";
             let ssid = &wifi_info.ssid;
             let ssid_label = "SSID:";
-            let ifindex = &wifi_info.ifindex;
-            let ifindex_label = "Intf index:";
+            let _ifindex = &wifi_info.ifindex;
+            let _ifindex_label = "Intf index:";
             let channel = &wifi_info.channel;
             let channel_label = "Channel:";
-            let txpower = &wifi_info.txpower;
-            let txpower_label = "TxPower:";
-            let mac = &wifi_info.mac;
-            let mac_label = "Mac addr:";
+            let _txpower = &wifi_info.txpower;
+            let _txpower_label = "TxPower:";
+            let _mac = &wifi_info.mac;
+            let _mac_label = "Mac addr:";
 
             let mut items: Vec<ListItem> = Vec::new();
 
@@ -182,8 +181,8 @@ impl WifiInterface {
 }
 
 impl Component for WifiInterface {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
-        self.action_tx = Some(tx);
+    fn register_action_handler(&mut self, action_tx: Sender<Action>) -> Result<()> {
+        self.action_tx = Some(action_tx);
         Ok(())
     }
 

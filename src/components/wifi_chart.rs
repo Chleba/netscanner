@@ -2,12 +2,9 @@ use crate::components::wifi_scan::WifiInfo;
 use crate::utils::MaxSizeVec;
 use chrono::Timelike;
 use color_eyre::eyre::Result;
-use pnet::datalink::{self, NetworkInterface};
 use ratatui::{prelude::*, widgets::*};
-use std::collections::HashMap;
-use std::process::{Command, Output};
 use std::time::Instant;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 use super::Component;
 use crate::{
@@ -21,12 +18,14 @@ use crate::{
 pub struct WifiDataset {
     ssid: String,
     data: MaxSizeVec<(f64, f64)>,
+    // Cache for rendering - converted from VecDeque to Vec
+    cached_data: Vec<(f64, f64)>,
     color: Color,
 }
 
 pub struct WifiChart {
-    action_tx: Option<UnboundedSender<Action>>,
-    last_update_time: Instant,
+    action_tx: Option<Sender<Action>>,
+    _last_update_time: Instant,
     wifi_datasets: Vec<WifiDataset>,
     signal_tick: [f64; 2],
     show_graph: bool,
@@ -43,7 +42,7 @@ impl WifiChart {
         Self {
             show_graph: false,
             action_tx: None,
-            last_update_time: Instant::now(),
+            _last_update_time: Instant::now(),
             wifi_datasets: Vec::new(),
             signal_tick: [0.0, 40.0],
         }
@@ -55,7 +54,7 @@ impl WifiChart {
 
     fn parse_char_data(&mut self, nets: &[WifiInfo]) {
         for w in nets {
-            let seconds: f64 = w.time.second() as f64;
+            let _seconds: f64 = w.time.second() as f64;
             if let Some(p) = self
                 .wifi_datasets
                 .iter_mut()
@@ -63,11 +62,12 @@ impl WifiChart {
             {
                 let n = &mut self.wifi_datasets[p];
                 let signal: f64 = w.signal as f64;
-                n.data.push((self.signal_tick[1], signal * -1.0));
+                n.data.push((self.signal_tick[1], -signal));
             } else {
                 self.wifi_datasets.push(WifiDataset {
                     ssid: w.ssid.clone(),
                     data: MaxSizeVec::new(100),
+                    cached_data: Vec::new(),
                     color: w.color,
                 });
             }
@@ -76,16 +76,20 @@ impl WifiChart {
         self.signal_tick[1] += 1.0;
     }
 
-    pub fn make_chart(&self) -> Chart {
+    pub fn make_chart(&mut self) -> Chart<'_> {
+        // First, update all cached data from VecDeque to Vec
+        for d in &mut self.wifi_datasets {
+            d.cached_data = d.data.get_vec();
+        }
+
         let mut datasets = Vec::new();
         for d in &self.wifi_datasets {
-            let d_data = &d.data.get_vec();
             let dataset = Dataset::default()
                 .name(&*d.ssid)
                 .marker(symbols::Marker::Dot)
                 .style(Style::default().fg(d.color))
                 .graph_type(GraphType::Line)
-                .data(d_data);
+                .data(&d.cached_data);
             datasets.push(dataset);
         }
 
@@ -148,8 +152,8 @@ impl WifiChart {
 }
 
 impl Component for WifiChart {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
-        self.action_tx = Some(tx);
+    fn register_action_handler(&mut self, action_tx: Sender<Action>) -> Result<()> {
+        self.action_tx = Some(action_tx);
         Ok(())
     }
 

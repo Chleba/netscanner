@@ -1,6 +1,5 @@
 use crate::components::sniff::IPTraffic;
 use crate::utils::{bytes_convert, count_traffic_total};
-use color_eyre::owo_colors::OwoColorize;
 use ratatui::style::Stylize;
 use ratatui::{layout::Size, prelude::*, widgets::*};
 use tui_scrollview::{ScrollView, ScrollViewState};

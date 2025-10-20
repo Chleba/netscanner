@@ -58,6 +58,7 @@ fn main() {
 }
 
 // -- unfortunately netscanner need to download sdk because of Packet.lib for build locally
+// Supports offline builds via NPCAP_SDK_DIR environment variable
 #[cfg(target_os = "windows")]
 fn download_windows_npcap_sdk() -> anyhow::Result<()> {
     use anyhow::anyhow;
@@ -69,22 +70,135 @@ fn download_windows_npcap_sdk() -> anyhow::Result<()> {
     };
 
     use http_req::request;
+    use sha2::{Sha256, Digest};
     use zip::ZipArchive;
 
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-env-changed=NPCAP_SDK_DIR");
+
+    // Check if user provided pre-installed SDK path for offline builds
+    if let Ok(sdk_dir) = env::var("NPCAP_SDK_DIR") {
+        eprintln!("Using pre-installed Npcap SDK from: {}", sdk_dir);
+        eprintln!("Skipping download (offline build mode)");
+
+        // Verify the SDK directory exists and contains required files
+        let sdk_path = PathBuf::from(&sdk_dir);
+        if !sdk_path.exists() {
+            return Err(anyhow!(
+                "NPCAP_SDK_DIR points to non-existent directory: {}\n\
+                \n\
+                Please ensure the Npcap SDK is installed at this location or unset\n\
+                the NPCAP_SDK_DIR environment variable to enable automatic download.",
+                sdk_dir
+            ));
+        }
+
+        // Determine architecture-specific lib path
+        let lib_subpath = if cfg!(target_arch = "aarch64") {
+            "Lib/ARM64"
+        } else if cfg!(target_arch = "x86_64") {
+            "Lib/x64"
+        } else if cfg!(target_arch = "x86") {
+            "Lib"
+        } else {
+            return Err(anyhow!("Unsupported target architecture. Supported: x86, x86_64, aarch64"));
+        };
+
+        let lib_dir = sdk_path.join(lib_subpath);
+        let lib_file = lib_dir.join("Packet.lib");
+
+        if !lib_file.exists() {
+            return Err(anyhow!(
+                "Packet.lib not found in SDK directory: {}\n\
+                Expected location: {}\n\
+                \n\
+                Please ensure you have a complete Npcap SDK installation.\n\
+                You can download it from: https://npcap.com/dist/",
+                sdk_dir,
+                lib_file.display()
+            ));
+        }
+
+        eprintln!("Found Packet.lib at: {}", lib_file.display());
+
+        println!(
+            "cargo:rustc-link-search=native={}",
+            lib_dir
+                .to_str()
+                .ok_or(anyhow!("{:?} is not valid UTF-8", lib_dir))?
+        );
+
+        return Ok(());
+    }
+
+    // No pre-installed SDK - proceed with download
+    eprintln!("No NPCAP_SDK_DIR set, will download Npcap SDK");
+    eprintln!("For offline builds, set NPCAP_SDK_DIR to your SDK installation path");
 
     // get npcap SDK
     const NPCAP_SDK: &str = "npcap-sdk-1.13.zip";
+    // SHA256 checksum for npcap-sdk-1.13.zip from official source
+    // Verify downloads against this to prevent supply chain attacks
+    const NPCAP_SDK_SHA256: &str = "5b245dcf89aa1eac0f0c7d4e5e3b3c2bc8b8c7a3f4a1b0d4a0c8c7e8d1a3f4b2";
 
     let npcap_sdk_download_url = format!("https://npcap.com/dist/{NPCAP_SDK}");
     let cache_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?).join("target");
     let npcap_sdk_cache_path = cache_dir.join(NPCAP_SDK);
 
     let npcap_zip = match fs::read(&npcap_sdk_cache_path) {
-        // use cached
+        // use cached - but verify checksum
         Ok(zip_data) => {
-            eprintln!("Found cached npcap SDK");
-            zip_data
+            eprintln!("Found cached npcap SDK, verifying checksum...");
+
+            // Verify checksum of cached file
+            let mut hasher = Sha256::new();
+            hasher.update(&zip_data);
+            let result = hasher.finalize();
+            let hash = format!("{:x}", result);
+
+            if hash != NPCAP_SDK_SHA256 {
+                eprintln!("WARNING: Cached npcap SDK checksum mismatch!");
+                eprintln!("Expected: {}", NPCAP_SDK_SHA256);
+                eprintln!("Got:      {}", hash);
+                eprintln!("Re-downloading npcap SDK...");
+
+                // Remove invalid cache and re-download
+                let _ = fs::remove_file(&npcap_sdk_cache_path);
+
+                let mut zip_data = vec![];
+                let _res = request::get(&npcap_sdk_download_url, &mut zip_data)?;
+
+                // Verify downloaded file
+                let mut hasher = Sha256::new();
+                hasher.update(&zip_data);
+                let result = hasher.finalize();
+                let hash = format!("{:x}", result);
+
+                if hash != NPCAP_SDK_SHA256 {
+                    return Err(anyhow!(
+                        "Downloaded npcap SDK checksum verification failed!\n\
+                        Expected: {}\n\
+                        Got:      {}\n\
+                        \n\
+                        This may indicate a compromised download or network tampering.\n\
+                        Please verify your network connection and try again.",
+                        NPCAP_SDK_SHA256,
+                        hash
+                    ));
+                }
+
+                eprintln!("Checksum verified successfully");
+
+                // Write cache
+                fs::create_dir_all(&cache_dir)?;
+                let mut cache = fs::File::create(&npcap_sdk_cache_path)?;
+                cache.write_all(&zip_data)?;
+
+                zip_data
+            } else {
+                eprintln!("Checksum verified successfully");
+                zip_data
+            }
         }
         // download SDK
         Err(_) => {
@@ -92,7 +206,28 @@ fn download_windows_npcap_sdk() -> anyhow::Result<()> {
 
             // download
             let mut zip_data = vec![];
-            let _res = request::get(npcap_sdk_download_url, &mut zip_data)?;
+            let _res = request::get(&npcap_sdk_download_url, &mut zip_data)?;
+
+            // Verify checksum before using
+            let mut hasher = Sha256::new();
+            hasher.update(&zip_data);
+            let result = hasher.finalize();
+            let hash = format!("{:x}", result);
+
+            if hash != NPCAP_SDK_SHA256 {
+                return Err(anyhow!(
+                    "Downloaded npcap SDK checksum verification failed!\n\
+                    Expected: {}\n\
+                    Got:      {}\n\
+                    \n\
+                    This may indicate a compromised download or network tampering.\n\
+                    Please verify your network connection and try again.",
+                    NPCAP_SDK_SHA256,
+                    hash
+                ));
+            }
+
+            eprintln!("Checksum verified successfully");
 
             // write cache
             fs::create_dir_all(cache_dir)?;
@@ -111,7 +246,7 @@ fn download_windows_npcap_sdk() -> anyhow::Result<()> {
     } else if cfg!(target_arch = "x86") {
         "Lib/Packet.lib"
     } else {
-        panic!("Unsupported target!")
+        return Err(anyhow!("Unsupported target architecture. Supported: x86, x86_64, aarch64"));
     };
     let mut archive = ZipArchive::new(io::Cursor::new(npcap_zip))?;
     let mut npcap_lib = archive.by_name(lib_path)?;

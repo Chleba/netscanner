@@ -1,20 +1,20 @@
 use chrono::{DateTime, Local};
-use color_eyre::{eyre::Result, owo_colors::OwoColorize};
-use crossterm::style::Stylize;
+use color_eyre::eyre::Result;
 use csv::Writer;
-use ratatui::{prelude::*, widgets::*};
+use ratatui::prelude::*;
 use std::env;
-use tokio::sync::mpsc::UnboundedSender;
+use std::sync::Arc;
+use tokio::sync::mpsc::Sender;
 
 use super::{discovery::ScannedIp, ports::ScannedIpPorts, Component, Frame};
 use crate::{action::Action, enums::PacketsInfoTypesEnum};
 
 #[derive(Default)]
 pub struct Export {
-    action_tx: Option<UnboundedSender<Action>>,
+    action_tx: Option<Sender<Action>>,
     home_dir: String,
     export_done: bool,
-    export_failed: bool,
+    _export_failed: bool,
 }
 
 impl Export {
@@ -23,7 +23,7 @@ impl Export {
             action_tx: None,
             home_dir: String::new(),
             export_done: false,
-            export_failed: false,
+            _export_failed: false,
         }
     }
 
@@ -31,18 +31,22 @@ impl Export {
     fn get_user_home_dir(&mut self) {
         let mut home_dir = String::from("/root");
         if let Some(h_dir) = env::var_os("HOME") {
-            home_dir = String::from(h_dir.to_str().unwrap());
+            if let Some(dir_str) = h_dir.to_str() {
+                home_dir = String::from(dir_str);
+            }
         }
         if let Some(sudo_user) = env::var_os("SUDO_USER") {
-            home_dir = format!("/home/{}", sudo_user.to_str().unwrap());
+            if let Some(user_str) = sudo_user.to_str() {
+                home_dir = format!("/home/{}", user_str);
+            }
         }
         self.home_dir = format!("{}/.netscanner", home_dir);
 
         // -- create dot folder
-        if std::fs::metadata(self.home_dir.clone()).is_err()
-            && std::fs::create_dir_all(self.home_dir.clone()).is_err()
+        if std::fs::metadata(&self.home_dir).is_err()
+            && std::fs::create_dir_all(&self.home_dir).is_err()
         {
-            self.export_failed = true;
+            self._export_failed = true;
         }
     }
 
@@ -50,18 +54,22 @@ impl Export {
     fn get_user_home_dir(&mut self) {
         let mut home_dir = String::from("/root");
         if let Some(h_dir) = env::var_os("HOME") {
-            home_dir = String::from(h_dir.to_str().unwrap());
+            if let Some(dir_str) = h_dir.to_str() {
+                home_dir = String::from(dir_str);
+            }
         }
         if let Some(sudo_user) = env::var_os("SUDO_USER") {
-            home_dir = format!("/Users/{}", sudo_user.to_str().unwrap());
+            if let Some(user_str) = sudo_user.to_str() {
+                home_dir = format!("/Users/{}", user_str);
+            }
         }
         self.home_dir = format!("{}/.netscanner", home_dir);
 
         // -- create dot folder
-        if std::fs::metadata(self.home_dir.clone()).is_err() {
-            if std::fs::create_dir_all(self.home_dir.clone()).is_err() {
-                println!("Failed to create export dir");
-            }
+        if std::fs::metadata(&self.home_dir).is_err()
+            && std::fs::create_dir_all(&self.home_dir).is_err()
+        {
+            log::error!("Failed to create export directory: {}", self.home_dir);
         }
     }
 
@@ -69,49 +77,53 @@ impl Export {
     fn get_user_home_dir(&mut self) {
         let mut home_dir = String::from("C:\\Users\\Administrator");
         if let Some(h_dir) = env::var_os("USERPROFILE") {
-            home_dir = String::from(h_dir.to_str().unwrap());
+            if let Some(dir_str) = h_dir.to_str() {
+                home_dir = String::from(dir_str);
+            }
         }
         if let Some(sudo_user) = env::var_os("SUDO_USER") {
-            home_dir = format!("C:\\Users\\{}", sudo_user.to_str().unwrap());
+            if let Some(user_str) = sudo_user.to_str() {
+                home_dir = format!("C:\\Users\\{}", user_str);
+            }
         }
         self.home_dir = format!("{}\\.netscanner", home_dir);
 
         // -- create .netscanner folder if it doesn't exist
-        if std::fs::metadata(self.home_dir.clone()).is_err() {
-            if std::fs::create_dir_all(self.home_dir.clone()).is_err() {
-                self.export_failed = true;
+        if std::fs::metadata(&self.home_dir).is_err() {
+            if std::fs::create_dir_all(&self.home_dir).is_err() {
+                self._export_failed = true;
             }
         }
     }
 
 
-    pub fn write_discovery(&mut self, data: Vec<ScannedIp>, timestamp: &String) -> Result<()> {
+    pub fn write_discovery(&mut self, data: Arc<Vec<ScannedIp>>, timestamp: &String) -> Result<()> {
         let mut w = Writer::from_path(format!("{}/scanned_ips.{}.csv", self.home_dir, timestamp))?;
 
         // -- header
         w.write_record(["ip", "mac", "hostname", "vendor"])?;
-        for s_ip in data {
-            w.write_record([s_ip.ip, s_ip.mac, s_ip.hostname, s_ip.vendor])?;
+        for s_ip in data.iter() {
+            w.write_record([&s_ip.ip, &s_ip.mac, &s_ip.hostname, &s_ip.vendor])?;
         }
         w.flush()?;
 
         Ok(())
     }
 
-    pub fn write_ports(&mut self, data: Vec<ScannedIpPorts>, timestamp: &String) -> Result<()> {
+    pub fn write_ports(&mut self, data: Arc<Vec<ScannedIpPorts>>, timestamp: &String) -> Result<()> {
         let mut w =
             Writer::from_path(format!("{}/scanned_ports.{}.csv", self.home_dir, timestamp))?;
 
         // -- header
         w.write_record(["ip", "ports"])?;
-        for s_ip in data {
+        for s_ip in data.iter() {
             let ports: String = s_ip
                 .ports
                 .iter()
                 .map(|n| n.to_string())
                 .collect::<Vec<String>>()
                 .join(":");
-            w.write_record([s_ip.ip, ports])?;
+            w.write_record([&s_ip.ip, &ports])?;
         }
         w.flush()?;
 
@@ -120,7 +132,7 @@ impl Export {
 
     pub fn write_packets(
         &mut self,
-        data: Vec<(DateTime<Local>, PacketsInfoTypesEnum)>,
+        data: Arc<Vec<(DateTime<Local>, PacketsInfoTypesEnum)>>,
         timestamp: &String,
         name: &str,
     ) -> Result<()> {
@@ -131,13 +143,13 @@ impl Export {
 
         // -- header
         w.write_record(["time", "log"])?;
-        for (t, p) in data {
+        for (t, p) in data.iter() {
             let log_str = match p {
-                PacketsInfoTypesEnum::Icmp(log) => log.raw_str,
-                PacketsInfoTypesEnum::Arp(log) => log.raw_str,
-                PacketsInfoTypesEnum::Icmp6(log) => log.raw_str,
-                PacketsInfoTypesEnum::Udp(log) => log.raw_str,
-                PacketsInfoTypesEnum::Tcp(log) => log.raw_str,
+                PacketsInfoTypesEnum::Icmp(log) => log.raw_str.clone(),
+                PacketsInfoTypesEnum::Arp(log) => log.raw_str.clone(),
+                PacketsInfoTypesEnum::Icmp6(log) => log.raw_str.clone(),
+                PacketsInfoTypesEnum::Udp(log) => log.raw_str.clone(),
+                PacketsInfoTypesEnum::Tcp(log) => log.raw_str.clone(),
             };
             w.write_record([t.to_string(), log_str])?;
         }
@@ -148,13 +160,13 @@ impl Export {
 }
 
 impl Component for Export {
-    fn init(&mut self, area: Size) -> Result<()> {
+    fn init(&mut self, _area: Size) -> Result<()> {
         self.get_user_home_dir();
         Ok(())
     }
 
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
-        self.action_tx = Some(tx);
+    fn register_action_handler(&mut self, action_tx: Sender<Action>) -> Result<()> {
+        self.action_tx = Some(action_tx);
         Ok(())
     }
 

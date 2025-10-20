@@ -1,8 +1,6 @@
-use chrono::{DateTime, Local, Timelike};
-use config::Source;
+use chrono::{DateTime, Local};
 use std::time::Instant;
-use tokio::sync::mpsc::UnboundedSender;
-use tokio_wifiscanner::Wifi;
+use tokio::sync::mpsc::Sender;
 
 use color_eyre::eyre::Result;
 use ratatui::{prelude::*, widgets::*};
@@ -12,7 +10,6 @@ use crate::{
     action::Action,
     config::DEFAULT_BORDER_STYLE,
     layout::{get_horizontal_layout, get_vertical_layout},
-    mode::Mode,
     tui::Frame,
 };
 
@@ -37,7 +34,7 @@ impl WifiInfo {
 }
 
 pub struct WifiScan {
-    pub action_tx: Option<UnboundedSender<Action>>,
+    pub action_tx: Option<Sender<Action>>,
     pub scan_start_time: Instant,
     pub wifis: Vec<WifiInfo>,
     pub signal_tick: [f64; 2],
@@ -77,8 +74,8 @@ const COLORS_NAMES: [Color; 14] = [
     Color::White,
 ];
 
-static MIN_DBM: f32 = -100.0;
-static MAX_DBM: f32 = -1.0;
+const MIN_DBM: f32 = -100.0;
+const MAX_DBM: f32 = -1.0;
 
 impl WifiScan {
     pub fn new() -> Self {
@@ -91,18 +88,17 @@ impl WifiScan {
         }
     }
 
-    fn make_table(&mut self) -> Table {
+    fn make_table(&mut self) -> Table<'_> {
         let header = Row::new(vec!["time", "ssid", "ch", "mac", "signal"])
             .style(Style::default().fg(Color::Yellow));
         // .bottom_margin(1);
         let mut rows = Vec::new();
         for w in &self.wifis {
-            let s_clamp = w.signal.max(MIN_DBM).min(MAX_DBM);
+            let s_clamp = w.signal.clamp(MIN_DBM, MAX_DBM);
             let percent = ((s_clamp - MIN_DBM) / (MAX_DBM - MIN_DBM)).clamp(0.0, 1.0);
 
             let p = (percent * 10.0) as usize;
-            let gauge: String = std::iter::repeat(char::from_u32(0x25a8).unwrap_or('#'))
-                .take(p)
+            let gauge: String = std::iter::repeat_n(char::from_u32(0x25a8).unwrap_or('#'), p)
                 .collect();
 
             let signal = format!("({}){}", w.signal, gauge);
@@ -165,7 +161,10 @@ impl WifiScan {
     }
 
     pub fn scan(&mut self) {
-        let tx = self.action_tx.clone().unwrap();
+        let Some(tx) = self.action_tx.clone() else {
+            log::error!("Cannot scan WiFi: action channel not initialized");
+            return;
+        };
         tokio::spawn(async move {
             let networks = tokio_wifiscanner::scan().await;
             match networks {
@@ -193,10 +192,10 @@ impl WifiScan {
                         }
                     }
 
-                    let t_send = tx.send(Action::Scan(wifi_nets));
+                    let t_send = tx.try_send(Action::Scan(wifi_nets));
                     match t_send {
-                        Ok(n) => (),
-                        Err(e) => (),
+                        Ok(_n) => (),
+                        Err(_e) => (),
                     }
                 }
                 Err(_e) => (),
@@ -219,7 +218,7 @@ impl WifiScan {
         }
         // -- sort wifi networks by it's signal strength
         self.wifis
-            .sort_by(|a, b| b.signal.partial_cmp(&a.signal).unwrap());
+            .sort_by(|a, b| b.signal.partial_cmp(&a.signal).unwrap_or(std::cmp::Ordering::Equal));
     }
 
     fn app_tick(&mut self) -> Result<()> {
@@ -239,8 +238,8 @@ impl WifiScan {
 }
 
 impl Component for WifiScan {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
-        self.action_tx = Some(tx);
+    fn register_action_handler(&mut self, action_tx: Sender<Action>) -> Result<()> {
+        self.action_tx = Some(action_tx);
         Ok(())
     }
 

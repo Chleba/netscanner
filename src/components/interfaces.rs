@@ -1,4 +1,3 @@
-use ipnetwork::IpNetwork;
 use pnet::{
     datalink::{self, NetworkInterface},
     util::MacAddr,
@@ -8,19 +7,18 @@ use std::time::Instant;
 
 use color_eyre::eyre::Result;
 use ratatui::{prelude::*, widgets::*};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 use super::Component;
 use crate::{
     action::Action,
     config::DEFAULT_BORDER_STYLE,
     layout::{get_horizontal_layout, get_vertical_layout},
-    mode::Mode,
     tui::Frame,
 };
 
 pub struct Interfaces {
-    action_tx: Option<UnboundedSender<Action>>,
+    action_tx: Option<Sender<Action>>,
     interfaces: Vec<NetworkInterface>,
     last_update_time: Instant,
     active_interfaces: Vec<NetworkInterface>,
@@ -49,21 +47,21 @@ impl Interfaces {
         self.active_interfaces.clear();
     
         let interfaces = datalink::interfaces();
-        for intf in &interfaces {
+        for interface in &interfaces {
             // -- get active interface with non-local IP
-            if (cfg!(windows) || intf.is_up()) && !intf.ips.is_empty() {
+            if (cfg!(windows) || interface.is_up()) && !interface.ips.is_empty() {
                 // Windows doesn't have the is_up() method
-                for ip in &intf.ips {
+                for ip in &interface.ips {
                     if let IpAddr::V4(ipv4) = ip.ip() {
                         if ipv4.is_private() && !ipv4.is_loopback() && !ipv4.is_unspecified() {
-                            self.active_interfaces.push(intf.clone());
+                            self.active_interfaces.push(interface.clone());
                             break;
                         }
                     }
                 }
             }
             // -- store interfaces into a vec
-            self.interfaces.push(intf.clone());
+            self.interfaces.push(interface.clone());
         }
         // -- sort interfaces
         self.interfaces.sort_by(|a, b| a.name.cmp(&b.name));
@@ -82,10 +80,12 @@ impl Interfaces {
 
     fn send_active_interface(&mut self) {
         if !self.active_interfaces.is_empty() {
-            let tx = self.action_tx.clone().unwrap();
+            let Some(tx) = self.action_tx.clone() else {
+                log::error!("Cannot send active interface: action channel not initialized");
+                return;
+            };
             let active_interface = &self.active_interfaces[self.active_interface_index];
-            tx.send(Action::ActiveInterface(active_interface.clone()))
-                .unwrap();
+            let _ = tx.try_send(Action::ActiveInterface(active_interface.clone()));
         }
     }
 
@@ -99,7 +99,7 @@ impl Interfaces {
         Ok(())
     }
 
-    fn make_table(&mut self) -> Table {
+    fn make_table(&mut self) -> Table<'_> {
         let mut active_interface: Option<&NetworkInterface> = None;
         if !self.active_interfaces.is_empty() {
             active_interface = Some(&self.active_interfaces[self.active_interface_index]);
@@ -110,8 +110,10 @@ impl Interfaces {
         let mut rows = Vec::new();
         for w in &self.interfaces {
             let mut active = String::from("");
-            if active_interface.is_some() && active_interface.unwrap() == w {
-                active = String::from("*");
+            if let Some(ai) = active_interface {
+                if ai == w {
+                    active = String::from("*");
+                }
             }
             let name = if cfg!(windows) {
                 w.description.clone()
@@ -192,7 +194,7 @@ impl Interfaces {
 }
 
 impl Component for Interfaces {
-    fn init(&mut self, area: Size) -> Result<()> {
+    fn init(&mut self, _area: Size) -> Result<()> {
         self.get_interfaces();
         self.send_active_interface();
         Ok(())
@@ -202,8 +204,8 @@ impl Component for Interfaces {
         self
     }
 
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
-        self.action_tx = Some(tx);
+    fn register_action_handler(&mut self, action_tx: Sender<Action>) -> Result<()> {
+        self.action_tx = Some(action_tx);
         Ok(())
     }
 

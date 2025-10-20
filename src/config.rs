@@ -1,15 +1,13 @@
-use std::{collections::HashMap, fmt, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 
 use color_eyre::eyre::Result;
-use config::Value;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use derive_deref::{Deref, DerefMut};
-use ratatui::{style::{Color, Modifier, Style}, widgets::{BorderType, Borders}};
+use ratatui::{style::{Color, Modifier, Style}, widgets::BorderType};
 use serde::{
-  de::{self, Deserializer, MapAccess, Visitor},
-  Deserialize, Serialize,
+  de::Deserializer,
+  Deserialize,
 };
-use serde_json::Value as JsonValue;
 
 use crate::{action::Action, mode::Mode};
 
@@ -37,12 +35,15 @@ pub struct Config {
 
 impl Config {
   pub fn new() -> Result<Self, config::ConfigError> {
-    let default_config: Config = json5::from_str(CONFIG).unwrap();
+    let default_config: Config = json5::from_str(CONFIG)
+      .expect("embedded default config should be valid JSON5");
     let data_dir = crate::utils::get_data_dir();
     let config_dir = crate::utils::get_config_dir();
     let mut builder = config::Config::builder()
-      .set_default("_data_dir", data_dir.to_str().unwrap())?
-      .set_default("_config_dir", config_dir.to_str().unwrap())?;
+      .set_default("_data_dir", data_dir.to_str()
+        .ok_or_else(|| config::ConfigError::Message("data directory path is not valid UTF-8".to_string()))?)?
+      .set_default("_config_dir", config_dir.to_str()
+        .ok_or_else(|| config::ConfigError::Message("config directory path is not valid UTF-8".to_string()))?)?;
 
     let config_files = [
       ("config.json5", config::FileFormat::Json5),
@@ -59,7 +60,11 @@ impl Config {
       }
     }
     if !found_config {
-      log::error!("No configuration file found. Application may not behave as expected");
+      log::warn!(
+        "No configuration file found in {:?}. Using default configuration. \
+        Supported formats: config.json5, config.json, config.yaml, config.toml, config.ini",
+        config_dir
+      );
     }
 
     let mut cfg: Self = builder.build()?.try_deserialize()?;
@@ -73,7 +78,7 @@ impl Config {
     for (mode, default_styles) in default_config.styles.iter() {
       let user_styles = cfg.styles.entry(*mode).or_default();
       for (style_key, style) in default_styles.iter() {
-        user_styles.entry(style_key.clone()).or_insert_with(|| style.clone());
+        user_styles.entry(style_key.clone()).or_insert_with(|| *style);
       }
     }
 
@@ -94,8 +99,18 @@ impl<'de> Deserialize<'de> for KeyBindings {
     let keybindings = parsed_map
       .into_iter()
       .map(|(mode, inner_map)| {
-        let converted_inner_map =
-          inner_map.into_iter().map(|(key_str, cmd)| (parse_key_sequence(&key_str).unwrap(), cmd)).collect();
+        let converted_inner_map = inner_map
+          .into_iter()
+          .filter_map(|(key_str, cmd)| {
+            match parse_key_sequence(&key_str) {
+              Ok(keys) => Some((keys, cmd)),
+              Err(e) => {
+                log::warn!("Invalid key binding '{}' in config: {}", key_str, e);
+                None
+              }
+            }
+          })
+          .collect();
         (mode, converted_inner_map)
       })
       .collect();
@@ -171,7 +186,8 @@ fn parse_key_code_with_modifiers(raw: &str, mut modifiers: KeyModifiers) -> Resu
     "minus" => KeyCode::Char('-'),
     "tab" => KeyCode::Tab,
     c if c.len() == 1 => {
-      let mut c = c.chars().next().unwrap();
+      // Safe: we checked c.len() == 1
+      let mut c = c.chars().next().expect("single character string");
       if modifiers.contains(KeyModifiers::SHIFT) {
         c = c.to_ascii_uppercase();
       }
@@ -203,7 +219,7 @@ pub fn key_event_to_string(key_event: &KeyEvent) -> String {
       char = format!("f({c})");
       &char
     },
-    KeyCode::Char(c) if c == ' ' => "space",
+    KeyCode::Char(' ') => "space",
     KeyCode::Char(c) => {
       char = c.to_string();
       &char
@@ -431,7 +447,7 @@ mod tests {
   #[test]
   fn test_parse_color_rgb() {
     let color = parse_color("rgb123");
-    let expected = 16 + 1 * 36 + 2 * 6 + 3;
+    let expected = 16 + 36 + 2 * 6 + 3;
     assert_eq!(color, Some(Color::Indexed(expected)));
   }
 
@@ -440,16 +456,6 @@ mod tests {
     let color = parse_color("unknown");
     assert_eq!(color, None);
   }
-
-  // #[test]
-  // fn test_config() -> Result<()> {
-  //   let c = Config::new()?;
-  //   assert_eq!(
-  //     c.keybindings.get(&Mode::Home).unwrap().get(&parse_key_sequence("<q>").unwrap_or_default()).unwrap(),
-  //     &Action::Quit
-  //   );
-  //   Ok(())
-  // }
 
   #[test]
   fn test_simple_keys() {

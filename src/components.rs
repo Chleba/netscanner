@@ -1,8 +1,79 @@
+//! Component system for modular UI elements.
+//!
+//! This module defines the [`Component`] trait and exports all component implementations.
+//! Components are self-contained UI elements that handle events, update state, and render
+//! themselves independently.
+//!
+//! # Architecture
+//!
+//! The component system enables a **modular, loosely-coupled architecture**:
+//!
+//! ```text
+//! ┌─────────────────────────────────────────────────────────┐
+//! │                    Component Trait                       │
+//! │  ┌───────────────────────────────────────────────────┐  │
+//! │  │  Lifecycle Methods                                │  │
+//! │  │  • init()       - Initialize with terminal size   │  │
+//! │  │  • shutdown()   - Cleanup resources               │  │
+//! │  └───────────────────────────────────────────────────┘  │
+//! │  ┌───────────────────────────────────────────────────┐  │
+//! │  │  Event Handling                                   │  │
+//! │  │  • handle_events()      - Process terminal events │  │
+//! │  │  • handle_key_events()  - Handle keyboard         │  │
+//! │  │  • handle_mouse_events() - Handle mouse           │  │
+//! │  └───────────────────────────────────────────────────┘  │
+//! │  ┌───────────────────────────────────────────────────┐  │
+//! │  │  State Management                                 │  │
+//! │  │  • update() - Process actions, update state       │  │
+//! │  └───────────────────────────────────────────────────┘  │
+//! │  ┌───────────────────────────────────────────────────┐  │
+//! │  │  Rendering                                        │  │
+//! │  │  • draw() - Render to terminal frame              │  │
+//! │  └───────────────────────────────────────────────────┘  │
+//! └─────────────────────────────────────────────────────────┘
+//! ```
+//!
+//! # Component Lifecycle
+//!
+//! 1. **Creation**: Component is instantiated via `Default` or `new()`
+//! 2. **Registration**: Action and config handlers are registered
+//! 3. **Initialization**: `init()` called with terminal size
+//! 4. **Event Loop**: Component processes events and actions
+//! 5. **Shutdown**: `shutdown()` called for cleanup
+//!
+//! # Available Components
+//!
+//! - **[`discovery`]**: Network host discovery via ICMP/ARP
+//! - **[`ports`]**: Concurrent TCP port scanning
+//! - **[`packetdump`]**: Real-time packet capture and analysis
+//! - **[`sniff`]**: Network traffic monitoring
+//! - **[`wifi_scan`]**: WiFi network scanning
+//! - **[`wifi_chart`]**: WiFi signal strength visualization
+//! - **[`wifi_interface`]**: WiFi connection information
+//! - **[`interfaces`]**: Network interface selection
+//! - **[`export`]**: Data export functionality
+//! - **[`tabs`]**: Tab navigation UI
+//! - **[`title`]**: Application title bar
+//!
+//! # Component Communication
+//!
+//! Components communicate exclusively through [`Action`] messages:
+//! - Never call other components directly
+//! - Send actions via the registered `action_tx` channel
+//! - Receive actions via `update()` method
+//! - Return new actions to be processed
+//!
+//! # Type Downcasting
+//!
+//! The `as_any()` method allows safe downcasting from `Box<dyn Component>` to
+//! concrete types when needed (e.g., for data export). This is used sparingly
+//! to maintain loose coupling.
+
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyEvent, MouseEvent};
 use ratatui::layout::{Rect, Size};
 use std::any::Any;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::Sender;
 
 use crate::{
     action::Action,
@@ -29,19 +100,16 @@ pub mod wifi_scan;
 pub trait Component: Any {
     /// Register an action handler that can send actions for processing if necessary.
     /// # Arguments
-    /// * `tx` - An unbounded sender that can send actions.
+    /// * `action_tx` - A bounded sender that can send actions.
     /// # Returns
     /// * `Result<()>` - An Ok result or an error.
-    #[allow(unused_variables)]
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(&mut self, _action_tx: Sender<Action>) -> Result<()> {
         Ok(())
     }
 
-    #[allow(unused_variables)]
     fn as_any(&self) -> &dyn Any;
 
-    #[allow(unused_variables)]
-    fn tab_changed(&mut self, tab: TabsEnum) -> Result<()> {
+    fn tab_changed(&mut self, _tab: TabsEnum) -> Result<()> {
         Ok(())
     }
 
@@ -50,8 +118,7 @@ pub trait Component: Any {
     /// * `config` - Configuration settings.
     /// # Returns
     /// * `Result<()>` - An Ok result or an error.
-    #[allow(unused_variables)]
-    fn register_config_handler(&mut self, config: Config) -> Result<()> {
+    fn register_config_handler(&mut self, _config: Config) -> Result<()> {
         Ok(())
     }
 
@@ -83,8 +150,7 @@ pub trait Component: Any {
     /// * `key` - A key event to be processed.
     /// # Returns
     /// * `Result<Option<Action>>` - An action to be processed or none.
-    #[allow(unused_variables)]
-    fn handle_key_events(&mut self, key: KeyEvent) -> Result<Option<Action>> {
+    fn handle_key_events(&mut self, _key: KeyEvent) -> Result<Option<Action>> {
         Ok(None)
     }
 
@@ -93,8 +159,7 @@ pub trait Component: Any {
     /// * `mouse` - A mouse event to be processed.
     /// # Returns
     /// * `Result<Option<Action>>` - An action to be processed or none.
-    #[allow(unused_variables)]
-    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
+    fn handle_mouse_events(&mut self, _mouse: MouseEvent) -> Result<Option<Action>> {
         Ok(None)
     }
 
@@ -103,8 +168,7 @@ pub trait Component: Any {
     /// * `action` - An action that may modify the state of the component.
     /// # Returns
     /// * `Result<Option<Action>>` - An action to be processed or none.
-    #[allow(unused_variables)]
-    fn update(&mut self, action: Action) -> Result<Option<Action>> {
+    fn update(&mut self, _action: Action) -> Result<Option<Action>> {
         Ok(None)
     }
 
@@ -115,4 +179,13 @@ pub trait Component: Any {
     /// # Returns
     /// * `Result<()>` - An Ok result or an error.
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()>;
+
+    /// Gracefully shutdown the component and clean up resources.
+    /// This is called before the application exits to ensure proper cleanup.
+    /// Components should stop any running threads, close network connections, etc.
+    /// # Returns
+    /// * `Result<()>` - An Ok result or an error.
+    fn shutdown(&mut self) -> Result<()> {
+        Ok(())
+    }
 }

@@ -1,10 +1,10 @@
 use std::cmp;
+use std::collections::VecDeque;
 use std::path::PathBuf;
 
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
 use directories::ProjectDirs;
-use human_panic::metadata;
 use lazy_static::lazy_static;
 use std::net::Ipv4Addr;
 use tracing::error;
@@ -15,7 +15,7 @@ use tracing_subscriber::{
 
 use crate::components::sniff::IPTraffic;
 
-pub static GIT_COMMIT_HASH: &'static str = env!("_GIT_INFO");
+pub static GIT_COMMIT_HASH: &str = env!("_GIT_INFO");
 
 lazy_static! {
     pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").to_uppercase().to_string();
@@ -59,27 +59,41 @@ pub fn count_traffic_total(traffic: &[IPTraffic]) -> (f64, f64) {
 
 #[derive(Clone, Debug)]
 pub struct MaxSizeVec<T> {
-    p_vec: Vec<T>,
+    deque: VecDeque<T>,
     max_len: usize,
 }
 
 impl<T> MaxSizeVec<T> {
     pub fn new(max_len: usize) -> Self {
         Self {
-            p_vec: Vec::with_capacity(max_len),
+            deque: VecDeque::with_capacity(max_len),
             max_len,
         }
     }
 
+    /// Push an item to the front of the collection.
+    /// If at capacity, removes the oldest item from the back.
+    /// This is now O(1) instead of O(n).
     pub fn push(&mut self, item: T) {
-        if self.p_vec.len() >= self.max_len {
-            self.p_vec.pop();
+        if self.deque.len() >= self.max_len {
+            self.deque.pop_back();
         }
-        self.p_vec.insert(0, item);
+        self.deque.push_front(item);
     }
 
-    pub fn get_vec(&self) -> &Vec<T> {
-        &self.p_vec
+    /// Get a reference to the underlying VecDeque.
+    /// Note: Returns VecDeque instead of Vec for better performance.
+    pub fn get_deque(&self) -> &VecDeque<T> {
+        &self.deque
+    }
+
+    /// Legacy method for backward compatibility.
+    /// Converts to Vec - use get_deque() for better performance.
+    pub fn get_vec(&self) -> Vec<T>
+    where
+        T: Clone,
+    {
+        self.deque.iter().cloned().collect()
     }
 }
 
@@ -96,7 +110,7 @@ pub fn bytes_convert(num: f64) -> String {
     );
     let pretty_bytes = format!("{:.2}", num / delimiter.powi(exponent))
         .parse::<f64>()
-        .unwrap()
+        .unwrap_or(0.0)
         * 1_f64;
     let unit = units[exponent as usize];
     format!("{}{}", pretty_bytes, unit)
@@ -122,7 +136,7 @@ pub fn initialize_panic_handler() -> Result<()> {
 
         #[cfg(not(debug_assertions))]
         {
-            use human_panic::{handle_dump, print_msg, Metadata};
+            use human_panic::{handle_dump, print_msg, metadata};
             let meta = metadata!()
                 .authors("Chleba <chlebik@gmail.com>")
                 .homepage("https://github.com/Chleba/netscanner")
@@ -176,13 +190,13 @@ pub fn get_config_dir() -> PathBuf {
 
 pub fn initialize_logging() -> Result<()> {
     let directory = get_data_dir();
-    std::fs::create_dir_all(directory.clone())?;
-    let log_path = directory.join(LOG_FILE.clone());
+    std::fs::create_dir_all(&directory)?;
+    let log_path = directory.join(LOG_FILE.as_str());
     let log_file = std::fs::File::create(log_path)?;
     std::env::set_var(
         "RUST_LOG",
         std::env::var("RUST_LOG")
-            .or_else(|_| std::env::var(LOG_ENV.clone()))
+            .or_else(|_| std::env::var(LOG_ENV.as_str()))
             .unwrap_or_else(|_| format!("{}=info", env!("CARGO_CRATE_NAME"))),
     );
     let file_subscriber = tracing_subscriber::fmt::layer()
