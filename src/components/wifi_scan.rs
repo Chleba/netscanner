@@ -1,5 +1,4 @@
 use chrono::{DateTime, Local};
-use config::Source;
 use std::time::Instant;
 use tokio::sync::mpsc::Sender;
 
@@ -75,8 +74,8 @@ const COLORS_NAMES: [Color; 14] = [
     Color::White,
 ];
 
-static MIN_DBM: f32 = -100.0;
-static MAX_DBM: f32 = -1.0;
+const MIN_DBM: f32 = -100.0;
+const MAX_DBM: f32 = -1.0;
 
 impl WifiScan {
     pub fn new() -> Self {
@@ -196,8 +195,8 @@ impl WifiScan {
 
                     let t_send = tx.try_send(Action::Scan(wifi_nets));
                     match t_send {
-                        Ok(n) => (),
-                        Err(e) => (),
+                        Ok(_n) => (),
+                        Err(_e) => (),
                     }
                 }
                 Err(_e) => (),
