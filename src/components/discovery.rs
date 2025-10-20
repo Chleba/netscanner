@@ -2,13 +2,17 @@ use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
 use ipnetwork::IpNetwork;
 
-use pnet::datalink::NetworkInterface;
+use pnet::datalink::{self, Channel, NetworkInterface};
+use pnet::packet::ethernet::{EtherTypes, MutableEthernetPacket};
+use pnet::packet::icmpv6::{checksum, echo_request, Icmpv6Types};
+use pnet::packet::ipv6::MutableIpv6Packet;
+use pnet::packet::Packet;
 use tokio::sync::Semaphore;
 
 use core::str;
 use ratatui::layout::Position;
 use ratatui::{prelude::*, widgets::*};
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv6Addr};
 use std::sync::Arc;
 use std::time::Duration;
 use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence};
@@ -131,6 +135,274 @@ impl Discovery {
         calculated.clamp(MIN_POOL_SIZE, MAX_POOL_SIZE)
     }
 
+    // Extract IPv6 address from network interface
+    // Prefers global unicast addresses over link-local for proper routing
+    fn get_interface_ipv6(interface: &NetworkInterface) -> Option<Ipv6Addr> {
+        let mut link_local = None;
+
+        for ip_network in &interface.ips {
+            if let IpAddr::V6(ipv6_addr) = ip_network.ip() {
+                if ipv6_addr.is_loopback() || ipv6_addr.is_multicast() {
+                    continue;
+                }
+
+                // Prefer global unicast addresses (non-link-local)
+                if !Self::is_link_local_ipv6(&ipv6_addr) {
+                    return Some(ipv6_addr);
+                }
+
+                // Store link-local as fallback
+                if link_local.is_none() {
+                    link_local = Some(ipv6_addr);
+                }
+            }
+        }
+
+        // Return link-local if no global address found
+        link_local
+    }
+
+    // Check if an IPv6 address is link-local (fe80::/10)
+    fn is_link_local_ipv6(addr: &Ipv6Addr) -> bool {
+        let segments = addr.segments();
+        (segments[0] & 0xffc0) == 0xfe80
+    }
+
+    // Check if we're running on macOS
+    fn is_macos() -> bool {
+        cfg!(target_os = "macos")
+    }
+
+    // Use system ping6 command (works on macOS where kernel blocks user-space ICMP)
+    // Returns true if host responds, false otherwise
+    async fn ping6_system_command(target_ipv6: Ipv6Addr, timeout_secs: u64) -> bool {
+        use tokio::process::Command;
+        use tokio::time::timeout;
+        use std::time::Duration;
+
+        let mut cmd = Command::new("ping6");
+        cmd.arg("-c").arg("1");
+
+        // Platform-specific timeout handling
+        #[cfg(target_os = "linux")]
+        {
+            // Linux supports -W flag for timeout in seconds
+            cmd.arg("-W").arg(timeout_secs.to_string());
+        }
+
+        // macOS ping6 doesn't support -W flag, relies on default timeout (~10s)
+        // We use tokio timeout wrapper to enforce timeout on all platforms
+
+        cmd.arg(target_ipv6.to_string());
+
+        let result = timeout(
+            Duration::from_secs(timeout_secs + 1),
+            cmd.output()
+        ).await;
+
+        match result {
+            Ok(Ok(output)) => {
+                if output.status.success() {
+                    log::debug!("ping6 success for {}", target_ipv6);
+                    true
+                } else {
+                    log::debug!("ping6 no response from {}", target_ipv6);
+                    false
+                }
+            }
+            Ok(Err(e)) => {
+                log::debug!("Failed to execute ping6 command: {:?}", e);
+                false
+            }
+            Err(_) => {
+                log::debug!("ping6 command timed out for {}", target_ipv6);
+                false
+            }
+        }
+    }
+
+    // Send ICMPv6 Echo Request packet to target IPv6 address
+    // Uses raw packet construction via pnet library
+    async fn send_icmpv6_echo_request(
+        interface: &NetworkInterface,
+        source_ipv6: Ipv6Addr,
+        target_ipv6: Ipv6Addr,
+        identifier: u16,
+        sequence: u16,
+    ) -> Result<(), String> {
+        // Create datalink channel for sending raw packets
+        let (mut tx, _) = match datalink::channel(interface, Default::default()) {
+            Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
+            Ok(_) => return Err("Unknown channel type".to_string()),
+            Err(e) => return Err(format!("Failed to create datalink channel: {}", e)),
+        };
+
+        // Packet structure:
+        // [Ethernet Header (14 bytes)] [IPv6 Header (40 bytes)] [ICMPv6 Echo Request (8 bytes + payload)]
+        const ETHERNET_HEADER_LEN: usize = 14;
+        const IPV6_HEADER_LEN: usize = 40;
+        const ICMPV6_HEADER_LEN: usize = 8;
+        const PAYLOAD_LEN: usize = 56; // Standard ping payload size
+        const TOTAL_LEN: usize = ETHERNET_HEADER_LEN + IPV6_HEADER_LEN + ICMPV6_HEADER_LEN + PAYLOAD_LEN;
+
+        let mut ethernet_buffer = [0u8; TOTAL_LEN];
+        let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer)
+            .ok_or("Failed to create Ethernet packet")?;
+
+        // Set Ethernet header
+        ethernet_packet.set_destination(pnet::util::MacAddr::broadcast());
+        ethernet_packet.set_source(interface.mac.unwrap_or(pnet::util::MacAddr::zero()));
+        ethernet_packet.set_ethertype(EtherTypes::Ipv6);
+
+        // Create IPv6 packet in the Ethernet payload
+        let mut ipv6_buffer = [0u8; IPV6_HEADER_LEN + ICMPV6_HEADER_LEN + PAYLOAD_LEN];
+        let mut ipv6_packet = MutableIpv6Packet::new(&mut ipv6_buffer)
+            .ok_or("Failed to create IPv6 packet")?;
+
+        ipv6_packet.set_version(6);
+        ipv6_packet.set_traffic_class(0);
+        ipv6_packet.set_flow_label(0);
+        ipv6_packet.set_payload_length((ICMPV6_HEADER_LEN + PAYLOAD_LEN) as u16);
+        ipv6_packet.set_next_header(pnet::packet::ip::IpNextHeaderProtocols::Icmpv6);
+        ipv6_packet.set_hop_limit(64);
+        ipv6_packet.set_source(source_ipv6);
+        ipv6_packet.set_destination(target_ipv6);
+
+        // Create ICMPv6 Echo Request in the IPv6 payload
+        let mut icmpv6_buffer = [0u8; ICMPV6_HEADER_LEN + PAYLOAD_LEN];
+
+        use pnet::packet::icmpv6::echo_request::MutableEchoRequestPacket;
+        let mut echo_request_packet = MutableEchoRequestPacket::new(&mut icmpv6_buffer)
+            .ok_or("Failed to create Echo Request packet")?;
+
+        echo_request_packet.set_icmpv6_type(Icmpv6Types::EchoRequest);
+        echo_request_packet.set_icmpv6_code(echo_request::Icmpv6Codes::NoCode);
+        echo_request_packet.set_identifier(identifier);
+        echo_request_packet.set_sequence_number(sequence);
+        // Payload (data field) is zeros (already initialized)
+
+        // Calculate and set ICMPv6 checksum
+        // Need to convert back to Icmpv6Packet for checksum calculation
+        use pnet::packet::icmpv6::Icmpv6Packet;
+        let icmpv6_for_checksum = Icmpv6Packet::new(echo_request_packet.packet())
+            .ok_or("Failed to create Icmpv6Packet for checksum")?;
+        let checksum_val = checksum(&icmpv6_for_checksum, &source_ipv6, &target_ipv6);
+        echo_request_packet.set_checksum(checksum_val);
+
+        // Copy ICMPv6 Echo Request into IPv6 payload
+        ipv6_packet.set_payload(echo_request_packet.packet());
+
+        // Copy IPv6 packet into Ethernet payload
+        ethernet_packet.set_payload(ipv6_packet.packet());
+
+        // Send the packet
+        // Yield to tokio scheduler before blocking I/O
+        tokio::task::yield_now().await;
+        tx.send_to(ethernet_packet.packet(), None)
+            .ok_or("Failed to send packet")?
+            .map_err(|e| format!("Send error: {}", e))?;
+
+        Ok(())
+    }
+
+    // Receive ICMPv6 Echo Reply packet from target IPv6 address
+    // Listens for Echo Reply with matching identifier and sequence number
+    async fn receive_icmpv6_echo_reply(
+        interface: &NetworkInterface,
+        target_ipv6: Ipv6Addr,
+        identifier: u16,
+        sequence: u16,
+        timeout: Duration,
+    ) -> Option<Ipv6Addr> {
+        // Create datalink channel for receiving raw packets
+        let (_, mut rx) = match datalink::channel(interface, Default::default()) {
+            Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
+            Ok(_) => return None,
+            Err(e) => {
+                log::debug!("Failed to create datalink channel for receiving: {}", e);
+                return None;
+            }
+        };
+
+        // Set up timeout using tokio
+        let result = tokio::time::timeout(timeout, async {
+            loop {
+                // Yield to tokio scheduler before blocking I/O
+                tokio::task::yield_now().await;
+
+                match rx.next() {
+                    Ok(packet) => {
+                        // Parse Ethernet frame
+                        use pnet::packet::ethernet::EthernetPacket;
+                        let eth_packet = match EthernetPacket::new(packet) {
+                            Some(eth) => eth,
+                            None => continue,
+                        };
+
+                        // Check if it's an IPv6 packet
+                        if eth_packet.get_ethertype() != EtherTypes::Ipv6 {
+                            continue;
+                        }
+
+                        // Parse IPv6 packet
+                        use pnet::packet::ipv6::Ipv6Packet;
+                        let ipv6_packet = match Ipv6Packet::new(eth_packet.payload()) {
+                            Some(ipv6) => ipv6,
+                            None => continue,
+                        };
+
+                        // Check if it's from our target
+                        if ipv6_packet.get_source() != target_ipv6 {
+                            continue;
+                        }
+
+                        // Check if it's an ICMPv6 packet
+                        use pnet::packet::ip::IpNextHeaderProtocols;
+                        if ipv6_packet.get_next_header() != IpNextHeaderProtocols::Icmpv6 {
+                            continue;
+                        }
+
+                        // Parse ICMPv6 packet
+                        use pnet::packet::icmpv6::Icmpv6Packet;
+                        let icmpv6_packet = match Icmpv6Packet::new(ipv6_packet.payload()) {
+                            Some(icmpv6) => icmpv6,
+                            None => continue,
+                        };
+
+                        // Check if it's an Echo Reply
+                        if icmpv6_packet.get_icmpv6_type() != Icmpv6Types::EchoReply {
+                            continue;
+                        }
+
+                        // Parse Echo Reply packet to get identifier and sequence
+                        // These are at bytes 4-5 and 6-7 of the ICMPv6 packet
+                        use pnet::packet::icmpv6::echo_reply::EchoReplyPacket;
+                        let echo_reply = match EchoReplyPacket::new(icmpv6_packet.packet()) {
+                            Some(reply) => reply,
+                            None => continue,
+                        };
+
+                        let reply_identifier = echo_reply.get_identifier();
+                        let reply_sequence = echo_reply.get_sequence_number();
+
+                        if reply_identifier == identifier && reply_sequence == sequence {
+                            // Found matching Echo Reply
+                            return Some(ipv6_packet.get_source());
+                        }
+                    }
+                    Err(e) => {
+                        log::debug!("Error receiving packet: {}", e);
+                        continue;
+                    }
+                }
+            }
+        })
+        .await;
+
+        // Return result if successful, None if timeout
+        result.ok().flatten()
+    }
+
     pub fn get_scanned_ips(&self) -> &Vec<ScannedIp> {
         &self.scanned_ips
     }
@@ -237,6 +509,9 @@ impl Discovery {
                 return;
             };
 
+            // Clone interface for IPv6 scanning (needed for raw packet operations)
+            let iface = self.active_interface.clone();
+
             // Calculate optimal pool size based on system resources
             let pool_size = Self::get_pool_size();
             log::debug!("Using pool size of {} for discovery scan", pool_size);
@@ -324,7 +599,7 @@ impl Discovery {
                         }
                     }
                     IpNetwork::V6(ipv6_cidr) => {
-                        // IPv6 scanning
+                        // IPv6 scanning - using manual ICMPv6 Echo Request/Reply
                         let ips = get_ips6_from_cidr(ipv6_cidr);
                         log::debug!("Scanning {} IPv6 addresses", ips.len());
 
@@ -333,6 +608,7 @@ impl Discovery {
                             .map(|&ip| {
                                 let s = semaphore.clone();
                                 let tx = tx.clone();
+                                let iface = iface.clone();
                                 let c = || async move {
                                     // Semaphore acquire should not fail in normal operation
                                     // If it does, we skip this IP and continue
@@ -340,33 +616,63 @@ impl Discovery {
                                         let _ = tx.try_send(Action::CountIp);
                                         return;
                                     };
-                                    let client = match Client::new(&Config::default()) {
-                                        Ok(c) => c,
-                                        Err(e) => {
-                                            log::error!("Failed to create ICMP client: {:?}", e);
-                                            let _ = tx.try_send(Action::CountIp);
-                                            return;
+
+                                    // On macOS, use system ping6 command because kernel doesn't deliver
+                                    // ICMPv6 Echo Reply packets to user-space raw sockets
+                                    let ping_success = if Self::is_macos() {
+                                        log::debug!("Using system ping6 for {} (macOS)", ip);
+                                        Self::ping6_system_command(ip, PING_TIMEOUT_SECS).await
+                                    } else {
+                                        // On Linux/other platforms, use manual ICMPv6 implementation
+                                        log::debug!("Using manual ICMPv6 for {} (non-macOS)", ip);
+
+                                        // Get source IPv6 from interface (needed for sending)
+                                        if let Some(source_ipv6) = iface.as_ref().and_then(Self::get_interface_ipv6) {
+                                            // Generate random identifier and sequence for this ping
+                                            let identifier = random::<u16>();
+                                            let sequence = 1u16;
+
+                                            // Send ICMPv6 Echo Request
+                                            match Self::send_icmpv6_echo_request(
+                                                iface.as_ref().unwrap(),
+                                                source_ipv6,
+                                                ip,
+                                                identifier,
+                                                sequence
+                                            ).await {
+                                                Ok(()) => {
+                                                    // Listen for Echo Reply
+                                                    if let Some(target_ipv6) = Self::receive_icmpv6_echo_reply(
+                                                        iface.as_ref().unwrap(),
+                                                        ip,
+                                                        identifier,
+                                                        sequence,
+                                                        Duration::from_secs(PING_TIMEOUT_SECS)
+                                                    ).await {
+                                                        log::debug!("ICMPv6 Echo Reply received from {}", target_ipv6);
+                                                        true
+                                                    } else {
+                                                        log::debug!("No ICMPv6 Echo Reply from {}", ip);
+                                                        false
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    log::debug!("Failed to send ICMPv6 Echo Request to {}: {}", ip, e);
+                                                    false
+                                                }
+                                            }
+                                        } else {
+                                            log::debug!("No IPv6 address on interface for pinging {}", ip);
+                                            false
                                         }
                                     };
-                                    let payload = [0; 56];
-                                    let mut pinger = client
-                                        .pinger(IpAddr::V6(ip), PingIdentifier(random()))
-                                        .await;
-                                    pinger.timeout(Duration::from_secs(PING_TIMEOUT_SECS));
 
-                                    match pinger.ping(PingSequence(2), &payload).await {
-                                        Ok((IcmpPacket::V6(_packet), _dur)) => {
-                                            tx.try_send(Action::PingIp(_packet.get_real_dest().to_string()))
-                                                .unwrap_or_default();
-                                            tx.try_send(Action::CountIp).unwrap_or_default();
-                                        }
-                                        Ok(_) => {
-                                            tx.try_send(Action::CountIp).unwrap_or_default();
-                                        }
-                                        Err(_) => {
-                                            tx.try_send(Action::CountIp).unwrap_or_default();
-                                        }
+                                    if ping_success {
+                                        tx.try_send(Action::PingIp(ip.to_string()))
+                                            .unwrap_or_default();
                                     }
+
+                                    tx.try_send(Action::CountIp).unwrap_or_default();
                                 };
                                 tokio::spawn(c())
                             })
