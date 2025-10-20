@@ -8,7 +8,7 @@ use tokio::sync::Semaphore;
 use core::str;
 use ratatui::layout::Position;
 use ratatui::{prelude::*, widgets::*};
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence};
@@ -195,9 +195,9 @@ impl Discovery {
                         }
 
                         // Validate it's not a special-purpose network
-                        // Reject multicast (ff00::/8) and loopback (::1/128)
-                        let first_segment = ipv6_net.network().segments()[0];
-                        if first_segment == 0xff00 || ipv6_net.network() == Ipv6Addr::LOCALHOST {
+                        if ipv6_net.network().is_multicast()
+                            || ipv6_net.network().is_loopback()
+                            || ipv6_net.network().is_unspecified() {
                             if let Some(tx) = &self.action_tx {
                                 let _ = tx.clone().try_send(Action::CidrError);
                             }
@@ -251,6 +251,7 @@ impl Discovery {
                         let cidr_str = format!("{}/{}", ipv4_cidr.network(), ipv4_cidr.prefix());
                         let Ok(ipv4_cidr_old) = cidr_str.parse::<Ipv4Cidr>() else {
                             log::error!("Failed to convert IPv4 CIDR for scanning");
+                            let _ = tx.try_send(Action::CidrError);
                             return;
                         };
 
@@ -267,8 +268,14 @@ impl Discovery {
                                         let _ = tx.try_send(Action::CountIp);
                                         return;
                                     };
-                                    let client =
-                                        Client::new(&Config::default()).expect("Cannot create client");
+                                    let client = match Client::new(&Config::default()) {
+                                        Ok(c) => c,
+                                        Err(e) => {
+                                            log::error!("Failed to create ICMP client: {:?}", e);
+                                            let _ = tx.try_send(Action::CountIp);
+                                            return;
+                                        }
+                                    };
                                     let payload = [0; 56];
                                     let mut pinger = client
                                         .pinger(IpAddr::V4(ip), PingIdentifier(random()))
@@ -333,8 +340,14 @@ impl Discovery {
                                         let _ = tx.try_send(Action::CountIp);
                                         return;
                                     };
-                                    let client =
-                                        Client::new(&Config::default()).expect("Cannot create client");
+                                    let client = match Client::new(&Config::default()) {
+                                        Ok(c) => c,
+                                        Err(e) => {
+                                            log::error!("Failed to create ICMP client: {:?}", e);
+                                            let _ = tx.try_send(Action::CountIp);
+                                            return;
+                                        }
+                                    };
                                     let payload = [0; 56];
                                     let mut pinger = client
                                         .pinger(IpAddr::V6(ip), PingIdentifier(random()))
