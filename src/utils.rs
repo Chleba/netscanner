@@ -15,7 +15,7 @@ use tracing_subscriber::{
 
 use crate::components::sniff::IPTraffic;
 
-pub static GIT_COMMIT_HASH: &'static str = env!("_GIT_INFO");
+pub static GIT_COMMIT_HASH: &str = env!("_GIT_INFO");
 
 lazy_static! {
     pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").to_uppercase().to_string();
@@ -136,7 +136,7 @@ pub fn initialize_panic_handler() -> Result<()> {
 
         #[cfg(not(debug_assertions))]
         {
-            use human_panic::{handle_dump, print_msg, metadata, Metadata};
+            use human_panic::{handle_dump, print_msg, metadata};
             let meta = metadata!()
                 .authors("Chleba <chlebik@gmail.com>")
                 .homepage("https://github.com/Chleba/netscanner")

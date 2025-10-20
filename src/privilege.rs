@@ -162,12 +162,10 @@ pub fn get_privilege_error_message() -> String {
                 )
             }
             _ => {
-                format!(
-                    "Insufficient privileges for network operations.\n\
+                "Insufficient privileges for network operations.\n\
                     \n\
                     This application requires raw socket access for network scanning.\n\
-                    Please run with elevated privileges (e.g., sudo)."
-                )
+                    Please run with elevated privileges (e.g., sudo).".to_string()
             }
         }
     }

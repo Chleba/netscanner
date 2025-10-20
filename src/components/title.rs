@@ -39,7 +39,7 @@ impl Component for Title {
         Ok(())
     }
 
-    fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
+    fn draw(&mut self, f: &mut Frame<'_>, _area: Rect) -> Result<()> {
         let rect = Rect::new(0, 0, f.area().width, 1);
         let version: &str = env!("CARGO_PKG_VERSION");
         let title = format!(" Network Scanner (v{})", version);

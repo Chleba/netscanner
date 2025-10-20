@@ -1,6 +1,5 @@
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
-use color_eyre::owo_colors::OwoColorize;
 
 use pnet::datalink::NetworkInterface;
 use tokio::sync::Semaphore;
@@ -38,7 +37,7 @@ use tui_input::Input;
 
 // Default concurrent ping scan pool size
 // Used as fallback if CPU detection fails or for single-core systems
-const DEFAULT_POOL_SIZE: usize = 32;
+const _DEFAULT_POOL_SIZE: usize = 32;
 
 // Minimum concurrent operations to maintain reasonable performance
 const MIN_POOL_SIZE: usize = 16;
@@ -587,7 +586,7 @@ impl Discovery {
 }
 
 impl Component for Discovery {
-    fn init(&mut self, area: Size) -> Result<()> {
+    fn init(&mut self, _area: Size) -> Result<()> {
         if self.cidr.is_none() {
             self.set_cidr(String::from(DEFAULT_IP), false);
         }
@@ -614,7 +613,7 @@ impl Component for Discovery {
                 Mode::Normal => return Ok(None),
                 Mode::Input => match key.code {
                     KeyCode::Enter => {
-                        if let Some(sender) = &self.action_tx {
+                        if let Some(_sender) = &self.action_tx {
                             self.set_cidr(self.input.value().to_string(), true);
                         }
                         Action::ModeChange(Mode::Normal)

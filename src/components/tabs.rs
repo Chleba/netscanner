@@ -1,5 +1,4 @@
 use color_eyre::eyre::Result;
-use color_eyre::owo_colors::OwoColorize;
 use ratatui::style::Stylize;
 use ratatui::{prelude::*, widgets::*};
 use ratatui::{
