@@ -11,3 +11,13 @@ target/
 
 # Claude Code project instructions - local only
 CLAUDE.md
+
+# Documentation and PR descriptions - local only
+UPSTREAM_PR_DESCRIPTION.md
+PR_DESCRIPTION.md
+IPv6_IMPLEMENTATION_SUMMARY.md
+IPv6_USAGE_EXAMPLES.md
+QA_SUMMARY.md
+VERIFICATION_REPORT.md
+qa_report.md
+qa_report_updated.md
