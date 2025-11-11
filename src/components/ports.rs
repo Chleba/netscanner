@@ -25,22 +25,10 @@ use crate::{
     tui::Frame,
 };
 
-// Default concurrent port scan pool size
-// Used as fallback if CPU detection fails
 const _DEFAULT_POOL_SIZE: usize = 64;
-
-// Minimum concurrent operations to maintain reasonable scan speed
 const MIN_POOL_SIZE: usize = 32;
-
-// Maximum concurrent operations to prevent overwhelming the network
 const MAX_POOL_SIZE: usize = 128;
-
-// Port scan timeout in seconds
-// Time to wait for TCP connection before considering port closed
-// 2 seconds balances thoroughness with scan speed for typical networks
 const PORT_SCAN_TIMEOUT_SECS: u64 = 2;
-
-// Animation frames for the scanning spinner
 const SPINNER_SYMBOLS: [&str; 6] = ["⠷", "⠯", "⠟", "⠻", "⠽", "⠾"];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -87,19 +75,12 @@ impl Ports {
         }
     }
 
-    // Calculate optimal pool size based on available CPU cores
-    // Returns a value between MIN_POOL_SIZE and MAX_POOL_SIZE
-    // Port scanning uses higher limits than discovery as it's more I/O-bound
     fn get_pool_size() -> usize {
-        // Try to detect number of CPU cores
         let num_cpus = std::thread::available_parallelism()
             .map(|n| n.get())
-            .unwrap_or(4); // Default to 4 if detection fails
+            .unwrap_or(4);
 
-        // Use 4x CPU cores for port scanning (very I/O-bound)
         let calculated = num_cpus * 4;
-
-        // Clamp to min/max bounds
         calculated.clamp(MIN_POOL_SIZE, MAX_POOL_SIZE)
     }
 
@@ -108,7 +89,6 @@ impl Ports {
     }
 
     fn process_ip(&mut self, ip: &str) {
-        // Parse IP address - support both IPv4 and IPv6
         let Ok(ip_addr) = ip.parse::<IpAddr>() else {
             return;
         };
@@ -118,7 +98,7 @@ impl Ports {
         } else {
             self.ip_ports.push(ScannedIpPorts {
                 ip: ip.to_string(),
-                hostname: String::new(), // Will be filled asynchronously
+                hostname: String::new(),
                 state: PortsScanState::Waiting,
                 ports: Vec::new(),
             });
@@ -132,11 +112,9 @@ impl Ports {
                     log::error!("Invalid IP in sort: {}", b.ip);
                     return std::cmp::Ordering::Equal;
                 };
-                // Compare IpAddr directly - supports both IPv4 and IPv6
                 match (a_ip, b_ip) {
                     (IpAddr::V4(a_v4), IpAddr::V4(b_v4)) => a_v4.cmp(&b_v4),
                     (IpAddr::V6(a_v6), IpAddr::V6(b_v6)) => a_v6.cmp(&b_v6),
-                    // IPv4 addresses sort before IPv6 addresses
                     (IpAddr::V4(_), IpAddr::V6(_)) => std::cmp::Ordering::Less,
                     (IpAddr::V6(_), IpAddr::V4(_)) => std::cmp::Ordering::Greater,
                 }
@@ -145,7 +123,6 @@ impl Ports {
 
         self.set_scrollbar_height();
 
-        // Perform DNS lookup asynchronously in background
         if let Some(tx) = self.action_tx.clone() {
             let dns_cache = self.dns_cache.clone();
             let ip_string = ip.to_string();
@@ -215,7 +192,7 @@ impl Ports {
 
     fn scan_ports(&mut self, index: usize) {
         if index >= self.ip_ports.len() {
-            return; // -- index out of bounds
+            return;
         }
 
         self.ip_ports[index].state = PortsScanState::Scanning;
@@ -229,8 +206,6 @@ impl Ports {
             return;
         };
         let ports_box = Box::new(COMMON_PORTS.iter());
-
-        // Calculate optimal pool size based on system resources
         let pool_size = Self::get_pool_size();
 
         tokio::spawn(async move {
@@ -242,7 +217,6 @@ impl Ports {
                 })
                 .await;
 
-            // Report scan completion
             if let Err(e) = tx.try_send(Action::PortScanDone(index)) {
                 log::error!(
                     "Failed to send port scan completion notification for {}: {:?}",
@@ -257,7 +231,6 @@ impl Ports {
         let timeout = Duration::from_secs(PORT_SCAN_TIMEOUT_SECS);
         let soc_addr = SocketAddr::new(ip, port);
         if let Ok(Ok(_)) = tokio::time::timeout(timeout, TcpStream::connect(&soc_addr)).await {
-            // Successfully connected to port
             if let Err(e) = tx.try_send(Action::PortScan(index, port)) {
                 log::error!(
                     "Failed to send open port notification for {}:{} - action channel may be full or closed: {:?}",
@@ -406,13 +379,11 @@ impl Component for Ports {
             self.spinner_index = s_index;
         }
 
-        // -- tab change
         if let Action::TabChange(tab) = action {
             self.tab_changed(tab)?;
         }
 
         if self.active_tab == TabsEnum::Ports {
-            // -- prev & next select item in list
             if let Action::Down = action {
                 self.next_in_list();
             }
@@ -433,12 +404,10 @@ impl Component for Ports {
             self.ip_ports[index].state = PortsScanState::Done;
         }
 
-        // -- PING IP
         if let Action::PingIp(ref ip) = action {
             self.process_ip(ip);
         }
 
-        // -- DNS resolved
         if let Action::DnsResolved(ref ip, ref hostname) = action {
             if let Some(entry) = self.ip_ports.iter_mut().find(|item| item.ip == *ip) {
                 entry.hostname = hostname.clone();
@@ -456,11 +425,9 @@ impl Component for Ports {
             list_rect.y += 1;
             list_rect.height -= 1;
 
-            // -- LIST
             let list = self.make_list(list_rect);
             f.render_stateful_widget(list, list_rect, &mut self.list_state.clone());
 
-            // -- SCROLLBAR
             let scrollbar = Self::make_scrollbar();
             let mut scroll_rect = list_rect;
             scroll_rect.y += 1;
