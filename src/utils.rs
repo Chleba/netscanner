@@ -46,16 +46,9 @@ pub fn get_ips4_from_cidr(cidr: Ipv4Cidr) -> Vec<Ipv4Addr> {
 
 pub fn get_ips6_from_cidr(cidr: Ipv6Network) -> Vec<Ipv6Addr> {
     let mut ips = Vec::new();
-    // For IPv6, we need to limit the number of IPs we scan to avoid excessive memory usage
-    // Typical /64 networks have 2^64 addresses, which is impractical to scan
-    // We'll limit to reasonable subnet sizes
     let prefix = cidr.prefix();
 
-    // Only allow scanning for /120 or larger (256 addresses or fewer)
-    // This prevents attempting to scan massive IPv6 ranges
     if prefix < 120 {
-        // For larger subnets, we'll generate a sample of addresses
-        // This is a practical limitation for IPv6 scanning
         log::warn!("IPv6 CIDR /{} is too large for complete scan, sampling addresses", prefix);
         return ips;
     }
@@ -71,19 +64,14 @@ pub fn count_ipv4_net_length(net_length: u32) -> u32 {
 }
 
 pub fn count_ipv6_net_length(net_length: u32) -> u64 {
-    // IPv6 prefix lengths must be 0-128
     if net_length > 128 {
         log::error!("Invalid IPv6 prefix length: {}, must be 0-128", net_length);
         return 0;
     }
 
-    // For IPv6, we need to use u64 for larger subnet calculations
-    // We'll cap at u64::MAX for practical purposes
     if net_length >= 64 {
-        // For /64 or smaller prefix, calculate actual count
         2u64.pow((128 - net_length).min(63))
     } else {
-        // For very large ranges, return max value
         u64::MAX
     }
 }
@@ -112,9 +100,6 @@ impl<T> MaxSizeVec<T> {
         }
     }
 
-    /// Push an item to the front of the collection.
-    /// If at capacity, removes the oldest item from the back.
-    /// This is now O(1) instead of O(n).
     pub fn push(&mut self, item: T) {
         if self.deque.len() >= self.max_len {
             self.deque.pop_back();
@@ -122,14 +107,10 @@ impl<T> MaxSizeVec<T> {
         self.deque.push_front(item);
     }
 
-    /// Get a reference to the underlying VecDeque.
-    /// Note: Returns VecDeque instead of Vec for better performance.
     pub fn get_deque(&self) -> &VecDeque<T> {
         &self.deque
     }
 
-    /// Legacy method for backward compatibility.
-    /// Converts to Vec - use get_deque() for better performance.
     pub fn get_vec(&self) -> Vec<T>
     where
         T: Clone,
@@ -184,17 +165,15 @@ pub fn initialize_panic_handler() -> Result<()> {
                 .support("https://github.com/Chleba/netscanner/issues");
 
             let file_path = handle_dump(&meta, panic_info);
-            // prints human-panic message
             print_msg(file_path, &meta)
                 .expect("human-panic: printing error message to console failed");
-            eprintln!("{}", panic_hook.panic_report(panic_info)); // prints color-eyre stack trace to stderr
+            eprintln!("{}", panic_hook.panic_report(panic_info));
         }
         let msg = format!("{}", panic_hook.panic_report(panic_info));
         log::error!("Error: {}", strip_ansi_escapes::strip_str(msg));
 
         #[cfg(debug_assertions)]
         {
-            // Better Panic stacktrace that is only enabled when debugging.
             better_panic::Settings::auto()
                 .most_recent_first(false)
                 .lineno_suffix(true)
