@@ -196,13 +196,14 @@ impl Ports {
         }
 
         self.ip_ports[index].state = PortsScanState::Scanning;
+        let ip_string = self.ip_ports[index].ip.clone();
 
         let Some(tx) = self.action_tx.clone() else {
             log::error!("Cannot scan ports: action channel not initialized");
             return;
         };
-        let Ok(ip) = self.ip_ports[index].ip.parse::<IpAddr>() else {
-            log::error!("Invalid IP for port scan: {}", self.ip_ports[index].ip);
+        let Ok(ip) = ip_string.parse::<IpAddr>() else {
+            log::error!("Invalid IP for port scan: {}", ip_string);
             return;
         };
         let ports_box = Box::new(COMMON_PORTS.iter());
@@ -213,11 +214,11 @@ impl Ports {
             let ports = stream::iter(ports_box);
             ports
                 .for_each_concurrent(pool_size, |port| {
-                    Self::scan(tx.clone(), index, ip, port.to_owned())
+                    Self::scan(tx.clone(), ip_string.clone(), ip, port.to_owned())
                 })
                 .await;
 
-            if let Err(e) = tx.try_send(Action::PortScanDone(index)) {
+            if let Err(e) = tx.send(Action::PortScanDone(ip_string.clone())).await {
                 log::error!(
                     "Failed to send port scan completion notification for {}: {:?}",
                     ip, e
@@ -227,13 +228,13 @@ impl Ports {
         });
     }
 
-    async fn scan(tx: Sender<Action>, index: usize, ip: IpAddr, port: u16) {
+    async fn scan(tx: Sender<Action>, ip_string: String, ip: IpAddr, port: u16) {
         let timeout = Duration::from_secs(PORT_SCAN_TIMEOUT_SECS);
         let soc_addr = SocketAddr::new(ip, port);
         if let Ok(Ok(_)) = tokio::time::timeout(timeout, TcpStream::connect(&soc_addr)).await {
-            if let Err(e) = tx.try_send(Action::PortScan(index, port)) {
+            if let Err(e) = tx.send(Action::PortScan(ip_string, port)).await {
                 log::error!(
-                    "Failed to send open port notification for {}:{} - action channel may be full or closed: {:?}",
+                    "Failed to send open port notification for {}:{} - channel closed: {:?}",
                     ip, port, e
                 );
             }
@@ -246,10 +247,13 @@ impl Ports {
         }
     }
 
-    fn store_scanned_port(&mut self, index: usize, port: u16) {
-        let ip_ports = &mut self.ip_ports[index];
-        if !ip_ports.ports.contains(&port) {
-            ip_ports.ports.push(port);
+    fn store_scanned_port(&mut self, ip: &str, port: u16) {
+        if let Some(ip_ports) = self.ip_ports.iter_mut().find(|item| item.ip == ip) {
+            if !ip_ports.ports.contains(&port) {
+                ip_ports.ports.push(port);
+            }
+        } else {
+            log::warn!("Received port scan result for unknown IP: {}:{}", ip, port);
         }
     }
 
@@ -396,12 +400,16 @@ impl Component for Ports {
             }
         }
 
-        if let Action::PortScan(index, port) = action {
-            self.store_scanned_port(index, port);
+        if let Action::PortScan(ref ip, port) = action {
+            self.store_scanned_port(ip, port);
         }
 
-        if let Action::PortScanDone(index) = action {
-            self.ip_ports[index].state = PortsScanState::Done;
+        if let Action::PortScanDone(ref ip) = action {
+            if let Some(entry) = self.ip_ports.iter_mut().find(|item| item.ip == *ip) {
+                entry.state = PortsScanState::Done;
+            } else {
+                log::warn!("Received port scan completion for unknown IP: {}", ip);
+            }
         }
 
         if let Action::PingIp(ref ip) = action {

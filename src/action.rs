@@ -168,10 +168,10 @@ pub enum Action {
     PacketDump(DateTime<Local>, PacketsInfoTypesEnum, PacketTypeEnum),
 
     // -- Port scanning
-    /// Open port discovered (IP index, port number)
-    PortScan(usize, u16),
-    /// Port scan completed for IP at index
-    PortScanDone(usize),
+    /// Open port discovered (IP address, port number)
+    PortScan(String, u16),
+    /// Port scan completed for IP address
+    PortScanDone(String),
 
     // -- Data management
     /// Clear captured data
