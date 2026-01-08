@@ -217,9 +217,14 @@ impl WifiScan {
                 self.wifis.push(w.clone());
             }
         }
-        // -- sort wifi networks by it's signal strength
-        self.wifis
-            .sort_by(|a, b| b.signal.partial_cmp(&a.signal).unwrap());
+        // -- sort wifi networks by signal strength (known RSSI first, descending)
+        self.wifis.sort_by(|a, b| {
+            match (a.signal < 0.0, b.signal < 0.0) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => b.signal.partial_cmp(&a.signal).unwrap(),
+            }
+        });
     }
 
     fn app_tick(&mut self) -> Result<()> {
