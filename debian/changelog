@@ -1,5 +1,8 @@
-netscanner (0.5.1-1) stable; urgency=medium
+netscanner (0.6.4-1) stable; urgency=medium
 
-  * Initial release.
+ * fixed unsafe logging
+ * fixed wifi sorting
+ * fix export home dir
 
- -- Dominic Orsi <dominic.orsi@gmail.com>  Sun, 23 Jun 2024 17:25:30 -0700
+ -- Chleba <chlebik@gmail.com>  Thu, 20 Jan 2026 16:15:30 -0700
+

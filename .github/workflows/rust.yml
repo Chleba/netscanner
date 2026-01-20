@@ -8,7 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RELEASE_TAG: 0.5.1-1 # This is the version of the package, it should be updated with every release
+  RELEASE_TAG: 0.6.4-1
 
 jobs:
   build:
@@ -17,22 +17,30 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Install system dependencies
+      run: sudo apt-get update && sudo apt-get install -y libpcap-dev
+
     - name: Build
       run: cargo build --verbose --release
+
     - name: Run tests
       run: cargo test --verbose
 
+    - name: Install cargo-deb
+      run: cargo install cargo-deb
+
     - name: Create Debian package
-      uses: dominicorsi/cargo-deb-ubuntu@1.0.0
-    
+      run: cargo deb
+
     - name: Upload Netscanner Debian Package (amd64)
       uses: actions/upload-artifact@v4
       with:
         name: netscanner_${{ env.RELEASE_TAG }}_amd64.deb
-        path: netscanner_${{ env.RELEASE_TAG }}_amd64.deb
-    
+        path: target/debian/*.deb
+
     - name: Release
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
-          files: netscanner_${{ env.RELEASE_TAG }}_amd64.deb
+          files: target/debian/*.deb

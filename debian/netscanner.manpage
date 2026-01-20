@@ -1,6 +1,5 @@
 .\" Manpage for netscanner.
-.\" Contact dominic.orsi@gmail.com to correct errors or typos.
-.TH man 1 "22 June 2024" "1.0" "netscanner man page"
+.TH man 1 "20 January 2026" "1.1" "netscanner man page"
 .SH NAME
 netscanner \- view and scan connected networks
 .SH SYNOPSIS
@@ -26,4 +25,4 @@ Print version
 See GitHub issues:
 https://github.com/chleba/netscanner/issues
 .SH AUTHOR
-Dominic Orsi <dominic.orsi@gmail.com>
+Chleba <chlebik@gmail.com>
