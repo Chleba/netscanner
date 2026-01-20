@@ -6,7 +6,7 @@ use ratatui::{prelude::*, widgets::*};
 use std::env;
 use tokio::sync::mpsc::UnboundedSender;
 
-use super::{discovery::ScannedIp, ports::ScannedIpPorts, Component, Frame};
+use super::{Component, Frame, discovery::ScannedIp, ports::ScannedIpPorts};
 use crate::{action::Action, enums::PacketsInfoTypesEnum};
 
 #[derive(Default)]
@@ -29,14 +29,20 @@ impl Export {
 
     #[cfg(target_os = "linux")]
     fn get_user_home_dir(&mut self) {
-        let mut home_dir = String::from("/root");
+        let mut home_dir: Option<String> = None;
         if let Some(h_dir) = env::var_os("HOME") {
-            home_dir = String::from(h_dir.to_str().unwrap());
+            home_dir = Some(String::from(h_dir.to_str().unwrap()));
         }
-        if let Some(sudo_user) = env::var_os("SUDO_USER") {
-            home_dir = format!("/home/{}", sudo_user.to_str().unwrap());
+        if let Some(sudo_user) = env::var_os("SUDO_USER")
+            && home_dir.is_none()
+        {
+            home_dir = Some(format!("/home/{}", sudo_user.to_str().unwrap()));
         }
-        self.home_dir = format!("{}/.netscanner", home_dir);
+        if let Some(home_dir) = home_dir {
+            self.home_dir = format!("{}/.netscanner", home_dir)
+        } else {
+            self.home_dir = String::from("/root");
+        }
 
         // -- create dot folder
         if std::fs::metadata(self.home_dir.clone()).is_err()
@@ -83,7 +89,6 @@ impl Export {
             }
         }
     }
-
 
     pub fn write_discovery(&mut self, data: Vec<ScannedIp>, timestamp: &String) -> Result<()> {
         let mut w = Writer::from_path(format!("{}/scanned_ips.{}.csv", self.home_dir, timestamp))?;

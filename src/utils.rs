@@ -1,5 +1,6 @@
 use std::cmp;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
@@ -9,9 +10,7 @@ use lazy_static::lazy_static;
 use std::net::Ipv4Addr;
 use tracing::error;
 use tracing_error::ErrorLayer;
-use tracing_subscriber::{
-    self, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt, Layer,
-};
+use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::components::sniff::IPTraffic;
 
@@ -122,7 +121,7 @@ pub fn initialize_panic_handler() -> Result<()> {
 
         #[cfg(not(debug_assertions))]
         {
-            use human_panic::{handle_dump, print_msg, Metadata};
+            use human_panic::{Metadata, handle_dump, print_msg};
             let meta = metadata!()
                 .authors("Chleba <chlebik@gmail.com>")
                 .homepage("https://github.com/Chleba/netscanner")
@@ -176,26 +175,33 @@ pub fn get_config_dir() -> PathBuf {
 
 pub fn initialize_logging() -> Result<()> {
     let directory = get_data_dir();
-    std::fs::create_dir_all(directory.clone())?;
-    let log_path = directory.join(LOG_FILE.clone());
+    std::fs::create_dir_all(&directory)?;
+
+    let log_path = directory.join(&*LOG_FILE);
     let log_file = std::fs::File::create(log_path)?;
-    std::env::set_var(
-        "RUST_LOG",
-        std::env::var("RUST_LOG")
-            .or_else(|_| std::env::var(LOG_ENV.clone()))
-            .unwrap_or_else(|_| format!("{}=info", env!("CARGO_CRATE_NAME"))),
-    );
+
+    let env_filter_str = std::env::var("RUST_LOG")
+        .or_else(|_| std::env::var(&*LOG_ENV))
+        .unwrap_or_else(|_| format!("{}=info", env!("CARGO_CRATE_NAME")));
+
+    let env_filter = tracing_subscriber::filter::EnvFilter::new(env_filter_str);
+
+    let log_file = Mutex::new(log_file);
+
     let file_subscriber = tracing_subscriber::fmt::layer()
         .with_file(true)
         .with_line_number(true)
-        .with_writer(log_file)
+        .with_writer(log_file) // Now accepts the Mutex<File>
         .with_target(false)
         .with_ansi(false)
-        .with_filter(tracing_subscriber::filter::EnvFilter::from_default_env());
-    tracing_subscriber::registry()
+        .with_filter(env_filter);
+
+    // 4. SAFETY: try_init prevents crashes if logging is initialized twice (e.g. tests)
+    let _ = tracing_subscriber::registry()
         .with(file_subscriber)
         .with(ErrorLayer::default())
-        .init();
+        .try_init();
+
     Ok(())
 }
 

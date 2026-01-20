@@ -1385,7 +1385,7 @@ dependencies = [
 
 [[package]]
 name = "netscanner"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "anyhow",
  "better-panic",

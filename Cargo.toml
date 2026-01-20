@@ -1,7 +1,7 @@
 [package]
 name = "netscanner"
-version = "0.6.3"
-edition = "2021"
+version = "0.6.4"
+edition = "2024"
 description = "Network Scanner"
 license = "MIT"
 authors = ["Chleba <chlebik@gmail.com>"]
