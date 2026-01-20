@@ -8,7 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RELEASE_TAG: 0.6.4-1
+  RELEASE_TAG: 0.6.41-1
 
 jobs:
   build:

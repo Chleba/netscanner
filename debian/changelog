@@ -1,4 +1,4 @@
-netscanner (0.6.4-1) stable; urgency=medium
+netscanner (0.6.41-1) stable; urgency=medium
 
  * fixed unsafe logging
  * fixed wifi sorting
