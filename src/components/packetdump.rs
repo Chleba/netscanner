@@ -63,6 +63,7 @@ pub struct ArpPacketData {
     pub sender_ip: Ipv4Addr,
     pub target_mac: MacAddr,
     pub target_ip: Ipv4Addr,
+    pub operation: pnet::packet::arp::ArpOperation,
 }
 
 pub struct PacketDump {
@@ -374,6 +375,7 @@ impl PacketDump {
                 sender_ip: header.get_sender_proto_addr(),
                 target_mac: header.get_target_hw_addr(),
                 target_ip: header.get_target_proto_addr(),
+                operation: header.get_operation(),
             }))
             .unwrap();
 

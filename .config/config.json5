@@ -16,6 +16,11 @@
       "<down>": "Down",
       "<left>": "Left",
       "<right>": "Right",
+      // Vim-style movement
+      "<h>": "Left",
+      "<j>": "Down",
+      "<k>": "Up",
+      "<l>": "Right",
       "<Tab>": "Tab",
       "<1>": "JumpDiscovery",
       "<2>": "JumpPackets",

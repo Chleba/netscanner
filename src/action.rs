@@ -43,6 +43,8 @@ pub enum Action {
     AppModeChange(Mode),
     ModeChange(Mode),
     PingIp(String),
+    ArpRetry(String),
+    HostnameUpdate(String, String),
     CountIp,
     CidrError,
     PacketDump(DateTime<Local>, PacketsInfoTypesEnum, PacketTypeEnum),
@@ -102,6 +104,18 @@ impl<'de> Deserialize<'de> for Action {
                     data if data.starts_with("Error(") => {
                         let error_msg = data.trim_start_matches("Error(").trim_end_matches(')');
                         Ok(Action::Error(error_msg.to_string()))
+                    }
+                    data if data.starts_with("HostnameUpdate(") => {
+                        let inner = data.trim_start_matches("HostnameUpdate(").trim_end_matches(')');
+                        let parts: Vec<&str> = inner.splitn(2, ",").collect();
+                        if parts.len() == 2 {
+                            Ok(Action::HostnameUpdate(
+                                parts[0].trim().to_string(),
+                                parts[1].trim().to_string(),
+                            ))
+                        } else {
+                            Err(E::custom(format!("Invalid HostnameUpdate format: {}", value)))
+                        }
                     }
                     data if data.starts_with("Resize(") => {
                         let parts: Vec<&str> = data

@@ -16,10 +16,11 @@ use tokio::sync::Semaphore;
 use core::str;
 use ratatui::layout::Position;
 use ratatui::{prelude::*, widgets::*};
+use std::fs;
 use std::net::{IpAddr, Ipv4Addr};
 use std::string;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use surge_ping::{Client, Config, ICMP, IcmpPacket, PingIdentifier, PingSequence};
 use tokio::{
     sync::mpsc::{self, UnboundedSender},
@@ -39,6 +40,22 @@ use crate::{
 };
 use mac_oui::Oui;
 use rand::random;
+
+/// Extension trait to load OUI database from a CSV string (for embedded/fresh DB)
+pub trait OuiExt {
+    fn from_csv_str(csv_text: &str) -> Result<Oui, String>;
+}
+
+impl OuiExt for Oui {
+    fn from_csv_str(csv_text: &str) -> Result<Oui, String> {
+        // Write CSV to temp file and load via from_csv_file
+        let tmp_path = format!("/tmp/netscanner_oui_{}.csv", std::process::id());
+        std::fs::write(&tmp_path, csv_text).map_err(|e| e.to_string())?;
+        let result = Self::from_csv_file(&tmp_path);
+        let _ = std::fs::remove_file(&tmp_path);
+        result
+    }
+}
 use ratatui::crossterm::event::Event;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use tui_input::Input;
@@ -293,40 +310,118 @@ impl Discovery {
     }
 
     fn process_mac(&mut self, arp_data: ArpPacketData) {
-        if let Some(n) = self
-            .scanned_ips
-            .iter_mut()
-            .find(|item| item.ip == arp_data.sender_ip.to_string())
-        {
-            n.mac = arp_data.sender_mac.to_string();
+        // Only accept ARP responses (not requests)
+        if arp_data.operation == pnet::packet::arp::ArpOperations::Reply {
+            if let Some(n) = self
+                .scanned_ips
+                .iter_mut()
+                .find(|item| item.ip == arp_data.sender_ip.to_string())
+            {
+                n.mac = arp_data.sender_mac.to_string();
 
-            if let Some(oui) = &self.oui {
-                let oui_res = oui.lookup_by_mac(&n.mac);
-                if let Ok(Some(oui_res)) = oui_res {
-                    let cn = oui_res.company_name.clone();
-                    n.vendor = cn;
+                if let Some(oui) = &self.oui {
+                    let oui_res = oui.lookup_by_mac(&n.mac);
+                    if let Ok(Some(oui_res)) = oui_res {
+                        let cn = oui_res.company_name.clone();
+                        n.vendor = cn;
+                    }
                 }
             }
         }
     }
 
+    /// Try to get MAC from the system's ARP cache (/proc/net/arp on Linux)
+    fn try_arp_cache(&mut self) {
+        let content = match fs::read_to_string("/proc/net/arp") {
+            Ok(c) => c,
+            Err(_) => return, // Not on Linux or no access
+        };
+
+        for line in content.lines().skip(1) { // skip header
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() < 4 {
+                continue;
+            }
+            // Format: IP address HW type Flags HW address Mask Device
+            let ip_str = parts[0];
+            let hw_addr_str = parts[3];
+
+            // Check if this is a known scanned IP
+            if let Some(n) = self
+                .scanned_ips
+                .iter_mut()
+                .find(|item| item.ip == ip_str)
+            {
+                // Only use if we don't have a MAC yet, or it's currently empty
+                if n.mac.is_empty() {
+                    n.mac = hw_addr_str.to_string();
+
+                    if let Some(oui) = &self.oui {
+                        let oui_res = oui.lookup_by_mac(&n.mac);
+                        if let Ok(Some(oui_res)) = oui_res {
+                            let cn = oui_res.company_name.clone();
+                            n.vendor = cn;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Send ARP request for a specific IP and schedule retries if no response
+    fn send_arp_with_retry(&mut self, ip: &str) {
+        let ipv4: Ipv4Addr = ip.parse().unwrap();
+        self.send_arp(ipv4);
+
+        // Schedule retries at 1s, 2s, 3s if no ARP response received
+        let ip_clone = ip.to_string();
+        let tx = self.action_tx.clone();
+
+        for delay_secs in [1u64, 2, 3] {
+            let tx = tx.clone();
+            let ip = ip_clone.clone();
+            let delay = Duration::from_secs(delay_secs);
+
+            let tx_inner = tx.clone().unwrap();
+            tokio::spawn(async move {
+                tokio::time::sleep(delay).await;
+                let _ = tx_inner.send(Action::ArpRetry(ip));
+            });
+        }
+    }
+
+    fn process_hostname_retry(&self, ip: String) {
+        let tx = self.action_tx.as_ref().unwrap().clone();
+
+        // Spawn a delayed retry task for reverse DNS lookup
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            let hip: IpAddr = ip.parse().unwrap();
+            let host = lookup_addr(&hip).unwrap_or_default();
+            if !host.is_empty() {
+                let _ = tx.send(Action::HostnameUpdate(ip, host));
+            }
+        });
+    }
+
     fn process_ip(&mut self, ip: &str) {
         let tx = self.action_tx.as_ref().unwrap();
         let ipv4: Ipv4Addr = ip.parse().unwrap();
-        // self.send_arp(ipv4);
+        // Send ARP request to get MAC address
+        self.send_arp_with_retry(ip);
+
+        let hip: IpAddr = ip.parse().unwrap();
+        let host = lookup_addr(&hip).unwrap_or_default();
+        let needs_retry = host.is_empty();
 
         if let Some(n) = self.scanned_ips.iter_mut().find(|item| item.ip == ip) {
-            let hip: IpAddr = ip.parse().unwrap();
-            let host = lookup_addr(&hip).unwrap_or_default();
-            n.hostname = host;
+            n.hostname = host.clone();
             n.ip = ip.to_string();
         } else {
-            let hip: IpAddr = ip.parse().unwrap();
-            let host = lookup_addr(&hip).unwrap_or_default();
             self.scanned_ips.push(ScannedIp {
                 ip: ip.to_string(),
                 mac: String::new(),
-                hostname: host,
+                hostname: host.clone(),
                 vendor: String::new(),
             });
 
@@ -335,6 +430,11 @@ impl Discovery {
                 let b_ip: Ipv4Addr = b.ip.parse::<Ipv4Addr>().unwrap();
                 a_ip.partial_cmp(&b_ip).unwrap()
             });
+        }
+
+        // Schedule retry after mutable borrow is done
+        if needs_retry {
+            self.process_hostname_retry(ip.to_string());
         }
 
         self.set_scrollbar_height();
@@ -560,10 +660,17 @@ impl Component for Discovery {
         if self.cidr.is_none() {
             self.set_cidr(String::from(DEFAULT_IP), false);
         }
-        // -- init oui
-        match Oui::default() {
+        // -- init oui with embedded fresh database
+        let csv_data = include_str!("../../assets/oui.csv");
+        match Oui::from_csv_str(csv_data) {
             Ok(s) => self.oui = Some(s),
-            Err(_) => self.oui = None,
+            Err(_) => {
+                // Fallback to default bundled DB if embedded fails
+                match Oui::default() {
+                    Ok(s) => self.oui = Some(s),
+                    Err(_) => self.oui = None,
+                }
+            }
         }
         Ok(())
     }
@@ -614,6 +721,12 @@ impl Component for Discovery {
         if let Action::PingIp(ref ip) = action {
             self.process_ip(ip);
         }
+        // -- hostname retry update
+        if let Action::HostnameUpdate(ref ip, ref host) = action {
+            if let Some(n) = self.scanned_ips.iter_mut().find(|item| item.ip == *ip) {
+                n.hostname = host.clone();
+            }
+        }
         // -- count IPs
         if let Action::CountIp = action {
             self.ip_num += 1;
@@ -634,6 +747,15 @@ impl Component for Discovery {
         // -- ARP packet recieved
         if let Action::ArpRecieve(ref arp_data) = action {
             self.process_mac(arp_data.clone());
+        }
+        // -- ARP retry: send another ARP request + try /proc/net/arp
+        if let Action::ArpRetry(ref ip) = action {
+            // Send another ARP request
+            if let Ok(ipv4) = ip.parse::<Ipv4Addr>() {
+                self.send_arp(ipv4);
+            }
+            // Try reading from kernel ARP cache as fallback
+            self.try_arp_cache();
         }
         // -- Scan CIDR
         if let Action::ScanCidr = action {
