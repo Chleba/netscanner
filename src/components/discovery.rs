@@ -1,7 +1,7 @@
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use dns_lookup::{lookup_addr, lookup_host};
+use dns_lookup::lookup_addr;
 use futures::future::join_all;
 
 use pnet::datalink::{Channel, NetworkInterface};
@@ -148,66 +148,60 @@ impl Discovery {
         self.ip_num = 0;
     }
 
-    fn send_arp(&mut self, target_ip: Ipv4Addr) {
-        if let Some(active_interface) = &self.active_interface {
-            if let Some(active_interface_mac) = active_interface.mac {
-                let ipv4 = active_interface.ips.iter().find(|f| f.is_ipv4()).unwrap();
-                let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
+    /// Send an ARP request for the given target IP.
+    /// This is a blocking I/O operation, so it must be called from a blocking thread.
+    fn send_arp_blocking(
+        active_interface: &NetworkInterface,
+        target_ip: Ipv4Addr,
+        tx: &UnboundedSender<Action>,
+    ) {
+        if let Some(active_interface_mac) = active_interface.mac {
+            let ipv4 = active_interface.ips.iter().find(|f| f.is_ipv4()).unwrap();
+            let source_ip: Ipv4Addr = ipv4.ip().to_string().parse().unwrap();
 
-                let (mut sender, _) =
-                    match pnet::datalink::channel(active_interface, Default::default()) {
-                        Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
-                        Ok(_) => {
-                            if let Some(tx_action) = &self.action_tx {
-                                tx_action
-                                    .clone()
-                                    .send(Action::Error(
-                                        "Unknown or unsupported channel type".into(),
-                                    ))
-                                    .unwrap();
-                            }
-                            return;
-                        }
-                        Err(e) => {
-                            if let Some(tx_action) = &self.action_tx {
-                                tx_action
-                                    .clone()
-                                    .send(Action::Error(format!(
-                                        "Unable to create datalink channel: {e}"
-                                    )))
-                                    .unwrap();
-                            }
-                            return;
-                        }
-                    };
+            let (mut sender, _) =
+                match pnet::datalink::channel(active_interface, Default::default()) {
+                    Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
+                    Ok(_) => {
+                        let _ = tx.send(Action::Error(
+                            "Unknown or unsupported channel type".into(),
+                        ));
+                        return;
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Action::Error(format!(
+                            "Unable to create datalink channel: {e}"
+                        )));
+                        return;
+                    }
+                };
 
-                let mut ethernet_buffer = [0u8; 42];
-                let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer).unwrap();
+            let mut ethernet_buffer = [0u8; 42];
+            let mut ethernet_packet = MutableEthernetPacket::new(&mut ethernet_buffer).unwrap();
 
-                ethernet_packet.set_destination(MacAddr::broadcast());
-                ethernet_packet.set_source(active_interface_mac);
-                ethernet_packet.set_ethertype(EtherTypes::Arp);
+            ethernet_packet.set_destination(MacAddr::broadcast());
+            ethernet_packet.set_source(active_interface_mac);
+            ethernet_packet.set_ethertype(EtherTypes::Arp);
 
-                let mut arp_buffer = [0u8; 28];
-                let mut arp_packet = MutableArpPacket::new(&mut arp_buffer).unwrap();
+            let mut arp_buffer = [0u8; 28];
+            let mut arp_packet = MutableArpPacket::new(&mut arp_buffer).unwrap();
 
-                arp_packet.set_hardware_type(ArpHardwareTypes::Ethernet);
-                arp_packet.set_protocol_type(EtherTypes::Ipv4);
-                arp_packet.set_hw_addr_len(6);
-                arp_packet.set_proto_addr_len(4);
-                arp_packet.set_operation(ArpOperations::Request);
-                arp_packet.set_sender_hw_addr(active_interface_mac);
-                arp_packet.set_sender_proto_addr(source_ip);
-                arp_packet.set_target_hw_addr(MacAddr::zero());
-                arp_packet.set_target_proto_addr(target_ip);
+            arp_packet.set_hardware_type(ArpHardwareTypes::Ethernet);
+            arp_packet.set_protocol_type(EtherTypes::Ipv4);
+            arp_packet.set_hw_addr_len(6);
+            arp_packet.set_proto_addr_len(4);
+            arp_packet.set_operation(ArpOperations::Request);
+            arp_packet.set_sender_hw_addr(active_interface_mac);
+            arp_packet.set_sender_proto_addr(source_ip);
+            arp_packet.set_target_hw_addr(MacAddr::zero());
+            arp_packet.set_target_proto_addr(target_ip);
 
-                ethernet_packet.set_payload(arp_packet.packet_mut());
+            ethernet_packet.set_payload(arp_packet.packet_mut());
 
-                sender
-                    .send_to(ethernet_packet.packet(), None)
-                    .unwrap()
-                    .unwrap();
-            }
+            let _ = sender
+                .send_to(ethernet_packet.packet(), None)
+                .unwrap()
+                .unwrap();
         }
     }
 
@@ -261,6 +255,12 @@ impl Discovery {
     fn scan(&mut self) {
         self.reset_scan();
 
+        // Abort any previously running scan task to prevent stale tasks from
+        // sending actions after a new scan starts.
+        if !self.task.is_finished() {
+            self.task.abort();
+        }
+
         if let Some(cidr) = self.cidr {
             self.is_scanning = true;
 
@@ -274,7 +274,7 @@ impl Discovery {
                     .map(|&ip| {
                         let s = semaphore.clone();
                         let tx = tx.clone();
-                        let c = || async move {
+                        async move {
                             let _permit = s.acquire().await.unwrap();
                             let client =
                                 Client::new(&Config::default()).expect("Cannot create client");
@@ -285,26 +285,22 @@ impl Discovery {
                             pinger.timeout(Duration::from_secs(2));
 
                             match pinger.ping(PingSequence(2), &payload).await {
-                                Ok((IcmpPacket::V4(packet), dur)) => {
-                                    tx.send(Action::PingIp(packet.get_real_dest().to_string()))
-                                        .unwrap_or_default();
-                                    tx.send(Action::CountIp).unwrap_or_default();
+                                Ok((IcmpPacket::V4(packet), _dur)) => {
+                                    let _ = tx.send(Action::PingIp(packet.get_real_dest().to_string()));
+                                    let _ = tx.send(Action::CountIp);
                                 }
                                 Ok(_) => {
-                                    tx.send(Action::CountIp).unwrap_or_default();
+                                    let _ = tx.send(Action::CountIp);
                                 }
                                 Err(_) => {
-                                    tx.send(Action::CountIp).unwrap_or_default();
+                                    let _ = tx.send(Action::CountIp);
                                 }
                             }
-                        };
-                        tokio::spawn(c())
+                        }
                     })
                     .collect();
-                for t in tasks {
-                    let _ = t.await;
-                }
-                // let _ = join_all(tasks).await;
+                // Run all tasks concurrently, not sequentially
+                let _ = join_all(tasks).await;
             });
         };
     }
@@ -371,7 +367,15 @@ impl Discovery {
     /// Send ARP request for a specific IP and schedule retries if no response
     fn send_arp_with_retry(&mut self, ip: &str) {
         let ipv4: Ipv4Addr = ip.parse().unwrap();
-        self.send_arp(ipv4);
+        // send_arp_blocking does blocking I/O — run it on a dedicated thread.
+        // Clone the interface and tx to move into the blocking task.
+        if let (Some(intf), Some(tx)) = (&self.active_interface, &self.action_tx) {
+            let intf_clone = intf.clone();
+            let tx_clone = tx.clone();
+            tokio::task::spawn_blocking(move || {
+                Self::send_arp_blocking(&intf_clone, ipv4, &tx_clone);
+            });
+        }
 
         // Schedule retries at 1s, 2s, 3s if no ARP response received
         let ip_clone = ip.to_string();
@@ -393,11 +397,14 @@ impl Discovery {
     fn process_hostname_retry(&self, ip: String) {
         let tx = self.action_tx.as_ref().unwrap().clone();
 
-        // Spawn a delayed retry task for reverse DNS lookup
+        // Spawn a delayed retry task for reverse DNS lookup.
+        // lookup_addr is a blocking syscall — run it on a dedicated thread.
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_secs(3)).await;
             let hip: IpAddr = ip.parse().unwrap();
-            let host = lookup_addr(&hip).unwrap_or_default();
+            let host = tokio::task::spawn_blocking(move || lookup_addr(&hip).unwrap_or_default())
+                .await
+                .unwrap_or_default();
             if !host.is_empty() {
                 let _ = tx.send(Action::HostnameUpdate(ip, host));
             }
@@ -405,23 +412,32 @@ impl Discovery {
     }
 
     fn process_ip(&mut self, ip: &str) {
-        let tx = self.action_tx.as_ref().unwrap();
-        let ipv4: Ipv4Addr = ip.parse().unwrap();
-        // Send ARP request to get MAC address
+        // Send ARP request to get MAC address (now runs on blocking thread)
         self.send_arp_with_retry(ip);
 
-        let hip: IpAddr = ip.parse().unwrap();
-        let host = lookup_addr(&hip).unwrap_or_default();
-        let needs_retry = host.is_empty();
+        // Do the initial DNS lookup asynchronously on a blocking thread.
+        // The IP is added immediately with empty hostname; the retry mechanism
+        // will fill it in ~3s later. This avoids blocking the event loop.
+        let tx = self.action_tx.as_ref().unwrap().clone();
+        let ip_clone = ip.to_string();
+        tokio::spawn(async move {
+            let hip: IpAddr = ip_clone.parse().unwrap();
+            let host = tokio::task::spawn_blocking(move || lookup_addr(&hip).unwrap_or_default())
+                .await
+                .unwrap_or_default();
+            if !host.is_empty() {
+                let _ = tx.send(Action::HostnameUpdate(ip_clone, host));
+            }
+        });
 
+        // Add the IP immediately (hostname will be filled in by the async DNS lookup above)
         if let Some(n) = self.scanned_ips.iter_mut().find(|item| item.ip == ip) {
-            n.hostname = host.clone();
             n.ip = ip.to_string();
         } else {
             self.scanned_ips.push(ScannedIp {
                 ip: ip.to_string(),
                 mac: String::new(),
-                hostname: host.clone(),
+                hostname: String::new(),
                 vendor: String::new(),
             });
 
@@ -430,11 +446,6 @@ impl Discovery {
                 let b_ip: Ipv4Addr = b.ip.parse::<Ipv4Addr>().unwrap();
                 a_ip.partial_cmp(&b_ip).unwrap()
             });
-        }
-
-        // Schedule retry after mutable borrow is done
-        if needs_retry {
-            self.process_hostname_retry(ip.to_string());
         }
 
         self.set_scrollbar_height();
@@ -750,9 +761,15 @@ impl Component for Discovery {
         }
         // -- ARP retry: send another ARP request + try /proc/net/arp
         if let Action::ArpRetry(ref ip) = action {
-            // Send another ARP request
+            // Send another ARP request (blocking I/O — run on dedicated thread)
             if let Ok(ipv4) = ip.parse::<Ipv4Addr>() {
-                self.send_arp(ipv4);
+                if let (Some(intf), Some(tx)) = (&self.active_interface, &self.action_tx) {
+                    let intf_clone = intf.clone();
+                    let tx_clone = tx.clone();
+                    tokio::task::spawn_blocking(move || {
+                        Self::send_arp_blocking(&intf_clone, ipv4, &tx_clone);
+                    });
+                }
             }
             // Try reading from kernel ARP cache as fallback
             self.try_arp_cache();

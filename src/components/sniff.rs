@@ -1,6 +1,5 @@
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use dns_lookup::{lookup_addr, lookup_host};
 
 use ipnetwork::IpNetwork;
 use pnet::{
@@ -95,11 +94,13 @@ impl Sniffer {
                 ip_entry.download += length as f64;
             }
         } else {
+            // Avoid blocking DNS lookup here — set hostname to unknown initially.
+            // Doing blocking lookups per-packet would freeze the event loop.
             self.traffic_ips.push(IPTraffic {
                 ip: destination,
                 download: length as f64,
                 upload: 0.0,
-                hostname: lookup_addr(&destination).unwrap_or(String::from("unknown")),
+                hostname: String::from("unknown"),
             });
         }
 
@@ -113,7 +114,7 @@ impl Sniffer {
                 ip: source,
                 download: 0.0,
                 upload: length as f64,
-                hostname: lookup_addr(&source).unwrap_or(String::from("unknown")),
+                hostname: String::from("unknown"),
             });
         }
 

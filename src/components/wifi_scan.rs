@@ -158,6 +158,9 @@ impl WifiScan {
 
     pub fn scan(&mut self) {
         let tx = self.action_tx.clone().unwrap();
+        // tokio_wifiscanner::scan() is async (uses tokio::process::Command internally),
+        // so we spawn it as an independent task. The key fix is that it runs independently
+        // and doesn't block the main event loop's action processing.
         tokio::spawn(async move {
             let networks = tokio_wifiscanner::scan().await;
             match networks {
@@ -185,11 +188,7 @@ impl WifiScan {
                         }
                     }
 
-                    let t_send = tx.send(Action::Scan(wifi_nets));
-                    match t_send {
-                        Ok(n) => (),
-                        Err(e) => (),
-                    }
+                    let _ = tx.send(Action::Scan(wifi_nets));
                 }
                 Err(_e) => (),
             };

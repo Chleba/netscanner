@@ -82,15 +82,28 @@ impl Ports {
     }
 
     fn process_ip(&mut self, ip: &str) {
-        let ipv4: Ipv4Addr = ip.parse().unwrap();
-        let hostname = lookup_addr(&ipv4.into()).unwrap_or_default();
+        let tx = self.action_tx.clone().unwrap();
+        let ip_clone = ip.to_string();
+
+        // lookup_addr is a blocking syscall — run it on a dedicated thread.
+        // The IP is added immediately with empty hostname; the async task
+        // will fill in the hostname via HostnamePortsUpdate action.
+        tokio::spawn(async move {
+            let hip: IpAddr = ip_clone.parse().unwrap();
+            let hostname = tokio::task::spawn_blocking(move || lookup_addr(&hip).unwrap_or_default())
+                .await
+                .unwrap_or_default();
+            if !hostname.is_empty() {
+                let _ = tx.send(Action::HostnameUpdate(ip_clone, hostname));
+            }
+        });
 
         if let Some(n) = self.ip_ports.iter_mut().find(|item| item.ip == ip) {
             n.ip = ip.to_string();
         } else {
             self.ip_ports.push(ScannedIpPorts {
                 ip: ip.to_string(),
-                hostname,
+                hostname: String::new(),
                 state: PortsScanState::Waiting,
                 ports: Vec::new(),
             });
@@ -347,6 +360,13 @@ impl Component for Ports {
         // -- PING IP
         if let Action::PingIp(ref ip) = action {
             self.process_ip(ip);
+        }
+
+        // -- hostname update from async DNS lookup
+        if let Action::HostnameUpdate(ref ip, ref host) = action {
+            if let Some(n) = self.ip_ports.iter_mut().find(|item| item.ip == *ip) {
+                n.hostname = host.clone();
+            }
         }
 
         Ok(None)
