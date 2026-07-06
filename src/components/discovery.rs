@@ -640,10 +640,9 @@ impl Component for Discovery {
         // -- active interface
         if let Action::ActiveInterface(ref interface) = action {
             let intf = interface.clone();
-            // -- first time scan after setting of interface
-            if self.active_interface.is_none() {
-                self.set_active_subnet(&intf);
-            }
+            // -- update subnet input and clear old scan results when switching interfaces
+            self.set_active_subnet(&intf);
+            self.reset_scan();
             self.active_interface = Some(intf);
         }
 

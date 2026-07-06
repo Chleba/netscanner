@@ -1066,11 +1066,19 @@ impl Component for PacketDump {
         if self.changed_interface {
             if let Some(ref lt) = self.loop_thread {
                 if lt.is_finished() {
+                    self.dump_stop.store(true, Ordering::SeqCst);
                     self.loop_thread = None;
                     self.dump_stop.store(false, Ordering::SeqCst);
                     self.start_loop();
                     self.changed_interface = false;
                 }
+            } else {
+                // thread already finished or never started, ensure clean state
+                self.dump_stop.store(true, Ordering::SeqCst);
+                self.loop_thread = None;
+                self.dump_stop.store(false, Ordering::SeqCst);
+                self.start_loop();
+                self.changed_interface = false;
             }
         }
 
