@@ -76,7 +76,7 @@ impl WifiChart {
         self.signal_tick[1] += 1.0;
     }
 
-    pub fn make_chart(&self) -> Chart {
+    pub fn make_chart(&self) -> Chart<'_> {
         let mut datasets = Vec::new();
         for d in &self.wifi_datasets {
             let d_data = &d.data.get_vec();
@@ -101,21 +101,13 @@ impl WifiChart {
 
         let chart = Chart::new(datasets)
             .block(
-                Block::new()
-                    .title(
-                        ratatui::widgets::block::Title::from("|WiFi signals|".yellow())
-                            .position(ratatui::widgets::block::Position::Top)
-                            .alignment(Alignment::Right),
-                    )
-                    .title(
-                        ratatui::widgets::block::Title::from(Line::from(vec![
-                            Span::styled("|hide ", Style::default().fg(Color::Yellow)),
-                            Span::styled("g", Style::default().fg(Color::Red)),
-                            Span::styled("raph|", Style::default().fg(Color::Yellow)),
-                        ]))
-                        .position(ratatui::widgets::block::Position::Bottom)
-                        .alignment(Alignment::Right),
-                    )
+                Block::default()
+                    .title_top(Line::from("|WiFi signals|").yellow().right_aligned())
+                    .title_bottom(Line::from(vec![
+                        Span::styled("|hide ", Style::default().fg(Color::Yellow)),
+                        Span::styled("g", Style::default().fg(Color::Red)),
+                        Span::styled("raph|", Style::default().fg(Color::Yellow)),
+                    ]).right_aligned())
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                     .borders(Borders::ALL)
                     .border_type(DEFAULT_BORDER_STYLE)

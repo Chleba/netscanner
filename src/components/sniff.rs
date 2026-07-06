@@ -60,7 +60,11 @@ impl Sniffer {
         Self {
             active_tab: TabsEnum::Discovery,
             action_tx: None,
-            list_state: ListState::default().with_selected(Some(0)),
+            list_state: {
+                let mut state = ListState::default();
+                state.select(Some(0));
+                state
+            },
             scrollbar_state: ScrollbarState::new(0),
             traffic_ips: Vec::new(),
             scrollview_state: ScrollViewState::new(),
@@ -134,7 +138,7 @@ impl Sniffer {
         }
     }
 
-    fn make_charts(&self) -> BarChart {
+    fn make_charts(&self) -> BarChart<'_> {
         BarChart::default()
             .direction(Direction::Vertical)
             .bar_width(12)
@@ -144,75 +148,59 @@ impl Sniffer {
                     Bar::default()
                         .value(self.udp_sum as u64)
                         .text_value(bytes_convert(self.udp_sum))
-                        .label("UDP".into())
+                        .label(String::from("UDP"))
                         .style(Color::Yellow),
                     Bar::default()
                         .value(self.tcp_sum as u64)
                         .text_value(bytes_convert(self.tcp_sum))
-                        .label("TCP".into())
+                        .label(String::from("TCP"))
                         .style(Color::Green),
                 ]),
             )
     }
 
-    fn make_ips_block(&self) -> Block {
+    fn make_ips_block(&self) -> Block<'_> {
         let ips_block = Block::default()
-            .title(
-                ratatui::widgets::block::Title::from(Line::from(vec![
-                    Span::styled("|", Style::default().fg(Color::Yellow)),
-                    Span::styled(
-                        String::from(char::from_u32(0x25b2).unwrap_or('<')),
-                        Style::default().fg(Color::Red),
-                    ),
-                    Span::styled(
-                        String::from(char::from_u32(0x25bc).unwrap_or('>')),
-                        Style::default().fg(Color::Red),
-                    ),
-                    Span::styled("scroll|", Style::default().fg(Color::Yellow)),
-                ]))
-                .position(ratatui::widgets::block::Position::Bottom)
-                .alignment(Alignment::Right),
-            )
-            .title(
-                ratatui::widgets::block::Title::from(Span::styled(
-                    "|Download/Upload|",
-                    Style::default().fg(Color::Yellow),
-                ))
-                .position(ratatui::widgets::block::Position::Top)
-                .alignment(Alignment::Right),
-            )
+            .title_bottom(Line::from(vec![
+                Span::styled("|", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    String::from(char::from_u32(0x25b2).unwrap_or('<')),
+                    Style::default().fg(Color::Red),
+                ),
+                Span::styled(
+                    String::from(char::from_u32(0x25bc).unwrap_or('>')),
+                    Style::default().fg(Color::Red),
+                ),
+                Span::styled("scroll|", Style::default().fg(Color::Yellow)),
+            ]).right_aligned())
+            .title_top(Line::from(vec![Span::styled(
+                "|Download/Upload|",
+                Style::default().fg(Color::Yellow),
+            )]).right_aligned())
             .borders(Borders::ALL)
             .border_style(Color::Rgb(100, 100, 100))
             .border_type(BorderType::Rounded);
         ips_block
     }
 
-    fn make_sum_block(&self) -> Block {
+    fn make_sum_block(&self) -> Block<'_> {
         let ips_block = Block::default()
-            .title(
-                ratatui::widgets::block::Title::from(Span::styled(
-                    "|Summary|",
-                    Style::default().fg(Color::Yellow),
-                ))
-                .position(ratatui::widgets::block::Position::Top)
-                .alignment(Alignment::Right),
-            )
+            .title_top(Line::from(vec![Span::styled(
+                "|Summary|",
+                Style::default().fg(Color::Yellow),
+            )]).right_aligned())
             .borders(Borders::ALL)
             .border_style(Color::Rgb(100, 100, 100))
             .border_type(BorderType::Rounded);
         ips_block
     }
 
-    fn make_charts_block(&self) -> Block {
+    fn make_charts_block(&self) -> Block<'_> {
         Block::default()
-            .title(
-                ratatui::widgets::block::Title::from(Span::styled(
-                    "|Protocols sum|",
-                    Style::default().fg(Color::Yellow),
-                ))
-                .position(ratatui::widgets::block::Position::Top)
-                .alignment(Alignment::Right),
-            )
+            .title_top(Line::from(vec![Span::styled(
+                "|Protocols sum|",
+                Style::default().fg(Color::Yellow),
+            )]).right_aligned())
             .borders(Borders::ALL)
             .border_style(Color::Rgb(100, 100, 100))
             .border_type(BorderType::Rounded)

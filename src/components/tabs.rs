@@ -4,8 +4,9 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::style::Stylize;
 use ratatui::{prelude::*, widgets::*};
 use ratatui::{
+    layout::Position,
     text::{Line, Span},
-    widgets::{block::Title, Paragraph},
+    widgets::Paragraph,
 };
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, IntoEnumIterator};
@@ -36,7 +37,7 @@ impl Tabs {
         }
     }
 
-    fn make_tabs(&self) -> Paragraph {
+    fn make_tabs(&self) -> Paragraph<'_> {
         let enum_titles: Vec<Span> =
             TabsEnum::iter()
                 .enumerate()
@@ -58,21 +59,16 @@ impl Tabs {
                     title_spans
                 });
 
-        let title = Title::from(Line::from(vec![
+        let title = Line::from(vec![
             "|".yellow(),
             "Tab".red().bold(),
             "s|".yellow(),
-        ]))
-        .alignment(Alignment::Right);
+        ]).right_aligned();
 
         let arrrow = String::from(char::from_u32(0x25bc).unwrap_or('>'));
         let b = Block::default()
             .title(title)
-            .title(
-                Title::from(Line::from(vec!["|".yellow(), arrrow.green(), "|".yellow()]))
-                    .alignment(Alignment::Center)
-                    .position(block::Position::Bottom),
-            )
+            .title_bottom(Line::from(vec!["|".yellow(), arrrow.green(), "|".yellow()]).centered())
             .borders(Borders::ALL)
             .border_type(DEFAULT_BORDER_STYLE)
             .padding(Padding::new(1, 0, 0, 0))

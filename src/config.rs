@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt, path::PathBuf};
 
 use color_eyre::eyre::Result;
 use config::Value;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use derive_deref::{Deref, DerefMut};
 use ratatui::{style::{Color, Modifier, Style}, widgets::{BorderType, Borders}};
 use serde::{

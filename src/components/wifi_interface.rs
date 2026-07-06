@@ -131,7 +131,7 @@ impl WifiInterface {
         }
     }
 
-    fn make_list(&mut self) -> List {
+    fn make_list(&mut self) -> List<'_> {
         if let Some(wifi_info) = &self.wifi_info {
             let interface = &wifi_info.interface;
             let interface_label = "Interface:";

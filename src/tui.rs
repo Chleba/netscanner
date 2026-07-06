@@ -96,7 +96,7 @@ impl Tui {
     let _cancellation_token = self.cancellation_token.clone();
     let _event_tx = self.event_tx.clone();
     self.task = tokio::spawn(async move {
-      let mut reader = crossterm::event::EventStream::new();
+      let mut reader = ratatui::crossterm::event::EventStream::new();
       let mut tick_interval = tokio::time::interval(tick_delay);
       let mut render_interval = tokio::time::interval(render_delay);
       _event_tx.send(Event::Init).unwrap();
@@ -169,13 +169,13 @@ impl Tui {
   }
 
   pub fn enter(&mut self) -> Result<()> {
-    crossterm::terminal::enable_raw_mode()?;
-    crossterm::execute!(io(), EnterAlternateScreen, cursor::Hide)?;
+    ratatui::crossterm::terminal::enable_raw_mode()?;
+    ratatui::crossterm::execute!(io(), EnterAlternateScreen, cursor::Hide)?;
     if self.mouse {
-      crossterm::execute!(io(), EnableMouseCapture)?;
+      ratatui::crossterm::execute!(io(), EnableMouseCapture)?;
     }
     if self.paste {
-      crossterm::execute!(io(), EnableBracketedPaste)?;
+      ratatui::crossterm::execute!(io(), EnableBracketedPaste)?;
     }
     self.start();
     Ok(())
@@ -183,16 +183,16 @@ impl Tui {
 
   pub fn exit(&mut self) -> Result<()> {
     self.stop()?;
-    if crossterm::terminal::is_raw_mode_enabled()? {
+    if ratatui::crossterm::terminal::is_raw_mode_enabled()? {
       self.flush()?;
       if self.paste {
-        crossterm::execute!(io(), DisableBracketedPaste)?;
+        ratatui::crossterm::execute!(io(), DisableBracketedPaste)?;
       }
       if self.mouse {
-        crossterm::execute!(io(), DisableMouseCapture)?;
+        ratatui::crossterm::execute!(io(), DisableMouseCapture)?;
       }
-      crossterm::execute!(io(), LeaveAlternateScreen, cursor::Show)?;
-      crossterm::terminal::disable_raw_mode()?;
+      ratatui::crossterm::execute!(io(), LeaveAlternateScreen, cursor::Show)?;
+      ratatui::crossterm::terminal::disable_raw_mode()?;
     }
     Ok(())
   }

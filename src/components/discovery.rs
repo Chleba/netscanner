@@ -37,8 +37,8 @@ use crate::{
     tui::Frame,
     utils::{count_ipv4_net_length, get_ips4_from_cidr},
 };
-use crossterm::event::Event;
-use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::Event;
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use mac_oui::Oui;
 use rand::random;
 use tui_input::backend::crossterm::EventHandler;
@@ -96,7 +96,11 @@ impl Discovery {
             is_scanning: false,
             mode: Mode::Normal,
             oui: None,
-            table_state: TableState::default().with_selected(0),
+            table_state: {
+                let mut state = TableState::default();
+                state.select(Some(0));
+                state
+            },
             scrollbar_state: ScrollbarState::new(0),
             spinner_index: 0,
         }
@@ -398,7 +402,7 @@ impl Discovery {
         cidr: Option<Ipv4Cidr>,
         ip_num: i32,
         is_scanning: bool,
-    ) -> Table {
+    ) -> Table<'_> {
         let header = Row::new(vec!["ip", "mac", "hostname", "vendor"])
             .style(Style::default().fg(Color::Yellow))
             .top_margin(1)
@@ -449,40 +453,24 @@ impl Discovery {
         )
         .header(header)
         .block(
-            Block::new()
-                .title(
-                    ratatui::widgets::block::Title::from("|Discovery|".yellow())
-                        .position(ratatui::widgets::block::Position::Top)
-                        .alignment(Alignment::Right),
-                )
-                .title(
-                    ratatui::widgets::block::Title::from(Line::from(vec![
-                        Span::styled("|", Style::default().fg(Color::Yellow)),
-                        Span::styled(
-                            "e",
-                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                        ),
-                        Span::styled("xport data", Style::default().fg(Color::Yellow)),
-                        Span::styled("|", Style::default().fg(Color::Yellow)),
-                    ]))
-                    .alignment(Alignment::Left)
-                    .position(ratatui::widgets::block::Position::Bottom),
-                )
-                .title(
-                    ratatui::widgets::block::Title::from(Line::from(scan_title))
-                        .position(ratatui::widgets::block::Position::Top)
-                        .alignment(Alignment::Left),
-                )
-                .title(
-                    ratatui::widgets::block::Title::from(Line::from(vec![
-                        Span::styled("|", Style::default().fg(Color::Yellow)),
-                        String::from(char::from_u32(0x25b2).unwrap_or('>')).red(),
-                        String::from(char::from_u32(0x25bc).unwrap_or('>')).red(),
-                        Span::styled("select|", Style::default().fg(Color::Yellow)),
-                    ]))
-                    .position(ratatui::widgets::block::Position::Bottom)
-                    .alignment(Alignment::Right),
-                )
+            Block::default()
+                .title_top(Line::from("|Discovery|").yellow().right_aligned())
+                .title_bottom(Line::from(vec![
+                    Span::styled("|", Style::default().fg(Color::Yellow)),
+                    Span::styled(
+                        "e",
+                        Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                    ),
+                    Span::styled("xport data", Style::default().fg(Color::Yellow)),
+                    Span::styled("|", Style::default().fg(Color::Yellow)),
+                ]).left_aligned())
+                .title_top(Line::from(scan_title).left_aligned())
+                .title_bottom(Line::from(vec![
+                    Span::styled("|", Style::default().fg(Color::Yellow)),
+                    String::from(char::from_u32(0x25b2).unwrap_or('>')).red(),
+                    String::from(char::from_u32(0x25bc).unwrap_or('>')).red(),
+                    Span::styled("select|", Style::default().fg(Color::Yellow)),
+                ]).right_aligned())
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                 .borders(Borders::ALL)
                 .border_type(DEFAULT_BORDER_STYLE),
@@ -501,7 +489,7 @@ impl Discovery {
         scrollbar
     }
 
-    fn make_input(&self, scroll: usize) -> Paragraph {
+    fn make_input(&self, scroll: usize) -> Paragraph<'_> {
         let input = Paragraph::new(self.input.value())
             .style(Style::default().fg(Color::Green))
             .scroll((0, scroll as u16))
@@ -513,42 +501,34 @@ impl Discovery {
                         Mode::Normal => Style::default().fg(Color::Rgb(100, 100, 100)),
                     })
                     .border_type(DEFAULT_BORDER_STYLE)
-                    .title(
-                        ratatui::widgets::block::Title::from(Line::from(vec![
-                            Span::raw("|"),
-                            Span::styled(
-                                "i",
-                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                            ),
-                            Span::styled("nput", Style::default().fg(Color::Yellow)),
-                            Span::raw("/"),
-                            Span::styled(
-                                "ESC",
-                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                            ),
-                            Span::raw("|"),
-                        ]))
-                        .alignment(Alignment::Right)
-                        .position(ratatui::widgets::block::Position::Bottom),
-                    )
-                    .title(
-                        ratatui::widgets::block::Title::from(Line::from(vec![
-                            Span::raw("|"),
-                            Span::styled(
-                                "s",
-                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                            ),
-                            Span::styled("can", Style::default().fg(Color::Yellow)),
-                            Span::raw("|"),
-                        ]))
-                        .alignment(Alignment::Left)
-                        .position(ratatui::widgets::block::Position::Bottom),
-                    ),
+                    .title_bottom(Line::from(vec![
+                        Span::raw("|"),
+                        Span::styled(
+                            "i",
+                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                        ),
+                        Span::styled("nput", Style::default().fg(Color::Yellow)),
+                        Span::raw("/"),
+                        Span::styled(
+                            "ESC",
+                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                        ),
+                        Span::raw("|"),
+                    ]).right_aligned())
+                    .title_bottom(Line::from(vec![
+                        Span::raw("|"),
+                        Span::styled(
+                            "s",
+                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                        ),
+                        Span::styled("can", Style::default().fg(Color::Yellow)),
+                        Span::raw("|"),
+                    ]).left_aligned()),
             );
         input
     }
 
-    fn make_error(&mut self) -> Paragraph {
+    fn make_error(&mut self) -> Paragraph<'_> {
         let error = Paragraph::new("CIDR parse error")
             .style(Style::default().fg(Color::Red))
             .block(
@@ -560,7 +540,7 @@ impl Discovery {
         error
     }
 
-    fn make_spinner(&self) -> Span {
+    fn make_spinner(&self) -> Span<'_> {
         let spinner = SPINNER_SYMBOLS[self.spinner_index];
         Span::styled(
             format!("{spinner}scanning.."),
@@ -603,7 +583,7 @@ impl Component for Discovery {
                         Action::ModeChange(Mode::Normal)
                     }
                     _ => {
-                        self.input.handle_event(&Event::Key(key));
+                        self.input.handle_event(&ratatui::crossterm::event::Event::Key(key));
                         return Ok(None);
                     }
                 },

@@ -99,7 +99,7 @@ impl Interfaces {
         Ok(())
     }
 
-    fn make_table(&mut self) -> Table {
+    fn make_table(&mut self) -> Table<'_> {
         let mut active_interface: Option<&NetworkInterface> = None;
         if !self.active_interfaces.is_empty() {
             active_interface = Some(&self.active_interfaces[self.active_interface_index]);

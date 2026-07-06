@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ipnetwork::Ipv4Network;
 
 use pnet::datalink::{Channel, ChannelType, NetworkInterface};
@@ -105,7 +105,11 @@ impl PacketDump {
             dump_paused: Arc::new(AtomicBool::new(false)),
             dump_stop: Arc::new(AtomicBool::new(false)),
             active_interface: None,
-            table_state: TableState::default().with_selected(0),
+            table_state: {
+                let mut state = TableState::default();
+                state.select(Some(0));
+                state
+            },
             scrollbar_state: ScrollbarState::new(0),
             packet_type: PacketTypeEnum::All,
             input: Input::default().with_value(String::from("")),
@@ -930,54 +934,34 @@ impl PacketDump {
         let table = Table::new(rows, [Constraint::Min(10), Constraint::Percentage(100)])
             .header(header)
             .block(
-                Block::new()
-                    .title(
-                        ratatui::widgets::block::Title::from(Line::from(dump_spans))
-                            .position(ratatui::widgets::block::Position::Top)
-                            .alignment(Alignment::Right),
-                    )
-                    .title(
-                        ratatui::widgets::block::Title::from(Line::from(vec![
-                            Span::raw("|"),
-                            Span::styled(
-                                "e",
-                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                            ),
-                            Span::styled("xport data", Style::default().fg(Color::Yellow)),
-                            Span::raw("|"),
-                        ]))
-                        .alignment(Alignment::Left)
-                        .position(ratatui::widgets::block::Position::Bottom),
-                    )
-                    .title(
-                        ratatui::widgets::block::Title::from(Span::styled(
-                            "|Packets|",
-                            Style::default().fg(Color::Yellow),
-                        ))
-                        .position(ratatui::widgets::block::Position::Top)
-                        .alignment(Alignment::Right),
-                    )
-                    .title(
-                        ratatui::widgets::block::Title::from(Line::from(type_titles))
-                            .position(ratatui::widgets::block::Position::Top)
-                            .alignment(Alignment::Left),
-                    )
-                    .title(
-                        ratatui::widgets::block::Title::from(Line::from(vec![
-                            Span::styled("|", Style::default().fg(Color::Yellow)),
-                            Span::styled(
-                                String::from(char::from_u32(0x25b2).unwrap_or('>')),
-                                Style::default().fg(Color::Red),
-                            ),
-                            Span::styled(
-                                String::from(char::from_u32(0x25bc).unwrap_or('>')),
-                                Style::default().fg(Color::Red),
-                            ),
-                            Span::styled("select|", Style::default().fg(Color::Yellow)),
-                        ]))
-                        .position(ratatui::widgets::block::Position::Bottom)
-                        .alignment(Alignment::Right),
-                    )
+                Block::default()
+                    .title_top(Line::from(dump_spans).right_aligned())
+                    .title_bottom(Line::from(vec![
+                        Span::raw("|"),
+                        Span::styled(
+                            "e",
+                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                        ),
+                        Span::styled("xport data", Style::default().fg(Color::Yellow)),
+                        Span::raw("|"),
+                    ]).left_aligned())
+                    .title_top(Line::from(vec![Span::styled(
+                        "|Packets|",
+                        Style::default().fg(Color::Yellow),
+                    )]).right_aligned())
+                    .title_top(Line::from(type_titles).left_aligned())
+                    .title_bottom(Line::from(vec![
+                        Span::styled("|", Style::default().fg(Color::Yellow)),
+                        Span::styled(
+                            String::from(char::from_u32(0x25b2).unwrap_or('>')),
+                            Style::default().fg(Color::Red),
+                        ),
+                        Span::styled(
+                            String::from(char::from_u32(0x25bc).unwrap_or('>')),
+                            Style::default().fg(Color::Red),
+                        ),
+                        Span::styled("select|", Style::default().fg(Color::Yellow)),
+                    ]).right_aligned())
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                     .borders(Borders::ALL) // .padding(Padding::new(1, 0, 2, 0)),
                     .border_type(DEFAULT_BORDER_STYLE),
@@ -999,7 +983,7 @@ impl PacketDump {
         scrollbar
     }
 
-    fn make_input(&self, scroll: usize) -> Paragraph {
+    fn make_input(&self, scroll: usize) -> Paragraph<'_> {
         let input = Paragraph::new(self.input.value())
             .style(Style::default().fg(Color::Green))
             .scroll((0, scroll as u16))
@@ -1011,37 +995,29 @@ impl PacketDump {
                         Mode::Normal => Style::default().fg(Color::Rgb(100, 100, 100)),
                     })
                     .border_type(DEFAULT_BORDER_STYLE)
-                    .title(
-                        ratatui::widgets::block::Title::from(Line::from(vec![
-                            Span::raw("|"),
-                            Span::styled(
-                                "i",
-                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                            ),
-                            Span::styled("nput", Style::default().fg(Color::Yellow)),
-                            Span::raw("/"),
-                            Span::styled(
-                                "ESC",
-                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                            ),
-                            Span::raw("|"),
-                        ]))
-                        .alignment(Alignment::Right)
-                        .position(ratatui::widgets::block::Position::Bottom),
-                    )
-                    .title(
-                        ratatui::widgets::block::Title::from(Line::from(vec![
-                            Span::raw("|"),
-                            Span::styled(
-                                "c",
-                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                            ),
-                            Span::styled("lear", Style::default().fg(Color::Yellow)),
-                            Span::raw("|"),
-                        ]))
-                        .alignment(Alignment::Left)
-                        .position(ratatui::widgets::block::Position::Bottom),
-                    ),
+                    .title_bottom(Line::from(vec![
+                        Span::raw("|"),
+                        Span::styled(
+                            "i",
+                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                        ),
+                        Span::styled("nput", Style::default().fg(Color::Yellow)),
+                        Span::raw("/"),
+                        Span::styled(
+                            "ESC",
+                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                        ),
+                        Span::raw("|"),
+                    ]).right_aligned())
+                    .title_bottom(Line::from(vec![
+                        Span::raw("|"),
+                        Span::styled(
+                            "c",
+                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                        ),
+                        Span::styled("lear", Style::default().fg(Color::Yellow)),
+                        Span::raw("|"),
+                    ]).left_aligned()),
             );
         input
     }
@@ -1074,7 +1050,7 @@ impl Component for PacketDump {
                         Action::ModeChange(Mode::Normal)
                     }
                     _ => {
-                        self.input.handle_event(&crossterm::event::Event::Key(key));
+                        self.input.handle_event(&ratatui::crossterm::event::Event::Key(key));
                         return Ok(None);
                     }
                 },

@@ -66,7 +66,11 @@ impl Ports {
             active_tab: TabsEnum::Discovery,
             action_tx: None,
             ip_ports: Vec::new(),
-            list_state: ListState::default().with_selected(Some(0)),
+            list_state: {
+                let mut state = ListState::default();
+                state.select(Some(0));
+                state
+            },
             scrollbar_state: ScrollbarState::new(0),
             spinner_index: 0,
             port_desc,
@@ -199,7 +203,7 @@ impl Ports {
         }
     }
 
-    fn make_list(&self, rect: Rect) -> List {
+    fn make_list(&self, rect: Rect) -> List<'_> {
         let mut items = Vec::new();
         for ip in &self.ip_ports {
             let mut lines = Vec::new();
@@ -256,34 +260,23 @@ impl Ports {
 
         List::new(items)
             .block(
-                Block::new()
-                    .title(
-                        ratatui::widgets::block::Title::from(Line::from(vec![
-                            Span::styled("|", Style::default().fg(Color::Yellow)),
-                            Span::styled(
-                                "s",
-                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                            ),
-                            Span::styled("can selected", Style::default().fg(Color::Yellow)),
-                            Span::styled("|", Style::default().fg(Color::Yellow)),
-                        ]))
-                        .alignment(Alignment::Right), // .position(ratatui::widgets::block::Position::Bottom),
-                    )
-                    .title(
-                        ratatui::widgets::block::Title::from("|Ports|".yellow())
-                            .position(ratatui::widgets::block::Position::Top)
-                            .alignment(Alignment::Right),
-                    )
-                    .title(
-                        ratatui::widgets::block::Title::from(Line::from(vec![
-                            Span::styled("|", Style::default().fg(Color::Yellow)),
-                            String::from(char::from_u32(0x25b2).unwrap_or('>')).red(),
-                            String::from(char::from_u32(0x25bc).unwrap_or('>')).red(),
-                            Span::styled("select|", Style::default().fg(Color::Yellow)),
-                        ]))
-                        .position(ratatui::widgets::block::Position::Bottom)
-                        .alignment(Alignment::Right),
-                    )
+                Block::default()
+                    .title_bottom(Line::from(vec![
+                        Span::styled("|", Style::default().fg(Color::Yellow)),
+                        Span::styled(
+                            "s",
+                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                        ),
+                        Span::styled("can selected", Style::default().fg(Color::Yellow)),
+                        Span::styled("|", Style::default().fg(Color::Yellow)),
+                    ]).right_aligned())
+                    .title_top(Line::from("|Ports|").yellow().right_aligned())
+                    .title_bottom(Line::from(vec![
+                        Span::styled("|", Style::default().fg(Color::Yellow)),
+                        String::from(char::from_u32(0x25b2).unwrap_or('>')).red(),
+                        String::from(char::from_u32(0x25bc).unwrap_or('>')).red(),
+                        Span::styled("select|", Style::default().fg(Color::Yellow)),
+                    ]).right_aligned())
                     .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                     .borders(Borders::ALL)
                     .border_type(DEFAULT_BORDER_STYLE)

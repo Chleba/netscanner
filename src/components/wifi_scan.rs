@@ -91,7 +91,7 @@ impl WifiScan {
         }
     }
 
-    fn make_table(&mut self) -> Table {
+    fn make_table(&mut self) -> Table<'_> {
         let header = Row::new(vec!["time", "ssid", "ch", "mac", "signal"])
             .style(Style::default().fg(Color::Yellow));
         // .bottom_margin(1);
@@ -140,21 +140,13 @@ impl WifiScan {
         )
         .header(header)
         .block(
-            Block::new()
-                .title(
-                    ratatui::widgets::block::Title::from("|WiFi Networks|".yellow())
-                        .position(ratatui::widgets::block::Position::Top)
-                        .alignment(Alignment::Right),
-                )
-                .title(
-                    ratatui::widgets::block::Title::from(Line::from(vec![
-                        Span::styled("|show ", Style::default().fg(Color::Yellow)),
-                        Span::styled("g", Style::default().fg(Color::Red)),
-                        Span::styled("raph|", Style::default().fg(Color::Yellow)),
-                    ]))
-                    .position(ratatui::widgets::block::Position::Bottom)
-                    .alignment(Alignment::Right),
-                )
+            Block::default()
+                .title_top(Line::from("|WiFi Networks|").yellow().right_aligned())
+                .title_bottom(Line::from(vec![
+                    Span::styled("|show ", Style::default().fg(Color::Yellow)),
+                    Span::styled("g", Style::default().fg(Color::Red)),
+                    Span::styled("raph|", Style::default().fg(Color::Yellow)),
+                ]).right_aligned())
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                 .borders(Borders::ALL)
                 .border_type(DEFAULT_BORDER_STYLE)
