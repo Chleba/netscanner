@@ -6,9 +6,9 @@ use futures::future::join_all;
 
 use pnet::datalink::{Channel, NetworkInterface};
 use pnet::packet::{
+    MutablePacket, Packet,
     arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPacket},
     ethernet::{EtherTypes, MutableEthernetPacket},
-    MutablePacket, Packet,
 };
 use pnet::util::MacAddr;
 use tokio::sync::Semaphore;
@@ -20,7 +20,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::string;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use surge_ping::{Client, Config, IcmpPacket, PingIdentifier, PingSequence, ICMP};
+use surge_ping::{Client, Config, ICMP, IcmpPacket, PingIdentifier, PingSequence};
 use tokio::{
     sync::mpsc::{self, UnboundedSender},
     task::{self, JoinHandle},
@@ -37,12 +37,12 @@ use crate::{
     tui::Frame,
     utils::{count_ipv4_net_length, get_ips4_from_cidr},
 };
-use ratatui::crossterm::event::Event;
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use mac_oui::Oui;
 use rand::random;
-use tui_input::backend::crossterm::EventHandler;
+use ratatui::crossterm::event::Event;
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use tui_input::Input;
+use tui_input::backend::crossterm::EventHandler;
 
 static POOL_SIZE: usize = 32;
 static INPUT_SIZE: usize = 30;
@@ -341,13 +341,11 @@ impl Discovery {
     }
 
     fn set_active_subnet(&mut self, intf: &NetworkInterface) {
-        let a_ip = intf.ips[0].ip().to_string();
-        let ip: Vec<&str> = a_ip.split('.').collect();
-        if ip.len() > 1 {
-            let new_a_ip = format!("{}.{}.{}.0/24", ip[0], ip[1], ip[2]);
-            self.input = Input::default().with_value(new_a_ip);
-
-            self.set_cidr(self.input.value().to_string(), false);
+        let ipv4 = intf.ips.iter().find(|ip| ip.is_ipv4());
+        if let Some(ip_network) = ipv4 {
+            let cidr_str = format!("{}/{}", ip_network.network(), ip_network.prefix());
+            self.input = Input::default().with_value(cidr_str.clone());
+            self.set_cidr(cidr_str, false);
         }
     }
 
@@ -385,11 +383,7 @@ impl Discovery {
                 if !self.scanned_ips.is_empty() {
                     s_ip_len = self.scanned_ips.len() - 1;
                 }
-                if index >= s_ip_len {
-                    0
-                } else {
-                    index + 1
-                }
+                if index >= s_ip_len { 0 } else { index + 1 }
             }
             None => 0,
         };
@@ -455,22 +449,28 @@ impl Discovery {
         .block(
             Block::default()
                 .title_top(Line::from("|Discovery|").yellow().right_aligned())
-                .title_bottom(Line::from(vec![
-                    Span::styled("|", Style::default().fg(Color::Yellow)),
-                    Span::styled(
-                        "e",
-                        Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                    ),
-                    Span::styled("xport data", Style::default().fg(Color::Yellow)),
-                    Span::styled("|", Style::default().fg(Color::Yellow)),
-                ]).left_aligned())
+                .title_bottom(
+                    Line::from(vec![
+                        Span::styled("|", Style::default().fg(Color::Yellow)),
+                        Span::styled(
+                            "e",
+                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                        ),
+                        Span::styled("xport data", Style::default().fg(Color::Yellow)),
+                        Span::styled("|", Style::default().fg(Color::Yellow)),
+                    ])
+                    .left_aligned(),
+                )
                 .title_top(Line::from(scan_title).left_aligned())
-                .title_bottom(Line::from(vec![
-                    Span::styled("|", Style::default().fg(Color::Yellow)),
-                    String::from(char::from_u32(0x25b2).unwrap_or('>')).red(),
-                    String::from(char::from_u32(0x25bc).unwrap_or('>')).red(),
-                    Span::styled("select|", Style::default().fg(Color::Yellow)),
-                ]).right_aligned())
+                .title_bottom(
+                    Line::from(vec![
+                        Span::styled("|", Style::default().fg(Color::Yellow)),
+                        String::from(char::from_u32(0x25b2).unwrap_or('>')).red(),
+                        String::from(char::from_u32(0x25bc).unwrap_or('>')).red(),
+                        Span::styled("select|", Style::default().fg(Color::Yellow)),
+                    ])
+                    .right_aligned(),
+                )
                 .border_style(Style::default().fg(Color::Rgb(100, 100, 100)))
                 .borders(Borders::ALL)
                 .border_type(DEFAULT_BORDER_STYLE),
@@ -501,29 +501,35 @@ impl Discovery {
                         Mode::Normal => Style::default().fg(Color::Rgb(100, 100, 100)),
                     })
                     .border_type(DEFAULT_BORDER_STYLE)
-                    .title_bottom(Line::from(vec![
-                        Span::raw("|"),
-                        Span::styled(
-                            "i",
-                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                        ),
-                        Span::styled("nput", Style::default().fg(Color::Yellow)),
-                        Span::raw("/"),
-                        Span::styled(
-                            "ESC",
-                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                        ),
-                        Span::raw("|"),
-                    ]).right_aligned())
-                    .title_bottom(Line::from(vec![
-                        Span::raw("|"),
-                        Span::styled(
-                            "s",
-                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-                        ),
-                        Span::styled("can", Style::default().fg(Color::Yellow)),
-                        Span::raw("|"),
-                    ]).left_aligned()),
+                    .title_bottom(
+                        Line::from(vec![
+                            Span::raw("|"),
+                            Span::styled(
+                                "i",
+                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                            ),
+                            Span::styled("nput", Style::default().fg(Color::Yellow)),
+                            Span::raw("/"),
+                            Span::styled(
+                                "ESC",
+                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                            ),
+                            Span::raw("|"),
+                        ])
+                        .right_aligned(),
+                    )
+                    .title_bottom(
+                        Line::from(vec![
+                            Span::raw("|"),
+                            Span::styled(
+                                "s",
+                                Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                            ),
+                            Span::styled("can", Style::default().fg(Color::Yellow)),
+                            Span::raw("|"),
+                        ])
+                        .left_aligned(),
+                    ),
             );
         input
     }
@@ -583,7 +589,8 @@ impl Component for Discovery {
                         Action::ModeChange(Mode::Normal)
                     }
                     _ => {
-                        self.input.handle_event(&ratatui::crossterm::event::Event::Key(key));
+                        self.input
+                            .handle_event(&ratatui::crossterm::event::Event::Key(key));
                         return Ok(None);
                     }
                 },
