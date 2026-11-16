@@ -1,7 +1,7 @@
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use dns_lookup::{lookup_addr, lookup_host};
+use dns_lookup::lookup_host;
 use futures::StreamExt;
 use futures::{future::join_all, stream};
 
@@ -85,15 +85,11 @@ impl Ports {
         let tx = self.action_tx.clone().unwrap();
         let ip_clone = ip.to_string();
 
-        // lookup_addr is a blocking syscall — run it on a dedicated thread.
         // The IP is added immediately with empty hostname; the async task
         // will fill in the hostname via HostnamePortsUpdate action.
         tokio::spawn(async move {
             let hip: IpAddr = ip_clone.parse().unwrap();
-            let hostname = tokio::task::spawn_blocking(move || lookup_addr(&hip).unwrap_or_default())
-                .await
-                .unwrap_or_default();
-            if !hostname.is_empty() {
+            if let Some(hostname) = crate::mdns::resolve_hostname(hip).await {
                 let _ = tx.send(Action::HostnameUpdate(ip_clone, hostname));
             }
         });
