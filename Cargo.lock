@@ -1711,6 +1711,7 @@ dependencies = [
  "serde",
  "serde_json",
  "signal-hook",
+ "socket2",
  "strip-ansi-escapes",
  "strum 0.26.3",
  "surge-ping",

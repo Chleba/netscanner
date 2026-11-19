@@ -1,7 +1,6 @@
 use cidr::Ipv4Cidr;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use dns_lookup::lookup_addr;
 use futures::future::join_all;
 
 use pnet::datalink::{Channel, NetworkInterface};
@@ -34,6 +33,7 @@ use crate::{
     config::DEFAULT_BORDER_STYLE,
     enums::TabsEnum,
     layout::get_vertical_layout,
+    mdns::resolve_hostname,
     mode::Mode,
     tui::Frame,
     utils::{count_ipv4_net_length, get_ips4_from_cidr},
@@ -398,14 +398,10 @@ impl Discovery {
         let tx = self.action_tx.as_ref().unwrap().clone();
 
         // Spawn a delayed retry task for reverse DNS lookup.
-        // lookup_addr is a blocking syscall — run it on a dedicated thread.
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_secs(3)).await;
             let hip: IpAddr = ip.parse().unwrap();
-            let host = tokio::task::spawn_blocking(move || lookup_addr(&hip).unwrap_or_default())
-                .await
-                .unwrap_or_default();
-            if !host.is_empty() {
+            if let Some(host) = resolve_hostname(hip).await {
                 let _ = tx.send(Action::HostnameUpdate(ip, host));
             }
         });
@@ -422,10 +418,7 @@ impl Discovery {
         let ip_clone = ip.to_string();
         tokio::spawn(async move {
             let hip: IpAddr = ip_clone.parse().unwrap();
-            let host = tokio::task::spawn_blocking(move || lookup_addr(&hip).unwrap_or_default())
-                .await
-                .unwrap_or_default();
-            if !host.is_empty() {
+            if let Some(host) = resolve_hostname(hip).await {
                 let _ = tx.send(Action::HostnameUpdate(ip_clone, host));
             }
         });

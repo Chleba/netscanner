@@ -12,6 +12,7 @@ pub mod tui;
 pub mod utils;
 pub mod enums;
 pub mod layout;
+pub mod mdns;
 pub mod widgets;
 
 use clap::Parser;
